@@ -25,6 +25,7 @@ public partial class RecordingPill : Window
     private readonly TimeSpan _total;
 
     private bool _dragging;
+    private bool _userDragged;   // once the user moves the pill, stop auto-repositioning it
     private POINT _dragCursorStart;
     private int _winStartX, _winStartY;
 
@@ -92,9 +93,11 @@ public partial class RecordingPill : Window
         ProgressFill.Visibility = Visibility.Visible;
         SetControlsEnabled(true);   // pause, restart, finish all live once recording starts
 
-        // The timer is wider than a single digit, so the pill grew — re-place so
-        // the recording bar stays centered on the region's bottom edge.
-        Dispatcher.BeginInvoke(new Action(PlacePill), System.Windows.Threading.DispatcherPriority.Loaded);
+        // The timer is wider than a single digit, so the pill grew — re-center it
+        // below the region. But NOT if the user has dragged it (e.g. before a
+        // restart): their chosen position must stick.
+        if (!_userDragged)
+            Dispatcher.BeginInvoke(new Action(PlacePill), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     /// <summary>Countdown visual: number shown, timer/progress hidden, controls dimmed.</summary>
@@ -249,9 +252,12 @@ public partial class RecordingPill : Window
     {
         if (!_dragging) return;
         if (!GetCursorPos(out POINT cur)) return;
-        int nx = _winStartX + (cur.X - _dragCursorStart.X);
-        int ny = _winStartY + (cur.Y - _dragCursorStart.Y);
-        SetWindowPos(Handle, HWND_TOPMOST, nx, ny, 0, 0, (uint)(SWP_NOSIZE | SWP_NOACTIVATE));
+        int dx = cur.X - _dragCursorStart.X;
+        int dy = cur.Y - _dragCursorStart.Y;
+        // Treat as a real drag (not a click) once it moves a few px — then the
+        // pill stays where the user put it, even across a restart.
+        if (Math.Abs(dx) > 3 || Math.Abs(dy) > 3) _userDragged = true;
+        SetWindowPos(Handle, HWND_TOPMOST, _winStartX + dx, _winStartY + dy, 0, 0, (uint)(SWP_NOSIZE | SWP_NOACTIVATE));
     }
 
     private void OnPillMouseUp(object sender, MouseButtonEventArgs e)

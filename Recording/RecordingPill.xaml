@@ -154,9 +154,11 @@
                     <Button x:Name="PauseButton" Style="{StaticResource PillBtnPrimary}"
                             ToolTip="Pause · Space" Click="OnPauseClick">
                         <Grid Width="16" Height="16">
-                            <Path x:Name="PauseIcon" Data="M4,3 H7 V13 H4 Z M9,3 H12 V13 H9 Z" Stretch="None"
+                            <Path x:Name="PauseIcon" Width="16" Height="16" Stretch="None"
+                                  Data="M4,3 H7 V13 H4 Z M9,3 H12 V13 H9 Z"
                                   Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                            <Path x:Name="PlayIcon" Visibility="Collapsed" Data="M5,3.5 L13,8 L5,12.5 Z" Stretch="None"
+                            <Path x:Name="PlayIcon" Width="16" Height="16" Stretch="None" Visibility="Collapsed"
+                                  Data="M5,3.5 L13,8 L5,12.5 Z"
                                   Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </Grid>
                     </Button>

@@ -1,0 +1,154 @@
+<Window x:Class="WipShare.Client.Recording.RecordingPill"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WipShare — recording"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        Opacity="0"
+        FontFamily="{StaticResource SansFont}">
+
+    <Window.Resources>
+        <!-- cancel (danger) icon button: fg-2 at rest, red wash on hover -->
+        <Style x:Key="PillBtnDanger" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Fg2Brush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#1FE35D6A" />
+                                <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- finish: muted at rest like the others; accent fill only on hover -->
+        <Style x:Key="PillBtnFinish" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Fg2Brush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentDimBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource WhiteBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- 16px transparent margin around the visible pill: it is BOTH the gap below
+         the region and the room the soft shadow needs to fade out completely.
+         NO ClipToBounds: clipping a shadowed border to its rectangular layout
+         bounds is what drew the faint box around the pill. The rounded Border
+         alone defines the shape; the shadow is cast from that rounded silhouette. -->
+    <Border x:Name="PillBorder" Margin="16"
+            Height="44"
+            Background="{StaticResource SurfaceBrush}"
+            BorderBrush="{StaticResource HairlineBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Cursor="SizeAll"
+            MouseLeftButtonDown="OnPillMouseDown"
+            MouseMove="OnPillMouseMove"
+            MouseLeftButtonUp="OnPillMouseUp">
+        <Border.Effect>
+            <!-- Small enough to fade to nothing well inside the 16px margin → no
+                 hard edge, no rectangle, on any background. -->
+            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="270" Opacity="0.45" Color="#000000" />
+        </Border.Effect>
+
+        <Grid x:Name="PillGrid" SizeChanged="OnPillGridSizeChanged">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,6,0">
+
+                <!-- grip slot: timer (recording) or countdown number (counting) -->
+                <Grid VerticalAlignment="Center" MinWidth="30">
+                    <TextBlock x:Name="TimerBlock" FontFamily="{StaticResource MonoFont}" FontSize="14"
+                               VerticalAlignment="Center"><Run x:Name="CurRun" Foreground="{StaticResource FgBrush}" Text="0:00" /><Run Foreground="{StaticResource Fg3Brush}" Text=" / " /><Run x:Name="TotRun" Foreground="{StaticResource Fg3Brush}" Text="0:15" /></TextBlock>
+                    <TextBlock x:Name="CountBlock" Visibility="Collapsed"
+                               FontFamily="{StaticResource MonoFont}" FontSize="18" FontWeight="SemiBold"
+                               Foreground="{StaticResource ErrBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Text="3" />
+                </Grid>
+
+                <!-- divider (fixed 20px, centered) -->
+                <Border Width="1" Height="20" Margin="12,0" VerticalAlignment="Center" Background="{StaticResource HairlineBrush}" />
+
+                <!-- cluster: cancel · finish · | · grip -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="CancelButton" Style="{StaticResource PillBtnDanger}"
+                            ToolTip="Cancel · Esc" Click="OnCancelClick">
+                        <Path Data="M4,4 L12,12 M12,4 L4,12"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Width="16" Height="16" Stretch="None" />
+                    </Button>
+
+                    <Button x:Name="FinishButton" Style="{StaticResource PillBtnFinish}"
+                            ToolTip="Finish &amp; upload" Click="OnFinishClick">
+                        <Path Data="M3,8.5 L6.5,12 L13,4.5"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Width="16" Height="16" Stretch="None" />
+                    </Button>
+
+                    <!-- divider (fixed 20px, centered) -->
+                    <Border Width="1" Height="20" Margin="4,0" VerticalAlignment="Center" Background="{StaticResource HairlineBrush}" />
+
+                    <!-- drag handle: 6-dot grip, exact to design (2 cols × 3 rows, r=1.3 @ 16-unit box, rendered 16px) -->
+                    <Border x:Name="DragHandle" Width="26" Height="32" CornerRadius="8" Background="Transparent">
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="16" Height="16">
+                                <Ellipse Canvas.Left="4.7"  Canvas.Top="1.7"  Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                                <Ellipse Canvas.Left="8.7"  Canvas.Top="1.7"  Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                                <Ellipse Canvas.Left="4.7"  Canvas.Top="6.7"  Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                                <Ellipse Canvas.Left="8.7"  Canvas.Top="6.7"  Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                                <Ellipse Canvas.Left="4.7"  Canvas.Top="11.7" Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                                <Ellipse Canvas.Left="8.7"  Canvas.Top="11.7" Width="2.6" Height="2.6" Fill="{StaticResource Fg3Brush}" />
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Indigo progress line flush along the bottom edge, full width. PillGrid's
+                 rounded clip makes its ends follow the pill's bottom corners (no poke-out,
+                 no rectangular clip on the shadowed border). Hidden during countdown. -->
+            <Rectangle x:Name="ProgressFill" Height="2" Width="0"
+                       VerticalAlignment="Bottom" HorizontalAlignment="Left"
+                       Fill="{StaticResource AccentBrush}" />
+        </Grid>
+    </Border>
+</Window>

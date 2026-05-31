@@ -67,6 +67,38 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- plain cluster button (restart): fg-2 at rest, surface-2 wash on hover -->
+        <Style x:Key="PillBtn" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Fg2Brush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource Surface2Brush}" />
+                                <Setter Property="Foreground" Value="{StaticResource FgBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- primary cluster button (pause/resume): slightly brighter (fg) at rest -->
+        <Style x:Key="PillBtnPrimary" TargetType="Button" BasedOn="{StaticResource PillBtn}">
+            <Setter Property="Foreground" Value="{StaticResource FgBrush}" />
+        </Style>
     </Window.Resources>
 
     <!-- 16px transparent margin around the visible pill: it is BOTH the gap below
@@ -93,21 +125,50 @@
         <Grid x:Name="PillGrid" SizeChanged="OnPillGridSizeChanged">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,6,0">
 
-                <!-- grip slot: timer (recording) or countdown number (counting) -->
-                <Grid VerticalAlignment="Center" MinWidth="30">
-                    <TextBlock x:Name="TimerBlock" FontFamily="{StaticResource MonoFont}" FontSize="14"
-                               VerticalAlignment="Center"><Run x:Name="CurRun" Foreground="{StaticResource FgBrush}" Text="0:00" /><Run Foreground="{StaticResource Fg3Brush}" Text=" / " /><Run x:Name="TotRun" Foreground="{StaticResource Fg3Brush}" Text="0:15" /></TextBlock>
-                    <TextBlock x:Name="CountBlock" Visibility="Collapsed"
-                               FontFamily="{StaticResource MonoFont}" FontSize="18" FontWeight="SemiBold"
-                               Foreground="{StaticResource ErrBrush}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" Text="3" />
-                </Grid>
+                <!-- grip slot: timer (recording) or countdown number (counting), + paused chip -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Grid VerticalAlignment="Center" MinWidth="30">
+                        <TextBlock x:Name="TimerBlock" FontFamily="{StaticResource MonoFont}" FontSize="14"
+                                   VerticalAlignment="Center"><Run x:Name="CurRun" Foreground="{StaticResource FgBrush}" Text="0:00" /><Run Foreground="{StaticResource Fg3Brush}" Text=" / " /><Run x:Name="TotRun" Foreground="{StaticResource Fg3Brush}" Text="0:15" /></TextBlock>
+                        <TextBlock x:Name="CountBlock" Visibility="Collapsed"
+                                   FontFamily="{StaticResource MonoFont}" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{StaticResource ErrBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Text="3" />
+                    </Grid>
+                    <!-- paused chip (warn-tinted), shown only while paused -->
+                    <Border x:Name="PausedTag" Visibility="Collapsed" Margin="9,0,0,0" VerticalAlignment="Center"
+                            CornerRadius="999" Padding="7,3,9,3"
+                            Background="#21D29922" BorderBrush="#47D29922" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="5" Height="5" Fill="#FFE0B04A" VerticalAlignment="Center" Margin="0,0,6,0" />
+                            <TextBlock Text="Paused" FontSize="11" FontWeight="Medium" Foreground="#FFE0B04A" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
 
                 <!-- divider (fixed 20px, centered) -->
                 <Border Width="1" Height="20" Margin="12,0" VerticalAlignment="Center" Background="{StaticResource HairlineBrush}" />
 
-                <!-- cluster: cancel · finish · | · grip -->
+                <!-- cluster: pause/resume · restart · cancel · finish · | · grip -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="PauseButton" Style="{StaticResource PillBtnPrimary}"
+                            ToolTip="Pause · Space" Click="OnPauseClick">
+                        <Grid Width="16" Height="16">
+                            <Path x:Name="PauseIcon" Data="M4,3 H7 V13 H4 Z M9,3 H12 V13 H9 Z" Stretch="None"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <Path x:Name="PlayIcon" Visibility="Collapsed" Data="M5,3.5 L13,8 L5,12.5 Z" Stretch="None"
+                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="RestartButton" Style="{StaticResource PillBtn}"
+                            ToolTip="Restart · R" Click="OnRestartClick">
+                        <Path Data="M3,8 A5,5 0 1 1 4.6,11.7 M3,12 V8 H7"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                              Width="16" Height="16" Stretch="None" />
+                    </Button>
+
                     <Button x:Name="CancelButton" Style="{StaticResource PillBtnDanger}"
                             ToolTip="Cancel · Esc" Click="OnCancelClick">
                         <Path Data="M4,4 L12,12 M12,4 L4,12"

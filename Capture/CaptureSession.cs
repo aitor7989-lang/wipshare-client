@@ -33,7 +33,13 @@ public sealed class CaptureSession : IDisposable
 
     private MonitorCapture? _capture;
     private VideoEncoder? _encoder;
+    private volatile bool _paused;
     private bool _disposed;
+
+    /// <summary>Pause feeding frames to the encoder. Recorded-time (the 15s budget) freezes.</summary>
+    public void Pause() => _paused = true;
+    /// <summary>Resume feeding frames; recorded-time continues from where it froze.</summary>
+    public void Resume() => _paused = false;
 
     public CaptureSession(
         SelectedRegion region,
@@ -66,16 +72,21 @@ public sealed class CaptureSession : IDisposable
     /// and the clip is finalized + kept (unlike <paramref name="ct"/>, which the
     /// caller treats as a discard). Lets the user stop before the 15s budget.
     /// </param>
+    /// <param name="restartToken">
+    /// "Restart" signal. Breaks the loop like a finish; the caller discards the
+    /// partial file and re-enters the countdown for the same region.
+    /// </param>
     public async Task<RecordingResult> RunAsync(
-        CancellationToken ct, IProgress<TimeSpan>? elapsedProgress = null, CancellationToken finishToken = default)
+        CancellationToken ct, IProgress<TimeSpan>? elapsedProgress = null,
+        CancellationToken finishToken = default, CancellationToken restartToken = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(CaptureSession));
 
-        // Linked CTS: break the capture loop early on discard-cancel (ct), on a
-        // graceful finish (finishToken), or if the capture item closes (monitor
-        // disconnect). All three fall through to FinalizeAndSave; whether the
-        // file is kept or discarded is the caller's decision, not ours.
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, finishToken);
+        // Linked CTS: break the capture loop early on discard-cancel (ct), a
+        // graceful finish (finishToken), a restart (restartToken), or if the
+        // capture item closes (monitor disconnect). All fall through to
+        // FinalizeAndSave; keep-vs-discard is the caller's decision, not ours.
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, finishToken, restartToken);
         var loopToken = linkedCts.Token;
 
         _capture = new MonitorCapture(_region.Monitor, _region, _loggerFactory);
@@ -145,16 +156,18 @@ public sealed class CaptureSession : IDisposable
 
         try
         {
-            for (int i = 0; i < totalFrames; i++)
+            // Budget is measured in FRAMES WRITTEN (recorded-time), not ticks, so
+            // paused time never counts toward the 15s. The encoder timestamps each
+            // sample by frame index, so simply not writing while paused keeps the
+            // output timeline continuous — no frozen gap, no offset bookkeeping.
+            while (encoded < totalFrames)
             {
                 bool moreTicks;
                 try { moreTicks = await timer.WaitForNextTickAsync(loopToken).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
                 if (!moreTicks) break;
 
-                // Live elapsed (recorded time so far), clamped to the budget.
-                long elapsedTicks = Math.Min(_duration.Ticks, tickInterval.Ticks * (i + 1));
-                elapsedProgress?.Report(TimeSpan.FromTicks(elapsedTicks));
+                if (_paused) continue;  // freeze: write nothing, advance nothing
 
                 Direct3D11CaptureFrame? frameToEncode;
                 Direct3D11CaptureFrame? previousToDispose = null;
@@ -184,6 +197,11 @@ public sealed class CaptureSession : IDisposable
                     var bgra = _capture.CropToBgraBytes(frameToEncode.Surface);
                     await _encoder.WriteFrameAsync(bgra, loopToken).ConfigureAwait(false);
                     encoded++;
+
+                    // Live elapsed = recorded time so far (frames written / fps);
+                    // freezes during pause because no frames are written.
+                    elapsedProgress?.Report(
+                        TimeSpan.FromSeconds(Math.Min(_duration.TotalSeconds, (double)encoded / _fps)));
 
                     // Snapshot the poster frame. `bgra` is the reused readback
                     // buffer (valid until the next CropToBgraBytes), so copy now.

@@ -32,6 +32,12 @@ public partial class RecordingPill : Window
     public event Action? CancelRequested;
     /// <summary>Finish — stop early but keep + upload the clip (indigo check).</summary>
     public event Action? FinishRequested;
+    /// <summary>Pause/Resume toggle (pause button). The bool is the new paused state.</summary>
+    public event Action<bool>? PauseToggleRequested;
+    /// <summary>Restart — discard the take and re-enter the 3-2-1 countdown (circular arrow).</summary>
+    public event Action? RestartRequested;
+
+    private bool _paused;
 
     public RecordingPill(SelectedRegion region, TimeSpan total, ILoggerFactory loggerFactory)
     {
@@ -45,12 +51,8 @@ public partial class RecordingPill : Window
         CurRun.Text = Format(TimeSpan.Zero);
 
         // Start in the countdown state: number shown, timer + progress hidden,
-        // Finish dimmed (only Cancel + drag are live until "1" clears).
-        TimerBlock.Visibility = Visibility.Collapsed;
-        CountBlock.Visibility = Visibility.Visible;
-        ProgressFill.Visibility = Visibility.Collapsed;
-        FinishButton.IsEnabled = false;
-        FinishButton.Opacity = 0.35;
+        // recording controls dimmed (only Cancel + drag are live until "1" clears).
+        ApplyCountdownState();
 
         Loaded += OnLoaded;
     }
@@ -88,12 +90,64 @@ public partial class RecordingPill : Window
         CountBlock.Visibility = Visibility.Collapsed;
         TimerBlock.Visibility = Visibility.Visible;
         ProgressFill.Visibility = Visibility.Visible;
-        FinishButton.IsEnabled = true;
-        FinishButton.Opacity = 1.0;
+        SetControlsEnabled(true);   // pause, restart, finish all live once recording starts
 
         // The timer is wider than a single digit, so the pill grew — re-place so
         // the recording bar stays centered on the region's bottom edge.
         Dispatcher.BeginInvoke(new Action(PlacePill), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Countdown visual: number shown, timer/progress hidden, controls dimmed.</summary>
+    private void ApplyCountdownState()
+    {
+        TimerBlock.Visibility = Visibility.Collapsed;
+        CountBlock.Visibility = Visibility.Visible;
+        ProgressFill.Visibility = Visibility.Collapsed;
+        PausedTag.Visibility = Visibility.Collapsed;
+        SetControlsEnabled(false);  // only Cancel + drag are live during the countdown
+    }
+
+    private void SetControlsEnabled(bool enabled)
+    {
+        // Styles dim a disabled button to 0.35 opacity via their IsEnabled trigger.
+        PauseButton.IsEnabled = enabled;
+        RestartButton.IsEnabled = enabled;
+        FinishButton.IsEnabled = enabled;
+    }
+
+    /// <summary>Applies the paused visual: play icon, paused chip, desaturated frozen progress.</summary>
+    public void SetPaused(bool paused)
+    {
+        _paused = paused;
+        PauseIcon.Visibility = paused ? Visibility.Collapsed : Visibility.Visible;
+        PlayIcon.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        PausedTag.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        PauseButton.ToolTip = paused ? "Resume · Space" : "Pause · Space";
+        ProgressFill.Fill = (Brush)FindResource(paused ? "Fg3Brush" : "AccentBrush");
+        CurRun.Foreground = (Brush)FindResource(paused ? "Fg2Brush" : "FgBrush");
+        if (paused) StartPausedBreathe(); else StopPausedBreathe();
+    }
+
+    private void StartPausedBreathe()
+    {
+        var a = new DoubleAnimation(0.78, 1.0, new Duration(TimeSpan.FromMilliseconds(1200)))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        };
+        PausedTag.BeginAnimation(OpacityProperty, a);
+    }
+
+    private void StopPausedBreathe() => PausedTag.BeginAnimation(OpacityProperty, null);
+
+    /// <summary>Resets the pill to the countdown state for a restart (same region).</summary>
+    public void ResetToCountdown()
+    {
+        if (_paused) SetPaused(false);
+        ProgressFill.Width = 0;
+        CurRun.Text = Format(TimeSpan.Zero);
+        ApplyCountdownState();
     }
 
     /// <summary>Updates the timer text + progress line. Call on the UI thread.</summary>
@@ -209,4 +263,12 @@ public partial class RecordingPill : Window
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => CancelRequested?.Invoke();
     private void OnFinishClick(object sender, RoutedEventArgs e) => FinishRequested?.Invoke();
+
+    private void OnPauseClick(object sender, RoutedEventArgs e)
+    {
+        SetPaused(!_paused);
+        PauseToggleRequested?.Invoke(_paused);
+    }
+
+    private void OnRestartClick(object sender, RoutedEventArgs e) => RestartRequested?.Invoke();
 }

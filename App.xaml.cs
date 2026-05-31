@@ -269,13 +269,14 @@ public partial class App : Application
         // One Esc hook spans the whole capture (countdown + recording). The
         // overlays never steal focus, so the recorded app stays active.
         using var escHook = new GlobalEscHook();
-        using var cts = new CancellationTokenSource();        // discard (Cancel/Esc)
+        using var cts = new CancellationTokenSource();        // discard (Cancel/Esc) — whole flow
         using var finishCts = new CancellationTokenSource();  // stop early & keep (Finish)
         bool canceled = false;
         bool finished = false;
+        bool restartRequested = false;
+        CaptureSession? activeSession = null;            // captured by pause/restart handlers
+        CancellationTokenSource? activeRestartCts = null;
 
-        // The pill owns the countdown AND the recording bar; it shows immediately,
-        // centered below the region, with 3-2-1 playing in its timer slot.
         var pill = new RecordingPill(region, total, _loggerFactory!);
 
         void RequestCancel()
@@ -292,68 +293,95 @@ public partial class App : Application
             _logger?.LogInformation("Finish requested — stopping early, keeping clip");
             try { finishCts.Cancel(); } catch { /* ignore */ }
         }
+        void RequestRestart()
+        {
+            if (canceled) return;
+            restartRequested = true;
+            _logger?.LogInformation("Restart requested — discarding take, re-counting down");
+            try { activeRestartCts?.Cancel(); } catch { /* ignore */ }
+        }
         escHook.Pressed += RequestCancel;
         pill.CancelRequested += RequestCancel;
         pill.FinishRequested += RequestFinish;
+        pill.RestartRequested += RequestRestart;
+        pill.PauseToggleRequested += paused =>
+        {
+            var s = activeSession;
+            if (s is null) return;
+            if (paused) s.Pause(); else s.Resume();
+        };
 
         try
         {
             pill.Show();
+            bool firstTake = true;
 
-            // ----- 3-2-1 countdown, in the pill -----
-            bool counted = await pill.RunCountdownAsync(cts.Token);
-            if (!counted || canceled)
+            while (true)
             {
-                _logger?.LogInformation("Canceled during countdown — no file");
+                if (!firstTake) pill.ResetToCountdown();
+                firstTake = false;
+                restartRequested = false;
+
+                // ----- 3-2-1 countdown, in the pill -----
+                bool counted = await pill.RunCountdownAsync(cts.Token);
+                if (!counted || canceled)
+                {
+                    _logger?.LogInformation("Canceled during countdown — no file");
+                    return;
+                }
+
+                // ----- recording -----
+                pill.SwitchToRecording();
+                var outputPath = AppSettings.BuildOutputPath(DateTime.Now);
+                var session = new CaptureSession(
+                    region, outputPath, total, AppSettings.TargetFps, AppSettings.TargetBitrateBps, _loggerFactory!);
+                using var restartCts = new CancellationTokenSource();
+                activeSession = session;
+                activeRestartCts = restartCts;
+                var progress = new Progress<TimeSpan>(pill.SetElapsed);
+
+                RecordingResult? result = null;
+                try
+                {
+                    result = await Task.Run(() => session.RunAsync(cts.Token, progress, finishCts.Token, restartCts.Token));
+                    _logger?.LogInformation(
+                        "Recording done: {Encoded} frames ({Dropped} dropped, finished={Finished}, restart={Restart}) → {Path}",
+                        result.FramesEncoded, result.FramesDropped, finished, restartRequested, result.OutputPath);
+                }
+                catch (OperationCanceledException)
+                {
+                    canceled = true;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "Recording failed");
+                    _trayApp?.ShowBalloon("WipShare", $"Recording failed: {ex.Message}", BalloonIcon.Error);
+                }
+                finally
+                {
+                    session.Dispose();
+                    activeSession = null;
+                    activeRestartCts = null;
+                }
+
+                if (restartRequested && !canceled && !finished)
+                {
+                    DiscardRecording(outputPath);  // clean teardown done; drop the partial take
+                    continue;                      // re-enter the countdown for the same region
+                }
+                if (canceled)
+                {
+                    _logger?.LogInformation("Recording aborted — discarding {Path}", outputPath);
+                    DiscardRecording(outputPath);
+                    return;
+                }
+                if (result is null) return; // hard failure (already surfaced)
+
+                if (_uploadQueue != null)
+                    EnqueueUpload(result);              // uploading toast appears via the queue's Started callback
+                else
+                    ShowLocalOnlyToast(result.OutputPath, result.ThumbnailPath);
                 return;
-            }
-
-            // ----- recording -----
-            pill.SwitchToRecording();
-            var outputPath = AppSettings.BuildOutputPath(DateTime.Now);
-            var session = new CaptureSession(
-                region, outputPath, total, AppSettings.TargetFps, AppSettings.TargetBitrateBps, _loggerFactory!);
-            var progress = new Progress<TimeSpan>(pill.SetElapsed);
-
-            RecordingResult? result = null;
-            try
-            {
-                result = await Task.Run(() => session.RunAsync(cts.Token, progress, finishCts.Token));
-                _logger?.LogInformation(
-                    "Recording done: {Encoded} frames ({Dropped} dropped, finished={Finished}) → {Path}",
-                    result.FramesEncoded, result.FramesDropped, finished, result.OutputPath);
-            }
-            catch (OperationCanceledException)
-            {
-                canceled = true;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError(ex, "Recording failed");
-                _trayApp?.ShowBalloon("WipShare", $"Recording failed: {ex.Message}", BalloonIcon.Error);
-            }
-            finally
-            {
-                session.Dispose();
-            }
-
-            if (canceled)
-            {
-                _logger?.LogInformation("Recording aborted — discarding {Path}", outputPath);
-                DiscardRecording(outputPath);
-                return;
-            }
-            if (result is null) return; // hard failure (already surfaced)
-
-            if (_uploadQueue != null)
-            {
-                // The uploading toast appears via the queue's Started callback.
-                EnqueueUpload(result);
-            }
-            else
-            {
-                // No invite code → keep the local copy and show the local-only toast.
-                ShowLocalOnlyToast(result.OutputPath, result.ThumbnailPath);
             }
         }
         finally

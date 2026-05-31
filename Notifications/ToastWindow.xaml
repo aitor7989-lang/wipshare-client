@@ -1,0 +1,226 @@
+<Window x:Class="WipShare.Client.Notifications.ToastWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WipShare"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        FontFamily="{StaticResource SansFont}">
+
+    <Window.Resources>
+        <!-- toast action button (default) -->
+        <Style x:Key="ToastBtn" TargetType="Button">
+            <Setter Property="Height" Value="27" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Foreground" Value="{StaticResource FgBrush}" />
+            <Setter Property="FontFamily" Value="{StaticResource SansFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7">
+                            <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource Surface2Brush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource HairlineStrongBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- toast action button (primary / accent) -->
+        <Style x:Key="ToastBtnPrimary" TargetType="Button">
+            <Setter Property="Height" Value="27" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Foreground" Value="{StaticResource WhiteBrush}" />
+            <Setter Property="FontFamily" Value="{StaticResource SansFont}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="7">
+                            <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentHiBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentHiBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- 18px transparent margin = shadow room; RootCard is the visible toast. -->
+    <Border x:Name="RootCard" Width="364" Margin="18"
+            Background="#FF1B1C1F"
+            BorderBrush="{StaticResource HairlineStrongBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            ClipToBounds="False">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="16" ShadowDepth="6" Direction="270" Opacity="0.5" Color="#000000" />
+        </Border.Effect>
+
+        <!-- slide+fade enter transform (animated on Loaded so it runs unfocused) -->
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="EnterTransform" X="0" Y="0" />
+        </Border.RenderTransform>
+
+        <Grid Margin="13,13,13,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ===== leading visual: icon-wrap OR poster thumb ===== -->
+            <Grid Grid.Column="0" Margin="0,0,11,0" VerticalAlignment="Top">
+                <!-- icon-wrap (uploading / failed / local-only) -->
+                <Border x:Name="IconWrap" Width="30" Height="30" CornerRadius="9"
+                        Background="{StaticResource Surface2Brush}">
+                    <Path x:Name="IconPath" Width="15" Height="15" Stretch="Uniform"
+                          Stroke="{StaticResource Fg2Brush}" StrokeThickness="1.6"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Border>
+                <!-- poster thumb (success) -->
+                <Border x:Name="ThumbWrap" Width="56" Height="36" CornerRadius="7" Visibility="Collapsed"
+                        BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1"
+                        Background="#FF0A0B0C" ClipToBounds="True">
+                    <Grid>
+                        <Image x:Name="ThumbImage" Stretch="UniformToFill" />
+                        <!-- play-triangle placeholder when no poster -->
+                        <Path x:Name="ThumbPlay" Data="M0,0 L9,5.5 L0,11 Z" Fill="#8CFFFFFF"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" Stretch="None" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- ===== body ===== -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <!-- title row -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="TitleText" FontSize="13" FontWeight="Medium"
+                               Foreground="{StaticResource FgBrush}" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <Path x:Name="TitleCheck" Visibility="Collapsed" Width="13" Height="13" Margin="7,0,0,0"
+                          Data="M3.5,8.5 L6.5,11.5 L12.5,4.5" Stretch="None"
+                          Stroke="{StaticResource OkBrush}" StrokeThickness="2"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                          VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- description (plain) -->
+                <TextBlock x:Name="DescText" Margin="0,3,0,0" FontSize="12"
+                           Foreground="{StaticResource Fg2Brush}" TextTrimming="CharacterEllipsis" />
+                <!-- description (mono — the viewer URL, success) -->
+                <TextBlock x:Name="DescMono" Margin="0,3,0,0" FontFamily="{StaticResource MonoFont}"
+                           FontSize="11.5" Foreground="{StaticResource FgBrush}"
+                           TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+
+                <!-- upload progress bar -->
+                <Border x:Name="ProgressTrack" Height="3" CornerRadius="999" Margin="0,11,0,0"
+                        Background="#14FFFFFF" ClipToBounds="True" Visibility="Collapsed">
+                    <Rectangle x:Name="ProgressBar" Height="3" Width="0" RadiusX="1.5" RadiusY="1.5"
+                               HorizontalAlignment="Left" Fill="{StaticResource AccentBrush}" />
+                </Border>
+
+                <!-- actions -->
+                <StackPanel x:Name="Actions" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
+                    <Button x:Name="BtnOpen" Style="{StaticResource ToastBtnPrimary}" Margin="0,0,7,0" Visibility="Collapsed" Click="OnOpenClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform"
+                                  Data="M6,3 H3 V13 H13 V10 M9,3 H13 V7 M13,3 L7.5,8.5"
+                                  Stroke="{StaticResource WhiteBrush}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            <TextBlock Text="Open" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnCopyAgain" Style="{StaticResource ToastBtn}" Margin="0,0,7,0" Visibility="Collapsed" Click="OnCopyAgainClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path x:Name="CopyIcon" Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform"
+                                  Data="M5,5 H13 V13 H5 Z M3,11 V4 A1,1 0 0 1 4,3 H11"
+                                  Stroke="{StaticResource FgBrush}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            <TextBlock x:Name="CopyAgainText" Text="Copy again" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnRetry" Style="{StaticResource ToastBtnPrimary}" Margin="0,0,7,0" Visibility="Collapsed" Click="OnRetryClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform"
+                                  Data="M13,8 A5,5 0 1 1 11.5,4.5 M13,3 V6 H10"
+                                  Stroke="{StaticResource WhiteBrush}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            <TextBlock Text="Retry now" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnSetup" Style="{StaticResource ToastBtn}" Visibility="Collapsed" Click="OnSetupClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Width="12" Height="12" Margin="0,0,6,0" Stretch="Uniform"
+                                  Data="M8,2.5 L9.4,3.9 L11.4,3.6 L11.8,5.6 L13.6,6.6 L12.6,8.4 L13.6,10.2 L11.8,11.2 L11.4,13.2 L9.4,12.9 L8,14.3 L6.6,12.9 L4.6,13.2 L4.2,11.2 L2.4,10.2 L3.4,8.4 L2.4,6.6 L4.2,5.6 L4.6,3.6 L6.6,3.9 Z M8,6.4 A1.6,1.6 0 1 1 8,9.6 A1.6,1.6 0 1 1 8,6.4"
+                                  Stroke="{StaticResource Fg2Brush}" StrokeThickness="1.3"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            <TextBlock Text="Set up sharing" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- ===== close ===== -->
+            <Button x:Name="CloseButton" Grid.Column="2" Width="22" Height="22" Margin="3,-3,-3,0"
+                    VerticalAlignment="Top" Cursor="Hand" Click="OnCloseClick">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="cb" Background="Transparent" CornerRadius="6">
+                            <Path Data="M1,1 L9,9 M9,1 L1,9" Width="11" Height="11" Stretch="None"
+                                  Stroke="{StaticResource Fg3Brush}" StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="cb" Property="Background" Value="{StaticResource Surface2Brush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- ===== auto-dismiss countdown hairline (success / local-only) ===== -->
+            <Rectangle x:Name="Countdown" Grid.ColumnSpan="3" Height="1.5" VerticalAlignment="Bottom"
+                       Margin="-13,0,-13,-14" Fill="#38FFFFFF" Visibility="Collapsed"
+                       RenderTransformOrigin="0,0.5">
+                <Rectangle.RenderTransform>
+                    <ScaleTransform x:Name="CountdownScale" ScaleX="1" ScaleY="1" />
+                </Rectangle.RenderTransform>
+            </Rectangle>
+        </Grid>
+    </Border>
+</Window>

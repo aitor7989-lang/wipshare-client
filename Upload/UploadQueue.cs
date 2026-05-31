@@ -13,6 +13,10 @@ public sealed class UploadCallbacks
 {
     /// <summary>Active job count changed (queued + in-flight). For the tray badge.</summary>
     public Action<int>? ActiveCountChanged { get; init; }
+    /// <summary>A job has been picked up and its pipeline is starting. For the uploading toast.</summary>
+    public Action<UploadJob>? Started { get; init; }
+    /// <summary>Upload progress: (job, cumulative bytes sent, total mp4 bytes).</summary>
+    public Action<UploadJob, long, long>? Progress { get; init; }
     /// <summary>An upload finished; <see cref="UploadJob.ViewerUrl"/> is set.</summary>
     public Action<UploadJob>? Succeeded { get; init; }
     /// <summary>An upload failed permanently (this run); the sidecar persists for restart.</summary>
@@ -149,6 +153,9 @@ public sealed class UploadQueue : IDisposable
     {
         try
         {
+            try { _callbacks.Started?.Invoke(job); }
+            catch (Exception ex) { _logger.LogError(ex, "Started handler threw"); }
+
             for (int attempt = 0; ; attempt++)
             {
                 job.AttemptCount = attempt + 1;
@@ -219,7 +226,15 @@ public sealed class UploadQueue : IDisposable
         job.ClipId = init.Id;
         job.Save(_logger);
 
-        await _api.PutFileAsync(init.UploadUrl, job.ClipLocalMp4Path, "video/mp4", ct).ConfigureAwait(false);
+        await _api.PutFileAsync(
+            init.UploadUrl, job.ClipLocalMp4Path, "video/mp4", ct,
+            onBytesSent: sent =>
+            {
+                try { _callbacks.Progress?.Invoke(job, sent, job.Mp4SizeBytes); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Progress handler threw"); }
+            }).ConfigureAwait(false);
+        // Report a final 100% so the bar visibly completes before "done".
+        try { _callbacks.Progress?.Invoke(job, job.Mp4SizeBytes, job.Mp4SizeBytes); } catch { /* ignore */ }
 
         // Thumbnail is best-effort: the backend marks the clip ready without it,
         // so a failed poster PUT must never fail the clip.

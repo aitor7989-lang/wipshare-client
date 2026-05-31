@@ -100,12 +100,18 @@ public sealed class WipShareApiClient : IDisposable
     /// carries auth. Content-Type and Content-Length must match what initiate
     /// signed, so we stream the file with an explicit content type.
     /// </summary>
-    public async Task PutFileAsync(string presignedUrl, string filePath, string contentType, CancellationToken ct)
+    /// <param name="onBytesSent">
+    /// Optional cumulative-bytes-sent callback for upload progress. Invoked on the
+    /// upload thread; marshal to the UI thread in the handler.
+    /// </param>
+    public async Task PutFileAsync(
+        string presignedUrl, string filePath, string contentType, CancellationToken ct, Action<long>? onBytesSent = null)
     {
         try
         {
             await using var fs = File.OpenRead(filePath);
-            using var content = new StreamContent(fs);
+            Stream body = onBytesSent is null ? fs : new ProgressStream(fs, onBytesSent);
+            using var content = new StreamContent(body);
             content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
             content.Headers.ContentLength = fs.Length;
             using var resp = await _http.PutAsync(presignedUrl, content, ct).ConfigureAwait(false);

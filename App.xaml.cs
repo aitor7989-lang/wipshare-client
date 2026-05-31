@@ -11,6 +11,7 @@ using WipShare.Client.Encoding;
 using WipShare.Client.Hotkey;
 using WipShare.Client.Logging;
 using WipShare.Client.Native;
+using WipShare.Client.Notifications;
 using WipShare.Client.Recording;
 using WipShare.Client.Settings;
 using WipShare.Client.Setup;
@@ -38,6 +39,12 @@ public partial class App : Application
     private UploadQueue? _uploadQueue;
     private FirstRunWindow? _firstRunWindow;
 
+    // Desktop toast stack (replaces the upload tray balloons). Maps each in-flight
+    // job to its single toast window so progress/success/failure transition in place.
+    private ToastHost? _toastHost;
+    private readonly Dictionary<UploadJob, ToastWindow> _toasts = new();
+    private readonly Dictionary<UploadJob, long> _uploadStartTick = new();
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -62,6 +69,10 @@ public partial class App : Application
         _trayApp.Initialize();
         _trayApp.RetryFailedRequested += OnRetryFailedUploads;
         _trayApp.ChangeInviteCodeRequested += (_, _) => ShowFirstRunWindow();
+
+        // Toast stack — created regardless of upload config (the local-only toast
+        // fires from the capture path when there's no invite code).
+        _toastHost = new ToastHost(_loggerFactory);
 
         try
         {
@@ -156,6 +167,8 @@ public partial class App : Application
         _uploadQueue = new UploadQueue(_apiClient, new UploadCallbacks
         {
             ActiveCountChanged = OnUploadActiveCountChanged,
+            Started = OnUploadStarted,
+            Progress = OnUploadProgress,
             Succeeded = OnUploadSucceeded,
             Failed = OnUploadFailed,
         }, _loggerFactory!);
@@ -334,14 +347,13 @@ public partial class App : Application
 
             if (_uploadQueue != null)
             {
-                _trayApp?.ShowBalloon("WipShare", $"Saved {Path.GetFileName(result.OutputPath)} — uploading…");
+                // The uploading toast appears via the queue's Started callback.
                 EnqueueUpload(result);
-                // The "Link copied" balloon replaces the Explorer pop when uploading.
             }
             else
             {
-                _trayApp?.ShowBalloon("WipShare", $"Saved to {Path.GetFileName(result.OutputPath)}");
-                RevealInExplorer(result.OutputPath);
+                // No invite code → keep the local copy and show the local-only toast.
+                ShowLocalOnlyToast(result.OutputPath, result.ThumbnailPath);
             }
         }
         finally
@@ -431,23 +443,117 @@ public partial class App : Application
 
     private void OnUploadActiveCountChanged(int activeCount) => _trayApp?.SetUploadStatus(activeCount);
 
+    // The upload callbacks are raised on the queue's background thread; every
+    // handler marshals to the UI thread before touching toasts / clipboard / tray.
+
+    private void OnUploadStarted(UploadJob job)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_toastHost is null) return;
+            _uploadStartTick[job] = Environment.TickCount64;
+
+            if (_toasts.TryGetValue(job, out var existing))
+            {
+                existing.TransitionToUploading("uploading…"); // a retry reuses the same toast
+                return;
+            }
+
+            var vm = new ToastViewModel
+            {
+                Kind = ToastKind.Uploading,
+                FileName = Path.GetFileName(job.ClipLocalMp4Path),
+                TotalMb = job.Mp4SizeBytes / (1024.0 * 1024.0),
+                ProgressNote = "starting…",
+            };
+            var w = _toastHost.AddToast(vm);
+            w.OpenRequested += _ => OpenViewer(job);
+            w.CopyAgainRequested += _ => { if (!string.IsNullOrWhiteSpace(job.ViewerUrl)) CopyToClipboardWithRetry(job.ViewerUrl!); };
+            w.RetryRequested += _ => RetryUpload(job, w);
+            w.Dismissed += _ => { _toasts.Remove(job); _uploadStartTick.Remove(job); };
+            _toasts[job] = w;
+        });
+    }
+
+    private void OnUploadProgress(UploadJob job, long sent, long total)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_toasts.TryGetValue(job, out var w)) return;
+            const double mb = 1024.0 * 1024.0;
+            double frac = total > 0 ? Math.Clamp((double)sent / total, 0, 1) : 0;
+
+            string note;
+            if (sent <= 0) note = "starting…";
+            else if (frac >= 0.999) note = "done";
+            else
+            {
+                long startTick = _uploadStartTick.TryGetValue(job, out var t0) ? t0 : Environment.TickCount64;
+                double elapsedSec = Math.Max(0.25, (Environment.TickCount64 - startTick) / 1000.0);
+                double rate = sent / elapsedSec; // bytes/sec
+                int secs = rate > 1 ? Math.Max(1, (int)Math.Ceiling((total - sent) / rate)) : 1;
+                note = $"{secs}s left";
+            }
+            w.UpdateProgress(sent / mb, total / mb, frac, note);
+        });
+    }
+
     private void OnUploadSucceeded(UploadJob job)
     {
         var url = job.ViewerUrl;
-        if (string.IsNullOrWhiteSpace(url)) return;
-
-        // Clipboard + tray must run on the UI thread.
         Dispatcher.BeginInvoke(() =>
         {
-            CopyToClipboardWithRetry(url);
-            _trayApp?.SetLastLink(url);
-            _trayApp?.ShowBalloon("WipShare", "Link copied to clipboard");
+            if (!string.IsNullOrWhiteSpace(url))
+            {
+                CopyToClipboardWithRetry(url!);   // the magic moment — link on the clipboard
+                _trayApp?.SetLastLink(url!);
+            }
+            if (_toasts.TryGetValue(job, out var w) && !string.IsNullOrWhiteSpace(url))
+                w.TransitionToSuccess(url!, job.ClipLocalJpgPath);
         });
     }
 
     private void OnUploadFailed(UploadJob job)
     {
-        _trayApp?.ShowBalloon("WipShare", "Upload failed — will retry on restart.", BalloonIcon.Warning);
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_toasts.TryGetValue(job, out var w)) w.TransitionToFailed();
+            else _trayApp?.ShowBalloon("WipShare", "Upload failed — will retry on restart.", BalloonIcon.Warning);
+        });
+    }
+
+    /// <summary>Re-enqueues a failed job and morphs its toast back to uploading (Retry now).</summary>
+    private void RetryUpload(UploadJob job, ToastWindow w)
+    {
+        if (_uploadQueue is null) return;
+        w.TransitionToUploading("retrying…");
+        _uploadStartTick[job] = Environment.TickCount64;
+        job.State = UploadState.Pending;
+        job.AttemptCount = 0;
+        _uploadQueue.Enqueue(job);
+    }
+
+    private void OpenViewer(UploadJob job)
+    {
+        var url = job.ViewerUrl;
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try { Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true }); }
+        catch (Exception ex) { _logger?.LogError(ex, "Open viewer failed"); }
+    }
+
+    /// <summary>Shows the calm "Saved to your computer" toast when sharing isn't set up.</summary>
+    private void ShowLocalOnlyToast(string mp4Path, string? thumbPath)
+    {
+        if (_toastHost is null) { RevealInExplorer(mp4Path); return; }
+        var vm = new ToastViewModel
+        {
+            Kind = ToastKind.LocalOnly,
+            FileName = Path.GetFileName(mp4Path),
+            ThumbnailPath = thumbPath,
+        };
+        var w = _toastHost.AddToast(vm);
+        w.SetupRequested += _ => ShowFirstRunWindow();
+        w.ShowAsLocalOnly();
     }
 
     private void OnRetryFailedUploads(object? sender, EventArgs e)
@@ -498,6 +604,7 @@ public partial class App : Application
         }
         _apiClient?.Dispose();
 
+        try { _toastHost?.Dispose(); } catch (Exception ex) { _logger?.LogError(ex, "Toast host dispose"); }
         _trayApp?.Dispose();
         _mfRuntime?.Dispose();
         _loggerFactory?.Dispose();

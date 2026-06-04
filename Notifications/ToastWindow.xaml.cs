@@ -73,6 +73,16 @@ public partial class ToastWindow : Window
         EnterTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(34, 0, dur) { EasingFunction = ease });
     }
 
+    private void OnCardRootSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Rounded clip so the bottom countdown hairline follows the card's rounded
+        // corners (radius 11 = 12px corner − 1px border). A rounded clip on this
+        // inner grid (not a rectangular ClipToBounds on the shadowed border) keeps
+        // the shadow clean while containing the hairline.
+        CardRoot.Clip = new System.Windows.Media.RectangleGeometry(
+            new Rect(0, 0, CardRoot.ActualWidth, CardRoot.ActualHeight), 11, 11);
+    }
+
     // ----- state rendering -----
 
     private void ApplyState()

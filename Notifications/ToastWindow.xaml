@@ -95,6 +95,7 @@
             <TranslateTransform x:Name="EnterTransform" X="0" Y="0" />
         </Border.RenderTransform>
 
+        <Grid x:Name="CardRoot" SizeChanged="OnCardRootSizeChanged">
         <Grid Margin="13,13,13,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -213,10 +214,13 @@
                 </Button.Template>
             </Button>
 
-            <!-- ===== auto-dismiss countdown hairline (success / local-only) ===== -->
-            <Rectangle x:Name="Countdown" Grid.ColumnSpan="3" Height="1.5" VerticalAlignment="Bottom"
-                       Margin="-13,0,-13,-14" Fill="#38FFFFFF" Visibility="Collapsed"
-                       RenderTransformOrigin="0,0.5">
+        </Grid>
+
+            <!-- ===== auto-dismiss countdown hairline (success / local-only) =====
+                 A direct child of the rounded-clipped CardRoot, so its ends follow
+                 the card's rounded bottom corners instead of poking outside. -->
+            <Rectangle x:Name="Countdown" Height="1.5" VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
+                       Fill="#38FFFFFF" Visibility="Collapsed" RenderTransformOrigin="0,0.5">
                 <Rectangle.RenderTransform>
                     <ScaleTransform x:Name="CountdownScale" ScaleX="1" ScaleY="1" />
                 </Rectangle.RenderTransform>

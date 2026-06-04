@@ -135,9 +135,11 @@
                                    Foreground="{StaticResource ErrBrush}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Text="3" />
                     </Grid>
-                    <!-- paused chip (warn-tinted), shown only while paused -->
+                    <!-- paused chip (warn-tinted), shown only while paused. Fixed height
+                         with CornerRadius = height/2 → a true pill (WPF does NOT clamp a
+                         giant radius to half-height the way CSS border-radius:999 does). -->
                     <Border x:Name="PausedTag" Visibility="Collapsed" Margin="9,0,0,0" VerticalAlignment="Center"
-                            CornerRadius="999" Padding="7,3,9,3"
+                            Height="18" CornerRadius="9" Padding="7,0,9,0"
                             Background="#21D29922" BorderBrush="#47D29922" BorderThickness="1">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse Width="5" Height="5" Fill="#FFE0B04A" VerticalAlignment="Center" Margin="0,0,6,0" />

@@ -322,12 +322,15 @@ public partial class App : Application
                 firstTake = false;
                 restartRequested = false;
 
-                // ----- 3-2-1 countdown, in the pill -----
-                bool counted = await pill.RunCountdownAsync(cts.Token);
-                if (!counted || canceled)
+                // ----- 3-2-1 countdown, in the pill (skipped when disabled in Settings) -----
+                if (AppSettings.CountdownEnabled)
                 {
-                    _logger?.LogInformation("Canceled during countdown — no file");
-                    return;
+                    bool counted = await pill.RunCountdownAsync(cts.Token);
+                    if (!counted || canceled)
+                    {
+                        _logger?.LogInformation("Canceled during countdown — no file");
+                        return;
+                    }
                 }
 
                 // ----- recording -----
@@ -533,12 +536,32 @@ public partial class App : Application
         {
             if (!string.IsNullOrWhiteSpace(url))
             {
-                CopyToClipboardWithRetry(url!);   // the magic moment — link on the clipboard
+                // Auto-copy can be turned off in Settings — the toast still offers Copy.
+                if (AppSettings.AutoCopyLink) CopyToClipboardWithRetry(url!);
                 _trayApp?.SetLastLink(url!);
             }
+            // Transition (which caches the poster into memory) BEFORE any local cleanup.
             if (_toasts.TryGetValue(job, out var w) && !string.IsNullOrWhiteSpace(url))
                 w.TransitionToSuccess(url!, job.ClipLocalJpgPath);
+
+            // "Keep a local copy = off" → remove the mp4 (+poster) now that the upload
+            // is confirmed. This path only runs on a successful upload — never local-only.
+            if (!AppSettings.KeepLocalCopy)
+                DeleteLocalCopyAfterUpload(job);
         });
+    }
+
+    /// <summary>Deletes the local mp4 + poster after a confirmed upload (keep-local off). Best-effort.</summary>
+    private void DeleteLocalCopyAfterUpload(UploadJob job)
+    {
+        try { if (File.Exists(job.ClipLocalMp4Path)) File.Delete(job.ClipLocalMp4Path); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Could not remove local mp4 after upload"); }
+
+        var jpg = job.ClipLocalJpgPath;
+        try { if (!string.IsNullOrEmpty(jpg) && File.Exists(jpg)) File.Delete(jpg); }
+        catch (Exception ex) { _logger?.LogWarning(ex, "Could not remove local poster after upload"); }
+
+        _logger?.LogInformation("Local copy removed after successful upload (keep-local off)");
     }
 
     private void OnUploadFailed(UploadJob job)

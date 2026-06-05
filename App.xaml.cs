@@ -30,6 +30,7 @@ public partial class App : Application
     private ILoggerFactory? _loggerFactory;
     private ILogger<App>? _logger;
     private int _captureInFlight; // 0 = idle, 1 = capturing
+    private RegionSelector? _activeSelector; // non-null only while the overlay is in its selection phase
 
     // Cloud upload. Null until an invite code is connected (recordings then
     // stay local + Explorer pop). The code lives in Credential Manager via
@@ -240,6 +241,17 @@ public partial class App : Application
 
     private async void OnHotkeyPressed(object? sender, EventArgs e)
     {
+        // If the overlay is up and still in its selection phase, a second hotkey
+        // press starts a fresh selection rather than stacking or being ignored.
+        // (Both the hotkey and the overlay live on the UI thread, so no race.)
+        var active = _activeSelector;
+        if (active is { IsSelecting: true })
+        {
+            _logger?.LogInformation("Hotkey re-press during selection — restarting");
+            active.RestartSelection();
+            return;
+        }
+
         if (Interlocked.CompareExchange(ref _captureInFlight, 1, 0) != 0)
         {
             _logger?.LogInformation("Hotkey ignored: capture already in flight");
@@ -269,15 +281,25 @@ public partial class App : Application
     private async Task RecordRegionAsync()
     {
         using var selector = new RegionSelector(_loggerFactory!);
-        var result = await selector.SelectAsync();
+        SelectionResult result;
+        _activeSelector = selector;          // lets a hotkey re-press restart this selection
+        try
+        {
+            result = await selector.SelectAsync();
+        }
+        finally
+        {
+            _activeSelector = null;          // selection phase over (confirmed/canceled)
+        }
+
         switch (result.Outcome)
         {
             case SelectionOutcome.Canceled:
                 _logger?.LogInformation("Selection canceled — no recording");
                 return;
             case SelectionOutcome.TooSmall:
-                _trayApp?.ShowBalloon("WipShare", "Region too small. Try again.",
-                    BalloonIcon.Warning);
+                // The overlay now handles "too small" inline (message + retry) and
+                // never returns it; kept as a defensive no-op.
                 return;
             case SelectionOutcome.Confirmed:
                 await RecordSelectedRegionAsync(result.Region!.Value, result.SelectionDipRect, selector);

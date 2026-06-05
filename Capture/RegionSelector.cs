@@ -1,8 +1,12 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using WipShare.Client.Native;
 using WipShare.Client.Settings;
@@ -37,7 +41,12 @@ public sealed record SelectionResult(SelectionOutcome Outcome, SelectedRegion? R
 /// Full-virtual-screen overlay that lets the user drag out a rectangle. The
 /// window instance survives selection — on Confirmed, ownership is handed to the
 /// caller (via <see cref="OverlayWindow"/>) so <see cref="RecordingOverlay"/> can
-/// take it over without a visible flash. On Canceled/TooSmall the window closes.
+/// take it over without a visible flash. On Canceled the window closes.
+///
+/// Polished selection UX (design app/region-overlay.html): an auto-fading entry
+/// hint, a calm inline "too small" message that re-arms for another try instead
+/// of bailing out, a DPI-accurate pixel readout, and a fresh-selection-on-rehotkey
+/// reset (<see cref="RestartSelection"/>) so a second hotkey press never stacks.
 /// </summary>
 public sealed class RegionSelector : IDisposable
 {
@@ -53,12 +62,26 @@ public sealed class RegionSelector : IDisposable
     private Rectangle? _border;
     private Border? _labelHost;
     private TextBlock? _labelText;
+    private Border? _hint;
+    private Border? _tooSmallMsg;
+
+    // Timers: the hint fades after idle; the too-small message clears itself.
+    private DispatcherTimer? _hintFadeTimer;
+    private DispatcherTimer? _tooSmallTimer;
 
     // Drag state (DIPs in window-local space)
     private Point _dragStart;
     private Rect _currentDip = Rect.Empty;
 
     public Window? OverlayWindow => _window;
+
+    /// <summary>
+    /// True while the overlay is still in its selection phase (shown, not yet
+    /// confirmed or closed). A hotkey re-press during this window restarts the
+    /// selection rather than being ignored or stacking a second overlay.
+    /// </summary>
+    public bool IsSelecting =>
+        _tcs is { Task.IsCompleted: false } && _state is SelectionState.Idle or SelectionState.Dragging;
 
     public RegionSelector(ILoggerFactory loggerFactory)
     {
@@ -153,7 +176,19 @@ public sealed class RegionSelector : IDisposable
         };
         root.Children.Add(_labelHost);
 
+        // Auto-fading entry hint + the inline "too small" message.
+        _hint = BuildHint();
+        root.Children.Add(_hint);
+        _tooSmallMsg = BuildTooSmall();
+        root.Children.Add(_tooSmallMsg);
+
+        _hintFadeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(4200) };
+        _hintFadeTimer.Tick += OnHintFadeTick;
+        _tooSmallTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1700) };
+        _tooSmallTimer.Tick += OnTooSmallTick;
+
         w.Content = root;
+        w.Loaded += OnLoaded;
         w.KeyDown += OnKeyDown;
         w.MouseLeftButtonDown += OnMouseLeftDown;
         w.MouseMove += OnMouseMove;
@@ -165,6 +200,12 @@ public sealed class RegionSelector : IDisposable
         w.Closed += OnClosed;
 
         return w;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        PositionHint();
+        ShowHint();
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
@@ -179,6 +220,10 @@ public sealed class RegionSelector : IDisposable
     private void OnMouseLeftDown(object sender, MouseButtonEventArgs e)
     {
         if (_state != SelectionState.Idle) return;
+        // A fresh press always starts a clean selection — clear any lingering
+        // hint/too-small chrome first so nothing stacks.
+        HideTooSmall();
+        HideHintNow();
         _state = SelectionState.Dragging;
         _dragStart = e.GetPosition(_window);
         _currentDip = new Rect(_dragStart, new Size(0, 0));
@@ -203,9 +248,11 @@ public sealed class RegionSelector : IDisposable
         // Release capture before transitioning state so any reentrancy lands cleanly.
         _window.ReleaseMouseCapture();
 
-        if (dip.Width < 1 || dip.Height < 1)
+        // A stray click with no meaningful drag just re-arms, silently — no need
+        // to scold the user for a single click.
+        if (dip.Width < 3 && dip.Height < 3)
         {
-            ResolveTooSmall();
+            ResetToIdle();
             return;
         }
 
@@ -225,11 +272,13 @@ public sealed class RegionSelector : IDisposable
 
         if (physWidth < AppSettings.MinRegionWidth || physHeight < AppSettings.MinRegionHeight)
         {
-            ResolveTooSmall();
+            ShowTooSmall();
             return;
         }
 
         _state = SelectionState.Confirmed;
+        _hintFadeTimer?.Stop();
+        HideTooSmall();
         _logger.LogInformation(
             "Selection confirmed: monitor=0x{Mon:X} local=({X},{Y}) physical={PW}x{PH} (dip={DW:F1}x{DH:F1})",
             region.Monitor.ToInt64(), region.X, region.Y, region.Width, region.Height,
@@ -277,6 +326,8 @@ public sealed class RegionSelector : IDisposable
     private void UpdateDimensionsLabel()
     {
         // Probe the target monitor + its DPI to display physical-pixel dimensions.
+        // PointToScreen already maps DIPs → device pixels, so this readout is
+        // DPI-accurate on mixed-scaling multi-monitor setups.
         var pTL = _window!.PointToScreen(_currentDip.TopLeft);
         var pBR = _window!.PointToScreen(_currentDip.BottomRight);
         int physW = (int)Math.Round(Math.Abs(pBR.X - pTL.X));
@@ -295,16 +346,124 @@ public sealed class RegionSelector : IDisposable
         Canvas.SetTop(_labelHost, ly);
     }
 
-    private void ResolveTooSmall()
+    // ----- hint + too-small chrome -----
+
+    private void ShowHint()
     {
-        _state = SelectionState.Canceled;
-        _logger.LogInformation("Selection released but below minimum {MinW}x{MinH}",
-            AppSettings.MinRegionWidth, AppSettings.MinRegionHeight);
-        _tcs?.TrySetResult(SelectionResult.TooSmall);
-        try { _window?.Close(); } catch { }
+        if (_hint == null) return;
+        _hint.BeginAnimation(UIElement.OpacityProperty, null);
+        _hint.Opacity = 1;
+        _hint.Visibility = Visibility.Visible;
+        PositionHint();
+        _hintFadeTimer?.Stop();
+        _hintFadeTimer?.Start();
     }
 
-    private void OnClosed(object? sender, EventArgs e)
+    private void HideHintNow()
+    {
+        _hintFadeTimer?.Stop();
+        if (_hint == null) return;
+        _hint.BeginAnimation(UIElement.OpacityProperty, null);
+        _hint.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnHintFadeTick(object? sender, EventArgs e)
+    {
+        _hintFadeTimer?.Stop();
+        if (_hint == null || _state != SelectionState.Idle) return;
+        var anim = new DoubleAnimation(0, TimeSpan.FromMilliseconds(260))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+        };
+        _hint.BeginAnimation(UIElement.OpacityProperty, anim);
+    }
+
+    private void ShowTooSmall()
+    {
+        // Re-arm for another drag without leaving the overlay; the message clears
+        // itself after a moment (or the next mousedown clears it immediately).
+        _state = SelectionState.Idle;
+        _currentDip = Rect.Empty;
+        if (_innerGeo != null) _innerGeo.Rect = new Rect(0, 0, 0, 0);
+        if (_border != null) { _border.Visibility = Visibility.Collapsed; _border.Width = 0; _border.Height = 0; }
+        if (_labelHost != null) _labelHost.Visibility = Visibility.Collapsed;
+        HideHintNow();
+
+        if (_tooSmallMsg != null && _window != null)
+        {
+            _tooSmallMsg.Visibility = Visibility.Visible;
+            _tooSmallMsg.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var sz = _tooSmallMsg.DesiredSize;
+            Canvas.SetLeft(_tooSmallMsg, Math.Max(0, (_window.ActualWidth - sz.Width) / 2));
+            Canvas.SetTop(_tooSmallMsg, Math.Max(0, (_window.ActualHeight - sz.Height) / 2));
+            _tooSmallMsg.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                });
+        }
+
+        _logger.LogInformation("Selection below minimum {MinW}x{MinH}; showing too-small hint",
+            AppSettings.MinRegionWidth, AppSettings.MinRegionHeight);
+
+        _tooSmallTimer?.Stop();
+        _tooSmallTimer?.Start();
+    }
+
+    private void HideTooSmall()
+    {
+        _tooSmallTimer?.Stop();
+        if (_tooSmallMsg == null) return;
+        _tooSmallMsg.BeginAnimation(UIElement.OpacityProperty, null);
+        _tooSmallMsg.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnTooSmallTick(object? sender, EventArgs e)
+    {
+        _tooSmallTimer?.Stop();
+        if (_state == SelectionState.Idle && _tooSmallMsg is { Visibility: Visibility.Visible })
+            ResetToIdle();
+    }
+
+    /// <summary>Returns the overlay to a fresh idle selection (clears any drag, message, and re-shows the hint).</summary>
+    private void ResetToIdle()
+    {
+        _state = SelectionState.Idle;
+        _currentDip = Rect.Empty;
+        if (_innerGeo != null) _innerGeo.Rect = new Rect(0, 0, 0, 0);
+        if (_border != null) { _border.Visibility = Visibility.Collapsed; _border.Width = 0; _border.Height = 0; }
+        if (_labelHost != null) _labelHost.Visibility = Visibility.Collapsed;
+        HideTooSmall();
+        ShowHint();
+    }
+
+    /// <summary>
+    /// A hotkey re-press while selecting starts over rather than stacking a second
+    /// overlay. No-op once the selection is confirmed (recording owns the window)
+    /// or canceled. Must be called on the UI thread.
+    /// </summary>
+    public void RestartSelection()
+    {
+        if (_window == null) return;
+        if (_state is SelectionState.Confirmed or SelectionState.Canceled) return;
+        if (_state == SelectionState.Dragging)
+        {
+            try { _window.ReleaseMouseCapture(); } catch { /* ignore */ }
+        }
+        _logger.LogInformation("Region selection restarted (hotkey re-press)");
+        ResetToIdle();
+    }
+
+    private void PositionHint()
+    {
+        if (_window == null || _hint == null) return;
+        _hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var sz = _hint.DesiredSize;
+        Canvas.SetLeft(_hint, Math.Max(0, (_window.ActualWidth - sz.Width) / 2));
+        Canvas.SetTop(_hint, 38);
+    }
+
+    private void ResolveCanceledOnClose()
     {
         if (_tcs is { Task.IsCompleted: false })
         {
@@ -313,10 +472,19 @@ public sealed class RegionSelector : IDisposable
         }
     }
 
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        _hintFadeTimer?.Stop();
+        _tooSmallTimer?.Stop();
+        ResolveCanceledOnClose();
+    }
+
     private void Cancel()
     {
         if (_state is SelectionState.Confirmed or SelectionState.Canceled) return;
         _state = SelectionState.Canceled;
+        _hintFadeTimer?.Stop();
+        _tooSmallTimer?.Stop();
         _logger.LogInformation("Region selection canceled by user");
         _tcs?.TrySetResult(SelectionResult.Canceled);
         try { _window?.Close(); } catch { }
@@ -326,11 +494,177 @@ public sealed class RegionSelector : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _hintFadeTimer?.Stop();
+        _tooSmallTimer?.Stop();
         if (_state == SelectionState.Idle || _state == SelectionState.Dragging)
         {
             try { _window?.Close(); } catch { }
         }
         _window = null;
+    }
+
+    // ----- chrome builders (code-built to match the existing all-code overlay) -----
+
+    private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
+    private static FontFamily Font(string key) => (FontFamily)Application.Current.FindResource(key);
+
+    private Border BuildHint()
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        var glyph = BuildSelectGlyph();
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        panel.Children.Add(glyph);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Drag to select a region",
+            Foreground = Res("Fg2Brush"),
+            FontFamily = Font("SansFont"),
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(11, 0, 0, 0),
+        });
+
+        panel.Children.Add(new Border
+        {
+            Width = 1,
+            Height = 16,
+            Background = Res("HairlineBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(12, 0, 12, 0),
+        });
+
+        var esc = BuildKeyCap("Esc");
+        esc.VerticalAlignment = VerticalAlignment.Center;
+        panel.Children.Add(esc);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "to cancel",
+            Foreground = Res("Fg2Brush"),
+            FontFamily = Font("SansFont"),
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0),
+        });
+
+        return new Border
+        {
+            Height = 42,
+            CornerRadius = new CornerRadius(21),
+            Background = new SolidColorBrush(Color.FromArgb(0xE6, 0x14, 0x15, 0x17)),
+            BorderBrush = Res("HairlineStrongBrush"),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(16, 0, 10, 0),
+            Child = panel,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            Effect = new DropShadowEffect { BlurRadius = 36, ShadowDepth = 8, Direction = 270, Opacity = 0.5, Color = Colors.Black },
+        };
+    }
+
+    private Border BuildTooSmall()
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        var glyph = BuildTooSmallGlyph();
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        panel.Children.Add(glyph);
+
+        var text = new TextBlock
+        {
+            FontFamily = Font("SansFont"),
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(9, 0, 0, 0),
+        };
+        text.Inlines.Add(new Run("That region is too small. ") { Foreground = Res("FgBrush") });
+        text.Inlines.Add(new Run("Drag a larger box.") { Foreground = Res("Fg3Brush") });
+        panel.Children.Add(text);
+
+        return new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x14, 0x15, 0x17)),
+            BorderBrush = Res("HairlineStrongBrush"),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(15, 11, 15, 11),
+            Child = panel,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            Effect = new DropShadowEffect { BlurRadius = 40, ShadowDepth = 10, Direction = 270, Opacity = 0.55, Color = Colors.Black },
+        };
+    }
+
+    private static Border BuildKeyCap(string text) => new()
+    {
+        Background = Res("SurfaceBrush"),
+        BorderBrush = Res("HairlineBrush"),
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(5),
+        Padding = new Thickness(8, 3, 8, 3),
+        Child = new TextBlock
+        {
+            Text = text,
+            FontFamily = Font("MonoFont"),
+            FontSize = 11,
+            Foreground = Res("Fg2Brush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        },
+    };
+
+    /// <summary>The crop-frame "select a region" glyph (corner brackets + inner square).</summary>
+    private static FrameworkElement BuildSelectGlyph()
+    {
+        var grid = new Grid { Width = 16, Height = 16 };
+        grid.Children.Add(new Path
+        {
+            Data = Geometry.Parse("M2.5,5.5 V3.5 H4.5 M11.5,3.5 H13.5 V5.5 M13.5,10.5 V12.5 H11.5 M4.5,12.5 H2.5 V10.5"),
+            Stroke = Res("Fg2Brush"),
+            StrokeThickness = 1.5,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round,
+            StrokeLineJoin = PenLineJoin.Round,
+        });
+        grid.Children.Add(new Rectangle
+        {
+            Width = 4,
+            Height = 4,
+            RadiusX = 1,
+            RadiusY = 1,
+            Stroke = Res("Fg2Brush"),
+            StrokeThickness = 1.2,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return grid;
+    }
+
+    /// <summary>The "too small" glyph: a rounded square with a short bar.</summary>
+    private static FrameworkElement BuildTooSmallGlyph()
+    {
+        var grid = new Grid { Width = 16, Height = 16 };
+        grid.Children.Add(new Border
+        {
+            Width = 11,
+            Height = 11,
+            CornerRadius = new CornerRadius(3),
+            BorderBrush = Res("Fg3Brush"),
+            BorderThickness = new Thickness(1.5),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        grid.Children.Add(new Rectangle
+        {
+            Width = 5,
+            Height = 1.5,
+            Fill = Res("Fg3Brush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return grid;
     }
 }
 

@@ -26,8 +26,17 @@ public partial class AboutWindow : Window
         var host = new Uri(Constants.UploadBaseUrl).Host;
         WebsiteText.Text = host;
 
+        // Clip content to the chrome's rounded corners so the close button's red
+        // hover never spills past the corner (design overflow:hidden).
+        ContentRoot.SizeChanged += (_, _) => UpdateCornerClip();
+        UpdateCornerClip();
+
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) Close(); };
     }
+
+    private void UpdateCornerClip() =>
+        ContentRoot.Clip = new System.Windows.Media.RectangleGeometry(
+            new Rect(0, 0, ContentRoot.ActualWidth, ContentRoot.ActualHeight), 7, 7);
 
     private void OnTitleBarMouseDown(object sender, MouseButtonEventArgs e)
     {

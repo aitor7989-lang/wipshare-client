@@ -1,8 +1,10 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Extensions.Logging;
 using WipShare.Client.Config;
 using WipShare.Client.Hotkey;
@@ -50,9 +52,61 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         LoadState();
 
+        // Clip content to the chrome's rounded corners (design overflow:hidden) so
+        // the close button's red hover never spills past the corner.
+        ContentRoot.SizeChanged += (_, _) => UpdateCornerClip();
+        UpdateCornerClip();
+
         PreviewKeyDown += OnWindowPreviewKeyDown;
         PreviewMouseDown += OnWindowPreviewMouseDown;
         Activated += (_, _) => { RenderConnection(); StartupToggle.IsChecked = StartupRegistry.IsEnabled(); };
+        Loaded += (_, _) => HookScrollbar();
+    }
+
+    private void UpdateCornerClip() =>
+        ContentRoot.Clip = new RectangleGeometry(
+            new Rect(0, 0, ContentRoot.ActualWidth, ContentRoot.ActualHeight), 7, 7);
+
+    // ----- overlay scrollbar (design ds/scrollbar.html) -----
+
+    private ScrollBar? _vbar;
+    private System.Windows.Threading.DispatcherTimer? _barHideTimer;
+    private bool _scrolledRecently;
+
+    /// <summary>
+    /// Drives the custom overlay scrollbar's fade: visible while the scroll area is
+    /// hovered OR for ~1s after a scroll, then it eases back out.
+    /// </summary>
+    private void HookScrollbar()
+    {
+        BodyScroll.ApplyTemplate();
+        _vbar = BodyScroll.Template.FindName("PART_VerticalScrollBar", BodyScroll) as ScrollBar;
+        if (_vbar == null) return;
+
+        _barHideTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
+        _barHideTimer.Tick += (_, _) => { _barHideTimer!.Stop(); _scrolledRecently = false; UpdateBar(); };
+
+        BodyScroll.ScrollChanged += (_, _) =>
+        {
+            _scrolledRecently = true;
+            _barHideTimer!.Stop();
+            _barHideTimer.Start();
+            UpdateBar();
+        };
+        BodyScroll.MouseEnter += (_, _) => UpdateBar();
+        BodyScroll.MouseLeave += (_, _) => UpdateBar();
+        UpdateBar();
+    }
+
+    private void UpdateBar()
+    {
+        if (_vbar == null) return;
+        double target = (BodyScroll.IsMouseOver || _scrolledRecently) ? 1.0 : 0.0;
+        _vbar.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(target, TimeSpan.FromMilliseconds(220))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            });
     }
 
     private void LoadState()
@@ -61,6 +115,7 @@ public partial class SettingsWindow : Window
 
         SetCountdownUi(AppSettings.CountdownEnabled);
         AutoCopyToggle.IsChecked = AppSettings.AutoCopyLink;
+        OpenLinkToggle.IsChecked = AppSettings.OpenLinkAfterRecording;
         KeepLocalToggle.IsChecked = AppSettings.KeepLocalCopy;
         UpdateLocRowVisibility();
         SetLocPath(AppSettings.OutputFolder);
@@ -201,6 +256,9 @@ public partial class SettingsWindow : Window
 
     private void OnAutoCopyClick(object sender, RoutedEventArgs e) =>
         AppSettings.AutoCopyLink = AutoCopyToggle.IsChecked == true;
+
+    private void OnOpenLinkClick(object sender, RoutedEventArgs e) =>
+        AppSettings.OpenLinkAfterRecording = OpenLinkToggle.IsChecked == true;
 
     private void OnKeepLocalClick(object sender, RoutedEventArgs e)
     {

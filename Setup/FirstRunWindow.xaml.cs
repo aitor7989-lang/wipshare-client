@@ -59,7 +59,16 @@ public partial class FirstRunWindow : Window, IDisposable
             CodeBox.Focus();
             Keyboard.Focus(CodeBox);
         };
+
+        // Clip content to the chrome's rounded corners so the close button's red
+        // hover never spills past the corner (design overflow:hidden).
+        ContentRoot.SizeChanged += (_, _) => UpdateCornerClip();
+        UpdateCornerClip();
     }
+
+    private void UpdateCornerClip() =>
+        ContentRoot.Clip = new RectangleGeometry(
+            new Rect(0, 0, ContentRoot.ActualWidth, ContentRoot.ActualHeight), 7, 7);
 
     // ----- input / chrome -----
 

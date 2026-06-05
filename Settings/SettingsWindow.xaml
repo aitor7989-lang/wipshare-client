@@ -24,7 +24,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Border x:Name="track" Width="32" Height="19" CornerRadius="999"
+                        <Border x:Name="track" Width="32" Height="19" CornerRadius="9.5"
                                 Background="{StaticResource Surface2Brush}"
                                 BorderBrush="{StaticResource HairlineBrush}" BorderThickness="1">
                             <Ellipse x:Name="thumb" Width="13" Height="13" HorizontalAlignment="Left"
@@ -132,6 +132,76 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- overlay scrollbar: a thin pill thumb that floats over the right margin
+             (no reserved gutter), fading in while the window is hovered — design's
+             custom .cscroll. 4px wide, 6px on hover; white 16% → 30% → 38% on drag. -->
+        <Style x:Key="OverlayScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="11" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False" IsTabStop="False" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False" IsTabStop="False" />
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb MinHeight="32" Cursor="Hand">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <!-- fixed thin width (centered in the 11px lane); only the fill opacity changes -->
+                                                <Border x:Name="th" Width="3" HorizontalAlignment="Center" CornerRadius="1.5" Background="#29FFFFFF" />
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="th" Property="Background" Value="#4DFFFFFF" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsDragging" Value="True">
+                                                        <Setter TargetName="th" Property="Background" Value="#6BFFFFFF" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ScrollViewer that overlays the scrollbar over the content (no gutter). -->
+        <Style x:Key="OverlayScroll" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                    Margin="{TemplateBinding Padding}"
+                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    CanContentScroll="{TemplateBinding CanContentScroll}" />
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Style="{StaticResource OverlayScrollBar}"
+                                       Orientation="Vertical"
+                                       HorizontalAlignment="Right"
+                                       Width="11"
+                                       Margin="0,8,4,8"
+                                       Minimum="0"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!-- Outer margin = drop-shadow room. -->
@@ -143,7 +213,7 @@
             <DropShadowEffect BlurRadius="40" ShadowDepth="12" Direction="270" Opacity="0.45" Color="#000000" />
         </Border.Effect>
 
-        <Grid>
+        <Grid x:Name="ContentRoot">
             <Grid.RowDefinitions>
                 <RowDefinition Height="36" />
                 <RowDefinition Height="*" />
@@ -186,7 +256,7 @@
             </Border>
 
             <!-- ===== Body ===== -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0">
+            <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Style="{StaticResource OverlayScroll}" VerticalScrollBarVisibility="Auto" Padding="0">
                 <StackPanel Margin="22,22,22,22">
                     <StackPanel.Resources>
                         <Style TargetType="Border" x:Key="GrpList">
@@ -225,13 +295,13 @@
                                         <!-- default -->
                                         <StackPanel x:Name="HkDefault" Orientation="Horizontal">
                                             <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource HairlineBrush}"
-                                                    BorderThickness="1" CornerRadius="8" Height="36" Padding="11,0" VerticalAlignment="Center">
+                                                    BorderThickness="1" CornerRadius="8" Height="34" Padding="11,0" VerticalAlignment="Center">
                                                 <StackPanel x:Name="ComboView" Orientation="Horizontal" VerticalAlignment="Center" />
                                             </Border>
-                                            <Button x:Name="HkChange" Style="{StaticResource BtnAct}" Margin="8,0,0,0" Content="Change" Click="OnHkChangeClick" />
+                                            <Button x:Name="HkChange" Style="{StaticResource BtnAct}" Height="34" Margin="8,0,0,0" Content="Change" Click="OnHkChangeClick" />
                                         </StackPanel>
                                         <!-- capturing -->
-                                        <Border x:Name="HkListen" Visibility="Collapsed" Height="36" Padding="13,0" CornerRadius="8"
+                                        <Border x:Name="HkListen" Visibility="Collapsed" Height="34" Padding="13,0" CornerRadius="8"
                                                 Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Ellipse Width="7" Height="7" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -242,11 +312,11 @@
                                         <!-- candidate confirm -->
                                         <StackPanel x:Name="HkConfirm" Visibility="Collapsed" Orientation="Horizontal">
                                             <Border Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource HairlineStrongBrush}"
-                                                    BorderThickness="1" CornerRadius="8" Height="36" Padding="11,0" VerticalAlignment="Center">
+                                                    BorderThickness="1" CornerRadius="8" Height="34" Padding="11,0" VerticalAlignment="Center">
                                                 <StackPanel x:Name="CandCombo" Orientation="Horizontal" VerticalAlignment="Center" />
                                             </Border>
-                                            <Button x:Name="HkSet" Style="{StaticResource BtnPrimary}" Height="32" Margin="8,0,0,0" Content="Set" Click="OnHkSetClick" />
-                                            <Button x:Name="HkCancel" Style="{StaticResource BtnAct}" Width="32" Height="32" Padding="0" Margin="6,0,0,0" Click="OnHkCancelClick" ToolTip="Cancel">
+                                            <Button x:Name="HkSet" Style="{StaticResource BtnPrimary}" Height="34" Margin="8,0,0,0" Content="Set" Click="OnHkSetClick" />
+                                            <Button x:Name="HkCancel" Style="{StaticResource BtnAct}" Width="34" Height="34" Padding="0" Margin="6,0,0,0" Click="OnHkCancelClick" ToolTip="Cancel">
                                                 <Path Data="M1,1 L9,9 M9,1 L1,9" Stroke="{StaticResource Fg2Brush}" StrokeThickness="1.5"
                                                       StrokeStartLineCap="Round" Width="10" Height="10" Stretch="None" />
                                             </Button>
@@ -327,6 +397,20 @@
                                                    Foreground="{StaticResource Fg3Brush}" Margin="0,2,0,0" TextWrapping="Wrap" />
                                     </StackPanel>
                                     <CheckBox Grid.Column="1" x:Name="AutoCopyToggle" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Click="OnAutoCopyClick" />
+                                </Grid>
+                                <Border Height="1" Background="{StaticResource HairlineBrush}" />
+                                <!-- open link after recording -->
+                                <Grid Margin="15,13">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                        <TextBlock Text="Open link after recording" FontSize="13.5" FontWeight="Medium" Foreground="{StaticResource FgBrush}" />
+                                        <TextBlock Text="Open the clip in your browser as soon as it finishes uploading." FontSize="12.5"
+                                                   Foreground="{StaticResource Fg3Brush}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" x:Name="OpenLinkToggle" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Click="OnOpenLinkClick" />
                                 </Grid>
                                 <Border Height="1" Background="{StaticResource HairlineBrush}" />
                                 <!-- keep local -->

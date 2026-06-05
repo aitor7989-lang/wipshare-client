@@ -18,7 +18,7 @@
 
     <Color x:Key="FgColor">#FFF7F8F8</Color>
     <Color x:Key="Fg2Color">#FF8A8F98</Color>
-    <Color x:Key="Fg3Color">#FF62666D</Color>
+    <Color x:Key="Fg3Color">#FF787C85</Color>
 
     <Color x:Key="AccentColor">#FF5E6AD2</Color>
     <Color x:Key="AccentHiColor">#FF7A85E0</Color>

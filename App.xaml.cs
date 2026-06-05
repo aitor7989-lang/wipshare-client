@@ -594,10 +594,14 @@ public partial class App : Application
             _trayApp?.SetFailedCount(_failedJobs.Count);
             if (!string.IsNullOrWhiteSpace(url))
             {
-                // Auto-copy can be turned off in Settings — the toast still offers Copy.
+                // Shared link (clipboard) stays the plain /c/[id]. App-initiated owner
+                // opens use the /r/[id]?o=token bridge so the owner's browser gets the
+                // cookie (owner view + /me). Falls back to /c/[id] if the bridge can't
+                // be built.
                 if (AppSettings.AutoCopyLink) CopyToClipboardWithRetry(url!);
-                if (AppSettings.OpenLinkAfterRecording) OpenInBrowser(url!);
-                _trayApp?.SetLastLink(url!);
+                var ownerUrl = OwnerBridgeUrl(job) ?? url!;
+                if (AppSettings.OpenLinkAfterRecording) OpenInBrowser(ownerUrl);
+                _trayApp?.SetLastLink(ownerUrl);
             }
             // Transition (which caches the poster into memory) BEFORE any local cleanup.
             if (_toasts.TryGetValue(job, out var w) && !string.IsNullOrWhiteSpace(url))
@@ -655,10 +659,26 @@ public partial class App : Application
 
     private void OpenViewer(UploadJob job)
     {
-        var url = job.ViewerUrl;
+        // Owner opening their own clip from the app → the identity bridge.
+        var url = OwnerBridgeUrl(job) ?? job.ViewerUrl;
         if (string.IsNullOrWhiteSpace(url)) return;
         try { Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true }); }
         catch (Exception ex) { _logger?.LogError(ex, "Open viewer failed"); }
+    }
+
+    /// <summary>
+    /// The owner-open URL: the /r/[id]?o=token bridge that hands this device's
+    /// identity to the browser (owner view + the clip lands in /me). Distinct from
+    /// the shared link (job.ViewerUrl = /c/[id]) which is what goes on the
+    /// clipboard. Returns null when the clip id or owner token is unavailable, so
+    /// callers fall back to the plain viewer URL.
+    /// </summary>
+    private string? OwnerBridgeUrl(UploadJob job)
+    {
+        var id = job.ClipId;
+        var owner = _accessConfig?.GetOwnerToken();
+        if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(owner)) return null;
+        return $"{Constants.UploadBaseUrl.TrimEnd('/')}/r/{Uri.EscapeDataString(id!)}?o={Uri.EscapeDataString(owner!)}";
     }
 
     /// <summary>Shows the calm "Saved to your computer" toast when sharing isn't set up.</summary>

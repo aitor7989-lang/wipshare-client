@@ -104,6 +104,22 @@
                     </Grid>
                 </Border>
 
+                <!-- your clips row -->
+                <Border BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,1,0,0">
+                    <Grid Margin="22,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Your clips" FontSize="13" Foreground="{StaticResource Fg3Brush}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" FontSize="13" VerticalAlignment="Center">
+                            <Hyperlink x:Name="YourClipsLink" Click="OnYourClipsClick" TextDecorations="None" Foreground="{StaticResource AccentHiBrush}">
+                                <TextBlock x:Name="YourClipsText" Text="wipshare-web.vercel.app/me" />
+                            </Hyperlink>
+                        </TextBlock>
+                    </Grid>
+                </Border>
+
                 <!-- foot / credits -->
                 <Border BorderBrush="{StaticResource HairlineBrush}" BorderThickness="0,1,0,0">
                     <StackPanel Margin="22,14,22,16" HorizontalAlignment="Center">

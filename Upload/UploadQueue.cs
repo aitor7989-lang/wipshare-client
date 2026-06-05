@@ -222,7 +222,8 @@ public sealed class UploadQueue : IDisposable
         job.Save(_logger);
 
         var init = await _api.InitiateAsync(
-            job.Mp4SizeBytes, "video/mp4", job.Width, job.Height, job.JpgSizeBytes, ct).ConfigureAwait(false);
+            job.Mp4SizeBytes, "video/mp4", job.Width, job.Height, job.JpgSizeBytes,
+            System.IO.Path.GetFileName(job.ClipLocalMp4Path), ct).ConfigureAwait(false);
         job.ClipId = init.Id;
         job.Save(_logger);
 

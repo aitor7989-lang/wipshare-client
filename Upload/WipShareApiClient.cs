@@ -74,9 +74,9 @@ public sealed class WipShareApiClient : IDisposable
     }
 
     public async Task<InitiateResponse> InitiateAsync(
-        long sizeBytes, string mime, int width, int height, long? thumbSizeBytes, CancellationToken ct)
+        long sizeBytes, string mime, int width, int height, long? thumbSizeBytes, string? filename, CancellationToken ct)
     {
-        var payload = new InitiateRequest(sizeBytes, mime, width, height, thumbSizeBytes, _ownerToken);
+        var payload = new InitiateRequest(sizeBytes, mime, width, height, thumbSizeBytes, _ownerToken, filename);
         using var req = new HttpRequestMessage(HttpMethod.Post, "api/clips/initiate")
         {
             // Fully qualified: the project has a sibling WipShare.Client.Encoding
@@ -202,7 +202,8 @@ public sealed class WipShareApiClient : IDisposable
         [property: JsonPropertyName("width")] int Width,
         [property: JsonPropertyName("height")] int Height,
         [property: JsonPropertyName("thumb_size_bytes")] long? ThumbSizeBytes,
-        [property: JsonPropertyName("owner_token")] string? OwnerToken);
+        [property: JsonPropertyName("owner_token")] string? OwnerToken,
+        [property: JsonPropertyName("filename")] string? Filename);
 
     private sealed record Envelope<T>(
         [property: JsonPropertyName("data")] T? Data,

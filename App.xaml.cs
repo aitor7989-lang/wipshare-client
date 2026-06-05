@@ -38,6 +38,9 @@ public partial class App : Application
     private WipShareApiClient? _apiClient;
     private UploadQueue? _uploadQueue;
     private FirstRunWindow? _firstRunWindow;
+    private Settings.SettingsWindow? _settingsWindow;
+    private Setup.AboutWindow? _aboutWindow;
+    private readonly HashSet<UploadJob> _failedJobs = new();
 
     // Desktop toast stack (replaces the upload tray balloons). Maps each in-flight
     // job to its single toast window so progress/success/failure transition in place.
@@ -68,7 +71,8 @@ public partial class App : Application
         _trayApp = new TrayApp(_loggerFactory);
         _trayApp.Initialize();
         _trayApp.RetryFailedRequested += OnRetryFailedUploads;
-        _trayApp.ChangeInviteCodeRequested += (_, _) => ShowFirstRunWindow();
+        _trayApp.SettingsRequested += (_, _) => ShowSettingsWindow();
+        _trayApp.AboutRequested += (_, _) => ShowAboutWindow();
 
         // Toast stack — created regardless of upload config (the local-only toast
         // fires from the capture path when there's no invite code).
@@ -114,6 +118,7 @@ public partial class App : Application
     {
         _accessConfig = new AccessConfig(_logger!);
         _accessConfig.MigrateLegacyConfigIfPresent();
+        _trayApp?.SetConfigured(_accessConfig.HasCode);
 
         if (_accessConfig.HasCode)
         {
@@ -141,6 +146,30 @@ public partial class App : Application
         _firstRunWindow = win;
         win.Closed += (_, _) => { if (ReferenceEquals(_firstRunWindow, win)) _firstRunWindow = null; };
         win.CodeAccepted += (_, _) => RestartUploadPipeline();
+        win.Show();
+        win.Activate();
+    }
+
+    /// <summary>Opens (or re-focuses) the Settings window.</summary>
+    private void ShowSettingsWindow()
+    {
+        if (_accessConfig is null || _hotkeyManager is null || _loggerFactory is null) return;
+        if (_settingsWindow != null) { _settingsWindow.Activate(); return; }
+        var win = new Settings.SettingsWindow(_accessConfig, _hotkeyManager, ShowFirstRunWindow, _loggerFactory);
+        _settingsWindow = win;
+        win.Closed += (_, _) => { if (ReferenceEquals(_settingsWindow, win)) _settingsWindow = null; };
+        win.Show();
+        win.Activate();
+    }
+
+    /// <summary>Opens (or re-focuses) the About window.</summary>
+    private void ShowAboutWindow()
+    {
+        if (_loggerFactory is null) return;
+        if (_aboutWindow != null) { _aboutWindow.Activate(); return; }
+        var win = new Setup.AboutWindow(_loggerFactory);
+        _aboutWindow = win;
+        win.Closed += (_, _) => { if (ReferenceEquals(_aboutWindow, win)) _aboutWindow = null; };
         win.Show();
         win.Activate();
     }
@@ -192,6 +221,7 @@ public partial class App : Application
     {
         TearDownUploadPipeline();
         StartUploadPipeline();
+        _trayApp?.SetConfigured(_accessConfig?.HasCode ?? false);
         _trayApp?.ShowBalloon("WipShare", "Connected — uploads are on.");
     }
 
@@ -342,6 +372,7 @@ public partial class App : Application
                 activeSession = session;
                 activeRestartCts = restartCts;
                 var progress = new Progress<TimeSpan>(pill.SetElapsed);
+                _trayApp?.SetRecording(true);
 
                 RecordingResult? result = null;
                 try
@@ -362,6 +393,7 @@ public partial class App : Application
                 }
                 finally
                 {
+                    _trayApp?.SetRecording(false);
                     session.Dispose();
                     activeSession = null;
                     activeRestartCts = null;
@@ -481,6 +513,8 @@ public partial class App : Application
     {
         Dispatcher.BeginInvoke(() =>
         {
+            _failedJobs.Remove(job);                          // a (re)started job is no longer failed
+            _trayApp?.SetFailedCount(_failedJobs.Count);
             if (_toastHost is null) return;
             _uploadStartTick[job] = Environment.TickCount64;
 
@@ -534,6 +568,8 @@ public partial class App : Application
         var url = job.ViewerUrl;
         Dispatcher.BeginInvoke(() =>
         {
+            _failedJobs.Remove(job);
+            _trayApp?.SetFailedCount(_failedJobs.Count);
             if (!string.IsNullOrWhiteSpace(url))
             {
                 // Auto-copy can be turned off in Settings — the toast still offers Copy.
@@ -568,6 +604,8 @@ public partial class App : Application
     {
         Dispatcher.BeginInvoke(() =>
         {
+            _failedJobs.Add(job);
+            _trayApp?.SetFailedCount(_failedJobs.Count);
             if (_toasts.TryGetValue(job, out var w)) w.TransitionToFailed();
             else _trayApp?.ShowBalloon("WipShare", "Upload failed — will retry on restart.", BalloonIcon.Warning);
         });

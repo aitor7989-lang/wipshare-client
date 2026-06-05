@@ -7,22 +7,34 @@ using Microsoft.Extensions.Logging;
 
 namespace WipShare.Client.Tray;
 
+/// <summary>
+/// The tray icon, its tooltip, and the context menu. Drives a small state machine
+/// (idle / recording / uploading / failed / not-set-up) off capture + upload
+/// events, swapping a composed icon and tooltip per state. The "link copied"
+/// moment is owned by the toast system — never duplicated here.
+/// </summary>
 public sealed class TrayApp : IDisposable
 {
-    private const string DefaultTooltip = "WipShare";
-
     private readonly ILogger<TrayApp> _logger;
     private TaskbarIcon? _trayIcon;
+    private readonly Dictionary<TrayState, Icon> _icons = new();
+
     private MenuItem? _statusItem;
     private MenuItem? _openLastLinkItem;
+    private MenuItem? _retryItem;
     private string? _lastLink;
+
+    // state inputs
+    private bool _configured;
+    private bool _recording;
+    private int _uploadingCount;
+    private int _failedCount;
+
     private bool _disposed;
 
-    /// <summary>Raised when the user picks "Retry failed uploads".</summary>
     public event EventHandler? RetryFailedRequested;
-
-    /// <summary>Raised when the user picks "Change invite code".</summary>
-    public event EventHandler? ChangeInviteCodeRequested;
+    public event EventHandler? SettingsRequested;
+    public event EventHandler? AboutRequested;
 
     public TrayApp(ILoggerFactory loggerFactory)
     {
@@ -31,43 +43,89 @@ public sealed class TrayApp : IDisposable
 
     public void Initialize()
     {
+        foreach (TrayState s in Enum.GetValues<TrayState>())
+            _icons[s] = TrayIconFactory.Create(s);
+
         _trayIcon = new TaskbarIcon
         {
-            ToolTipText = DefaultTooltip,
-            Icon = LoadTrayIcon(),
+            ToolTipText = "WipShare — Ready",
+            Icon = _icons[TrayState.Idle],
         };
 
         var menu = new ContextMenu();
-
-        _statusItem = new MenuItem { Header = "WipShare: idle", IsEnabled = false };
+        _statusItem = new MenuItem { Header = "Ready", IsEnabled = false };
         menu.Items.Add(_statusItem);
         menu.Items.Add(new Separator());
 
         _openLastLinkItem = MakeMenuItem("Open last link", OnOpenLastLink);
         _openLastLinkItem.IsEnabled = false;
         menu.Items.Add(_openLastLinkItem);
-        menu.Items.Add(MakeMenuItem("Retry failed uploads", OnRetryFailed));
+
+        _retryItem = MakeMenuItem("Retry failed uploads", OnRetryFailed);
+        _retryItem.IsEnabled = false;
+        menu.Items.Add(_retryItem);
         menu.Items.Add(new Separator());
 
-        menu.Items.Add(MakeMenuItem("Change invite code…", OnChangeInviteCode));
-        menu.Items.Add(MakeMenuItem("Settings", OnSettings));
-        menu.Items.Add(MakeMenuItem("About", OnAbout));
+        menu.Items.Add(MakeMenuItem("Settings…", OnSettings));
+        menu.Items.Add(MakeMenuItem("About WipShare", OnAbout));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MakeMenuItem("Quit", OnQuit));
+        menu.Items.Add(MakeMenuItem("Quit WipShare", OnQuit));
         _trayIcon.ContextMenu = menu;
 
         _logger.LogInformation("Tray icon initialized");
     }
 
-    /// <summary>Updates the upload badge/tooltip. Safe to call from any thread.</summary>
-    public void SetUploadStatus(int activeCount)
+    // ----- state inputs (any thread) -----
+
+    /// <summary>Whether an invite code is present (sets the Idle vs Not-set-up base state).</summary>
+    public void SetConfigured(bool configured) { _configured = configured; Recompute(); }
+
+    /// <summary>Whether a capture is actively recording.</summary>
+    public void SetRecording(bool recording) { _recording = recording; Recompute(); }
+
+    /// <summary>Queued + in-flight upload count (the existing "Uploading N…" signal).</summary>
+    public void SetUploadStatus(int activeCount) { _uploadingCount = activeCount; Recompute(); }
+
+    /// <summary>Number of uploads currently in the failed-pending state.</summary>
+    public void SetFailedCount(int failedCount) { _failedCount = failedCount; Recompute(); }
+
+    private void Recompute()
     {
         RunOnUi(() =>
         {
-            if (_statusItem != null)
-                _statusItem.Header = activeCount > 0 ? $"Uploading {activeCount}…" : "WipShare: idle";
-            if (_trayIcon != null)
-                _trayIcon.ToolTipText = activeCount > 0 ? $"{DefaultTooltip} — uploading {activeCount}…" : DefaultTooltip;
+            if (_trayIcon == null) return;
+
+            TrayState state;
+            string tooltip, status;
+            if (_recording)
+            {
+                state = TrayState.Recording; tooltip = "WipShare — Recording…"; status = "Recording…";
+            }
+            else if (_uploadingCount > 0)
+            {
+                state = TrayState.Uploading;
+                tooltip = $"WipShare — Uploading {_uploadingCount}…";
+                status = $"Uploading {_uploadingCount}…";
+            }
+            else if (_failedCount > 0)
+            {
+                state = TrayState.Failed;
+                tooltip = "Upload failed — click to retry";
+                status = _failedCount == 1 ? "1 upload failed" : $"{_failedCount} uploads failed";
+            }
+            else if (!_configured)
+            {
+                state = TrayState.NotSetUp; tooltip = "Local only — add an invite code to share"; status = "Local only";
+            }
+            else
+            {
+                state = TrayState.Idle; tooltip = "WipShare — Ready"; status = "Ready";
+            }
+
+            _trayIcon.ToolTipText = tooltip;
+            if (_icons.TryGetValue(state, out var icon)) _trayIcon.Icon = icon;
+            if (_statusItem != null) _statusItem.Header = status;
+            if (_retryItem != null) _retryItem.IsEnabled = _failedCount > 0;
         });
     }
 
@@ -91,6 +149,8 @@ public sealed class TrayApp : IDisposable
             Application.Current?.Dispatcher.BeginInvoke(() => tray.ShowBalloonTip(title, message, icon));
     }
 
+    // ----- menu -----
+
     private static MenuItem MakeMenuItem(string header, RoutedEventHandler handler)
     {
         var item = new MenuItem { Header = header };
@@ -98,24 +158,8 @@ public sealed class TrayApp : IDisposable
         return item;
     }
 
-    private void OnSettings(object? sender, RoutedEventArgs e)
-    {
-        MessageBox.Show(
-            "Settings UI not implemented in Phase 1.",
-            "WipShare",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-    }
-
-    private void OnAbout(object? sender, RoutedEventArgs e)
-    {
-        var version = typeof(TrayApp).Assembly.GetName().Version?.ToString() ?? "unknown";
-        MessageBox.Show(
-            $"WipShare Client – Phase 1\nVersion {version}\n\nWindow recording for 3D artists.",
-            "About WipShare",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-    }
+    private void OnSettings(object? sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+    private void OnAbout(object? sender, RoutedEventArgs e) => AboutRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnQuit(object? sender, RoutedEventArgs e)
     {
@@ -127,27 +171,14 @@ public sealed class TrayApp : IDisposable
     {
         var url = _lastLink;
         if (string.IsNullOrWhiteSpace(url)) return;
-        try
-        {
-            // Our own viewer URL — open in the default browser.
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to open last link");
-        }
+        try { Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true }); }
+        catch (Exception ex) { _logger.LogError(ex, "Failed to open last link"); }
     }
 
     private void OnRetryFailed(object? sender, RoutedEventArgs e)
     {
         _logger.LogInformation("Retry failed uploads selected from tray menu");
         RetryFailedRequested?.Invoke(this, EventArgs.Empty);
-    }
-
-    private void OnChangeInviteCode(object? sender, RoutedEventArgs e)
-    {
-        _logger.LogInformation("Change invite code selected from tray menu");
-        ChangeInviteCodeRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private static void RunOnUi(Action action)
@@ -158,20 +189,16 @@ public sealed class TrayApp : IDisposable
         else app.Dispatcher.BeginInvoke(action);
     }
 
-    private static Icon LoadTrayIcon()
-    {
-        var uri = new Uri("pack://application:,,,/Tray/TrayIcon.ico", UriKind.Absolute);
-        var resource = Application.GetResourceStream(uri)
-            ?? throw new InvalidOperationException("Embedded TrayIcon.ico resource not found");
-        using var stream = resource.Stream;
-        return new Icon(stream);
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _trayIcon?.Dispose();
         _trayIcon = null;
+        foreach (var icon in _icons.Values)
+        {
+            try { icon.Dispose(); } catch { /* ignore */ }
+        }
+        _icons.Clear();
     }
 }

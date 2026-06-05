@@ -1,6 +1,6 @@
 namespace WipShare.Client.Notifications;
 
-/// <summary>The four toast states from the notifications design.</summary>
+/// <summary>The toast states from the notifications design.</summary>
 public enum ToastKind
 {
     /// <summary>Upload in flight: icon, filename, MB/seconds-left line, progress bar. Persists.</summary>
@@ -11,6 +11,10 @@ public enum ToastKind
     Failed,
     /// <summary>Saved but sharing not configured: neutral save icon, "Set up sharing". Auto-dismiss 7s.</summary>
     LocalOnly,
+    /// <summary>Recording cut short but the partial clip was kept: calm, informational. Auto-dismiss 7s.</summary>
+    Interrupted,
+    /// <summary>No network yet: clip saved, will upload when back online. Calm, informational. Auto-dismiss 7s.</summary>
+    Offline,
 }
 
 /// <summary>
@@ -40,4 +44,7 @@ public sealed class ToastViewModel
 
     /// <summary>Trailing dim note: "starting…", "{n}s left", "done", "retrying…".</summary>
     public string ProgressNote { get; set; } = "starting…";
+
+    /// <summary>Length of the kept clip in seconds (the Interrupted state's message).</summary>
+    public int ClipSeconds { get; set; }
 }

@@ -596,6 +596,7 @@ public partial class App : Application
             {
                 // Auto-copy can be turned off in Settings — the toast still offers Copy.
                 if (AppSettings.AutoCopyLink) CopyToClipboardWithRetry(url!);
+                if (AppSettings.OpenLinkAfterRecording) OpenInBrowser(url!);
                 _trayApp?.SetLastLink(url!);
             }
             // Transition (which caches the poster into memory) BEFORE any local cleanup.
@@ -624,11 +625,19 @@ public partial class App : Application
 
     private void OnUploadFailed(UploadJob job)
     {
+        // With no network at all, frame it as the calm "offline" state (the clip is
+        // safe and resumes later) rather than a hard failure; a genuine upload error
+        // while online stays "failed" with a Retry action.
+        bool offline = !System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable();
         Dispatcher.BeginInvoke(() =>
         {
             _failedJobs.Add(job);
             _trayApp?.SetFailedCount(_failedJobs.Count);
-            if (_toasts.TryGetValue(job, out var w)) w.TransitionToFailed();
+            if (_toasts.TryGetValue(job, out var w))
+            {
+                if (offline) w.TransitionToOffline();
+                else w.TransitionToFailed();
+            }
             else _trayApp?.ShowBalloon("WipShare", "Upload failed — will retry on restart.", BalloonIcon.Warning);
         });
     }
@@ -698,6 +707,13 @@ public partial class App : Application
             }
         }
         _logger?.LogError("Could not copy link to clipboard after retries");
+    }
+
+    /// <summary>Opens a public viewer URL in the default browser (the "Open link after recording" setting).</summary>
+    private void OpenInBrowser(string url)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true }); }
+        catch (Exception ex) { _logger?.LogError(ex, "Opening clip link in browser failed"); }
     }
 
     protected override void OnExit(ExitEventArgs e)

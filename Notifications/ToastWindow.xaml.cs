@@ -22,6 +22,9 @@ public partial class ToastWindow : Window
     private const string IconUpload = "M8,13 V4 M4.5,7.5 L8,4 L11.5,7.5";
     private const string IconAlert  = "M8,2.5 L14.5,13 H1.5 Z M8,6.5 V9.5 M8,11.7 L8,12.1";
     private const string IconSave   = "M3,4.5 A1.5,1.5 0 0 1 4.5,3 H9.5 L13,6.5 V11.5 A1.5,1.5 0 0 1 11.5,13 H4.5 A1.5,1.5 0 0 1 3,11.5 Z M5.5,3 V6 H9 M5.5,9.5 H10.5";
+    private const string IconInterrupted = "M4,3 H12 A1.5,1.5 0 0 1 13.5,4.5 V11.5 A1.5,1.5 0 0 1 12,13 H4 A1.5,1.5 0 0 1 2.5,11.5 V4.5 A1.5,1.5 0 0 1 4,3 Z M2.5,6 H13.5 M9.5,8.5 L12,11 M12,8.5 L9.5,11";
+    private const string IconOffline = "M4.6,12 H10.6 A2.5,2.5 0 0 0 10.95,7.03 A3.5,3.5 0 0 0 4.7,6.1 M2,2.5 L13.5,14";
+    private const string IconCheck   = "M3.5,8.5 L6.5,11.5 L12.5,4.5";
 
     private readonly ILogger _logger;
     private bool _leaving;
@@ -102,6 +105,8 @@ public partial class ToastWindow : Window
         Countdown.Visibility = Visibility.Collapsed;
         BtnOpen.Visibility = BtnCopyAgain.Visibility = BtnRetry.Visibility = BtnSetup.Visibility = Visibility.Collapsed;
         RootCard.Cursor = Cursors.Arrow;
+        DescText.TextWrapping = TextWrapping.NoWrap;          // short lines ellipsize…
+        DescText.TextTrimming = TextTrimming.CharacterEllipsis;
 
         switch (Model.Kind)
         {
@@ -114,11 +119,10 @@ public partial class ToastWindow : Window
                 break;
 
             case ToastKind.Success:
-                IconWrap.Visibility = Visibility.Collapsed;
-                ThumbWrap.Visibility = Visibility.Visible;
-                LoadThumbnail();
+                // Green-tinted check icon-wrap (design notifications.html), not a thumbnail.
+                IconWrap.Background = new SolidColorBrush(Color.FromArgb(0x26, 0x3F, 0xB9, 0x50));
+                SetIcon(IconCheck, (Brush)FindResource("OkBrush"), 2);
                 TitleText.Text = "Link copied";
-                TitleCheck.Visibility = Visibility.Visible;
                 DescText.Visibility = Visibility.Collapsed;
                 DescMono.Visibility = Visibility.Visible;
                 DescMono.Text = StripScheme(Model.ViewerUrl ?? "");
@@ -145,6 +149,28 @@ public partial class ToastWindow : Window
                 DescText.Text = "Add an invite code to share a link.";
                 Actions.Visibility = Visibility.Visible;
                 BtnSetup.Visibility = Visibility.Visible;
+                Countdown.Visibility = Visibility.Visible;
+                break;
+
+            case ToastKind.Interrupted:
+                IconWrap.Background = surface2;   // calm, informational — not an error
+                SetIcon(IconInterrupted, fg2, 1.5);
+                TitleText.Text = "Recording stopped early";
+                DescText.TextWrapping = TextWrapping.Wrap;            // …but full sentences wrap
+                DescText.TextTrimming = TextTrimming.None;
+                DescText.Text = Model.ClipSeconds > 0
+                    ? $"The recording ended early — your {Model.ClipSeconds}-second clip was saved and is uploading."
+                    : "The recording ended early — your clip was saved and is uploading.";
+                Countdown.Visibility = Visibility.Visible;
+                break;
+
+            case ToastKind.Offline:
+                IconWrap.Background = surface2;   // calm, informational — not an error
+                SetIcon(IconOffline, fg2, 1.5);
+                TitleText.Text = "You’re offline";
+                DescText.TextWrapping = TextWrapping.Wrap;
+                DescText.TextTrimming = TextTrimming.None;
+                DescText.Text = "Clip saved — it’ll upload automatically when you’re back online.";
                 Countdown.Visibility = Visibility.Visible;
                 break;
         }
@@ -231,6 +257,18 @@ public partial class ToastWindow : Window
     }
 
     public void ShowAsLocalOnly() => ArmAutoDismiss(TimeSpan.FromSeconds(7));
+
+    /// <summary>Morphs an in-flight upload toast into the calm "offline" state (auto-resumes when back online).</summary>
+    public void TransitionToOffline()
+    {
+        Model.Kind = ToastKind.Offline;
+        StopAutoDismiss();
+        ApplyState();
+        ArmAutoDismiss(TimeSpan.FromSeconds(7));
+    }
+
+    /// <summary>Arms the auto-dismiss for a standalone "recording stopped early" toast (the VM is pre-set).</summary>
+    public void ShowAsInterrupted() => ArmAutoDismiss(TimeSpan.FromSeconds(7));
 
     // ----- auto-dismiss countdown (hover pauses) -----
 

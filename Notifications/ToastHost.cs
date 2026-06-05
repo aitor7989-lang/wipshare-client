@@ -184,8 +184,9 @@ public sealed class ToastHost : IDisposable
             Background = new SolidColorBrush(Color.FromArgb(0xD2, 0x16, 0x17, 0x1A)),
             BorderBrush = (Brush)Application.Current.FindResource("HairlineBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(999),
-            Padding = new Thickness(11, 6, 11, 6),
+            Height = 28,
+            CornerRadius = new CornerRadius(14),   // = height/2 → a true capsule (WPF doesn't clamp like CSS)
+            Padding = new Thickness(11, 0, 11, 0),
             Margin = new Thickness(CardMargin),
             Child = content,
             Cursor = System.Windows.Input.Cursors.Hand,

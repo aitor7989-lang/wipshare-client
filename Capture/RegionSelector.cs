@@ -38,15 +38,13 @@ public sealed record SelectionResult(SelectionOutcome Outcome, SelectedRegion? R
 }
 
 /// <summary>
-/// Full-virtual-screen overlay that lets the user drag out a rectangle. The
-/// window instance survives selection — on Confirmed, ownership is handed to the
-/// caller (via <see cref="OverlayWindow"/>) so <see cref="RecordingOverlay"/> can
-/// take it over without a visible flash. On Canceled the window closes.
-///
-/// Polished selection UX (design app/region-overlay.html): an auto-fading entry
-/// hint, a calm inline "too small" message that re-arms for another try instead
-/// of bailing out, a DPI-accurate pixel readout, and a fresh-selection-on-rehotkey
-/// reset (<see cref="RestartSelection"/>) so a second hotkey press never stacks.
+/// Full-virtual-screen overlay that lets the user drag out a rectangle, recreating
+/// the design's region-overlay.html: idle crosshair guide-lines + an auto-fading
+/// hint, a dim cut-out selection with a 1px white border (faint black outer edge),
+/// white corner ticks, a frosted dimensions readout clamped on-screen, and a calm
+/// inline "too small" message that re-arms. The window instance survives a confirmed
+/// selection — ownership is handed to <see cref="RecordingOverlay"/> which keeps the
+/// dim (eased lighter) as the locked recording-region frame, so it never flashes off.
 /// </summary>
 public sealed class RegionSelector : IDisposable
 {
@@ -59,7 +57,11 @@ public sealed class RegionSelector : IDisposable
     // Visual tree (built once, referenced from event handlers)
     private RectangleGeometry? _outerGeo;
     private RectangleGeometry? _innerGeo;
-    private Rectangle? _border;
+    private Rectangle? _selFill;     // faint white wash inside the selection
+    private Rectangle? _selWhite;    // 1px white border
+    private Rectangle? _selBlack;    // 1px black outer edge (reads on light content)
+    private Border? _cTL, _cTR, _cBL, _cBR;  // white corner ticks
+    private Rectangle? _crossV, _crossH;     // idle crosshair guide-lines
     private Border? _labelHost;
     private TextBlock? _labelText;
     private Border? _hint;
@@ -127,8 +129,9 @@ public sealed class RegionSelector : IDisposable
 
         var root = new Canvas { Background = Brushes.Transparent };
 
-        // Backdrop: a Path with EvenOdd fill. Outer rect covers everything;
-        // inner rect (zero-sized at start) punches a hole during the drag.
+        // Backdrop: a Path with EvenOdd fill. Outer rect covers everything; inner
+        // rect (zero-sized at start) punches the selection hole during the drag.
+        // Idle has no hole, so the whole screen reads dimmed.
         _outerGeo = new RectangleGeometry(new Rect(0, 0, w.Width, w.Height));
         _innerGeo = new RectangleGeometry(new Rect(0, 0, 0, 0));
         var group = new GeometryGroup { FillRule = FillRule.EvenOdd };
@@ -136,43 +139,81 @@ public sealed class RegionSelector : IDisposable
         group.Children.Add(_innerGeo);
         var backdrop = new Path
         {
-            Fill = Brushes.Black,
+            Fill = new SolidColorBrush(Color.FromRgb(6, 7, 8)),
             Opacity = AppSettings.BackdropOpacity,
             Data = group,
             IsHitTestVisible = false,
         };
-        Canvas.SetLeft(backdrop, 0);
-        Canvas.SetTop(backdrop, 0);
         root.Children.Add(backdrop);
 
-        // 2px white selection border (hidden until drag begins)
-        _border = new Rectangle
+        // Idle crosshair guide-lines (thin, ~15% white), tracking the cursor.
+        var guideBrush = new SolidColorBrush(Color.FromArgb(38, 255, 255, 255));
+        _crossV = new Rectangle { Width = 1, Fill = guideBrush, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+        _crossH = new Rectangle { Height = 1, Fill = guideBrush, IsHitTestVisible = false, Visibility = Visibility.Collapsed };
+        Canvas.SetTop(_crossV, 0);
+        Canvas.SetLeft(_crossH, 0);
+        root.Children.Add(_crossV);
+        root.Children.Add(_crossH);
+
+        // Selection rectangle: faint inner wash + 1px white border + 1px black
+        // outer edge, all hidden until a drag begins.
+        _selFill = new Rectangle
         {
-            Stroke = Brushes.White,
-            StrokeThickness = 2,
+            Fill = new SolidColorBrush(Color.FromArgb(13, 255, 255, 255)),
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            SnapsToDevicePixels = true,
+        };
+        _selBlack = new Rectangle
+        {
+            Stroke = new SolidColorBrush(Color.FromArgb(140, 0, 0, 0)),
+            StrokeThickness = 1,
             Fill = Brushes.Transparent,
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed,
             SnapsToDevicePixels = true,
         };
-        root.Children.Add(_border);
+        _selWhite = new Rectangle
+        {
+            Stroke = Brushes.White,
+            StrokeThickness = 1,
+            Fill = Brushes.Transparent,
+            IsHitTestVisible = false,
+            Visibility = Visibility.Collapsed,
+            SnapsToDevicePixels = true,
+        };
+        root.Children.Add(_selFill);
+        root.Children.Add(_selBlack);
+        root.Children.Add(_selWhite);
 
-        // Dimensions label: black 70% pill with white SemiBold text
+        _cTL = BuildCorner(new Thickness(2, 2, 0, 0), new CornerRadius(3, 0, 0, 0));
+        _cTR = BuildCorner(new Thickness(0, 2, 2, 0), new CornerRadius(0, 3, 0, 0));
+        _cBL = BuildCorner(new Thickness(2, 0, 0, 2), new CornerRadius(0, 0, 0, 3));
+        _cBR = BuildCorner(new Thickness(0, 0, 2, 2), new CornerRadius(0, 0, 3, 0));
+        root.Children.Add(_cTL);
+        root.Children.Add(_cTR);
+        root.Children.Add(_cBL);
+        root.Children.Add(_cBR);
+
+        // Dimensions readout: frosted pill (mono, 500), W in fg, × in fg-3, H in fg.
         _labelText = new TextBlock
         {
-            Foreground = Brushes.White,
-            FontSize = 16, // 12pt @ 96 DPI
-            FontWeight = FontWeights.SemiBold,
+            FontFamily = Font("MonoFont"),
+            FontSize = 12.5,
+            FontWeight = FontWeights.Medium,
             VerticalAlignment = VerticalAlignment.Center,
         };
         _labelHost = new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb((byte)(0.7 * 255), 0, 0, 0)),
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(6, 2, 6, 2),
+            Background = new SolidColorBrush(Color.FromArgb(0xEB, 0x14, 0x15, 0x17)),
+            BorderBrush = Res("HairlineStrongBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(10, 6, 10, 6),
             Child = _labelText,
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed,
+            Effect = new DropShadowEffect { BlurRadius = 22, ShadowDepth = 8, Direction = 270, Opacity = 0.5, Color = Colors.Black },
         };
         root.Children.Add(_labelHost);
 
@@ -204,8 +245,17 @@ public sealed class RegionSelector : IDisposable
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        SizeGuides();
+        ShowCrosshair(true);
         PositionHint();
         ShowHint();
+    }
+
+    private void SizeGuides()
+    {
+        if (_window == null) return;
+        if (_crossV != null) _crossV.Height = _window.ActualHeight;
+        if (_crossH != null) _crossH.Width = _window.ActualWidth;
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
@@ -221,20 +271,29 @@ public sealed class RegionSelector : IDisposable
     {
         if (_state != SelectionState.Idle) return;
         // A fresh press always starts a clean selection — clear any lingering
-        // hint/too-small chrome first so nothing stacks.
+        // hint/too-small/crosshair chrome first so nothing stacks.
         HideTooSmall();
         HideHintNow();
+        ShowCrosshair(false);
         _state = SelectionState.Dragging;
         _dragStart = e.GetPosition(_window);
         _currentDip = new Rect(_dragStart, new Size(0, 0));
         _window!.CaptureMouse();
-        _border!.Visibility = Visibility.Visible;
+        ShowSelectionVisuals(true);
         _labelHost!.Visibility = Visibility.Visible;
         UpdateVisuals();
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
+        if (_state == SelectionState.Idle)
+        {
+            // Track the crosshair guide-lines with the cursor.
+            var c = e.GetPosition(_window);
+            if (_crossV != null) Canvas.SetLeft(_crossV, c.X);
+            if (_crossH != null) Canvas.SetTop(_crossH, c.Y);
+            return;
+        }
         if (_state != SelectionState.Dragging) return;
         var p = e.GetPosition(_window);
         _currentDip = SelectorMath.MakeRect(_dragStart, p);
@@ -248,8 +307,7 @@ public sealed class RegionSelector : IDisposable
         // Release capture before transitioning state so any reentrancy lands cleanly.
         _window.ReleaseMouseCapture();
 
-        // A stray click with no meaningful drag just re-arms, silently — no need
-        // to scold the user for a single click.
+        // A stray click with no meaningful drag just re-arms, silently.
         if (dip.Width < 3 && dip.Height < 3)
         {
             ResetToIdle();
@@ -284,7 +342,8 @@ public sealed class RegionSelector : IDisposable
             region.Monitor.ToInt64(), region.X, region.Y, region.Width, region.Height,
             dip.Width, dip.Height);
         _tcs?.TrySetResult(SelectionResult.Confirm(region, dip));
-        // NOTE: window is left open. Caller transitions it to RecordingOverlay.
+        // NOTE: window is left open. Caller transitions it to RecordingOverlay,
+        // which keeps the dim (eased to the locked opacity) so it never flashes off.
     }
 
     /// <summary>Convert the DIP rect (in window-local coords) into a clamped, monitor-local physical-pixel region.</summary>
@@ -313,40 +372,67 @@ public sealed class RegionSelector : IDisposable
     private void UpdateVisuals()
     {
         _innerGeo!.Rect = _currentDip;
+        var r = _currentDip;
 
-        Canvas.SetLeft(_border!, _currentDip.X);
-        Canvas.SetTop(_border!, _currentDip.Y);
-        _border!.Width = Math.Max(0, _currentDip.Width);
-        _border!.Height = Math.Max(0, _currentDip.Height);
+        Place(_selFill!, r.X, r.Y, r.Width, r.Height);
+        Place(_selWhite!, r.X, r.Y, r.Width, r.Height);
+        Place(_selBlack!, r.X - 1, r.Y - 1, r.Width + 2, r.Height + 2);
 
-        if (_currentDip.Width >= 1 && _currentDip.Height >= 1)
+        PlaceCorner(_cTL!, r.X - 1, r.Y - 1);
+        PlaceCorner(_cTR!, r.Right + 1 - 12, r.Y - 1);
+        PlaceCorner(_cBL!, r.X - 1, r.Bottom + 1 - 12);
+        PlaceCorner(_cBR!, r.Right + 1 - 12, r.Bottom + 1 - 12);
+
+        if (r.Width >= 1 && r.Height >= 1)
             UpdateDimensionsLabel();
     }
 
     private void UpdateDimensionsLabel()
     {
-        // Probe the target monitor + its DPI to display physical-pixel dimensions.
-        // PointToScreen already maps DIPs → device pixels, so this readout is
-        // DPI-accurate on mixed-scaling multi-monitor setups.
+        // PointToScreen maps DIPs → device pixels, so this readout is DPI-accurate
+        // on mixed-scaling multi-monitor setups (reports real captured pixels).
         var pTL = _window!.PointToScreen(_currentDip.TopLeft);
         var pBR = _window!.PointToScreen(_currentDip.BottomRight);
         int physW = (int)Math.Round(Math.Abs(pBR.X - pTL.X));
         int physH = (int)Math.Round(Math.Abs(pBR.Y - pTL.Y));
-        _labelText!.Text = $"{physW} × {physH}";
 
-        // Position: 12px outside bottom-right by default; flip inside if it'd clip the virtual screen.
+        _labelText!.Inlines.Clear();
+        _labelText.Inlines.Add(new Run(physW.ToString()) { Foreground = Res("FgBrush") });
+        _labelText.Inlines.Add(new Run("  ×  ") { Foreground = Res("Fg3Brush"), FontWeight = FontWeights.Normal });
+        _labelText.Inlines.Add(new Run(physH.ToString()) { Foreground = Res("FgBrush") });
+
+        // Position: just outside the selection's bottom-right corner (where the
+        // cursor is), right-edge aligned to the region; flips above near the edge.
         _labelHost!.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var labelSz = _labelHost.DesiredSize;
         var (lx, ly) = SelectorMath.PositionLabel(
             _currentDip, labelSz,
             virtualWidth: _window.ActualWidth,
-            virtualHeight: _window.ActualHeight,
-            padding: 12);
+            virtualHeight: _window.ActualHeight);
         Canvas.SetLeft(_labelHost, lx);
         Canvas.SetTop(_labelHost, ly);
     }
 
-    // ----- hint + too-small chrome -----
+    // ----- hint + too-small + crosshair chrome -----
+
+    private void ShowSelectionVisuals(bool show)
+    {
+        var v = show ? Visibility.Visible : Visibility.Collapsed;
+        if (_selFill != null) _selFill.Visibility = v;
+        if (_selBlack != null) _selBlack.Visibility = v;
+        if (_selWhite != null) _selWhite.Visibility = v;
+        if (_cTL != null) _cTL.Visibility = v;
+        if (_cTR != null) _cTR.Visibility = v;
+        if (_cBL != null) _cBL.Visibility = v;
+        if (_cBR != null) _cBR.Visibility = v;
+    }
+
+    private void ShowCrosshair(bool show)
+    {
+        var v = show ? Visibility.Visible : Visibility.Collapsed;
+        if (_crossV != null) _crossV.Visibility = v;
+        if (_crossH != null) _crossH.Visibility = v;
+    }
 
     private void ShowHint()
     {
@@ -385,17 +471,16 @@ public sealed class RegionSelector : IDisposable
         _state = SelectionState.Idle;
         _currentDip = Rect.Empty;
         if (_innerGeo != null) _innerGeo.Rect = new Rect(0, 0, 0, 0);
-        if (_border != null) { _border.Visibility = Visibility.Collapsed; _border.Width = 0; _border.Height = 0; }
+        ShowSelectionVisuals(false);
         if (_labelHost != null) _labelHost.Visibility = Visibility.Collapsed;
         HideHintNow();
+        ShowCrosshair(false);
 
         if (_tooSmallMsg != null && _window != null)
         {
+            // Same component, same spot as the hint — it cross-fades in its place.
             _tooSmallMsg.Visibility = Visibility.Visible;
-            _tooSmallMsg.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            var sz = _tooSmallMsg.DesiredSize;
-            Canvas.SetLeft(_tooSmallMsg, Math.Max(0, (_window.ActualWidth - sz.Width) / 2));
-            Canvas.SetTop(_tooSmallMsg, Math.Max(0, (_window.ActualHeight - sz.Height) / 2));
+            PositionTopCenter(_tooSmallMsg);
             _tooSmallMsg.BeginAnimation(UIElement.OpacityProperty,
                 new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160))
                 {
@@ -425,15 +510,17 @@ public sealed class RegionSelector : IDisposable
             ResetToIdle();
     }
 
-    /// <summary>Returns the overlay to a fresh idle selection (clears any drag, message, and re-shows the hint).</summary>
+    /// <summary>Returns the overlay to a fresh idle selection (clears any drag, message, and re-shows the hint + crosshair).</summary>
     private void ResetToIdle()
     {
         _state = SelectionState.Idle;
         _currentDip = Rect.Empty;
         if (_innerGeo != null) _innerGeo.Rect = new Rect(0, 0, 0, 0);
-        if (_border != null) { _border.Visibility = Visibility.Collapsed; _border.Width = 0; _border.Height = 0; }
+        ShowSelectionVisuals(false);
         if (_labelHost != null) _labelHost.Visibility = Visibility.Collapsed;
         HideTooSmall();
+        SizeGuides();
+        ShowCrosshair(true);
         ShowHint();
     }
 
@@ -456,11 +543,50 @@ public sealed class RegionSelector : IDisposable
 
     private void PositionHint()
     {
-        if (_window == null || _hint == null) return;
-        _hint.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        var sz = _hint.DesiredSize;
-        Canvas.SetLeft(_hint, Math.Max(0, (_window.ActualWidth - sz.Width) / 2));
-        Canvas.SetTop(_hint, 38);
+        if (_hint != null) PositionTopCenter(_hint);
+    }
+
+    /// <summary>
+    /// Centers a guidance pill horizontally on the cursor's monitor, 36px from its
+    /// top. The hint and the too-small notice are the same component in the same
+    /// place (the notice cross-fades in the hint's spot).
+    /// </summary>
+    private void PositionTopCenter(FrameworkElement el)
+    {
+        if (_window == null) return;
+        el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var sz = el.DesiredSize;
+        var mon = CursorMonitorRectDip();
+        Canvas.SetLeft(el, mon.X + Math.Max(0, (mon.Width - sz.Width) / 2));
+        Canvas.SetTop(el, mon.Y + 36);
+    }
+
+    /// <summary>
+    /// Bounds of the monitor under the cursor, in window-local DIP coordinates.
+    /// The overlay spans the whole virtual desktop, so centering chrome (the hint,
+    /// the too-small message) on the virtual rect would drop it at the seam between
+    /// monitors. Centering on the cursor's monitor keeps it on the screen in use.
+    /// </summary>
+    private Rect CursorMonitorRectDip()
+    {
+        var full = new Rect(0, 0, _window?.ActualWidth ?? 0, _window?.ActualHeight ?? 0);
+        if (_window == null) return full;
+        try
+        {
+            if (!GetCursorPos(out var cp)) return full;
+            var hMon = MonitorFromPoint(cp, MONITOR_DEFAULTTONEAREST);
+            if (hMon == IntPtr.Zero) return full;
+            var mi = MONITORINFO.New();
+            if (!GetMonitorInfoW(hMon, ref mi)) return full;
+            var rc = mi.rcMonitor;
+            var tl = _window.PointFromScreen(new Point(rc.Left, rc.Top));
+            var br = _window.PointFromScreen(new Point(rc.Right, rc.Bottom));
+            return new Rect(tl, br);
+        }
+        catch
+        {
+            return full;
+        }
     }
 
     private void ResolveCanceledOnClose()
@@ -503,23 +629,57 @@ public sealed class RegionSelector : IDisposable
         _window = null;
     }
 
-    // ----- chrome builders (code-built to match the existing all-code overlay) -----
+    // ----- builders / helpers (code-built to match the existing all-code overlay) -----
+
+    private static void Place(FrameworkElement el, double x, double y, double w, double h)
+    {
+        Canvas.SetLeft(el, x);
+        Canvas.SetTop(el, y);
+        el.Width = Math.Max(0, w);
+        el.Height = Math.Max(0, h);
+    }
+
+    private static void PlaceCorner(Border c, double x, double y)
+    {
+        Canvas.SetLeft(c, x);
+        Canvas.SetTop(c, y);
+    }
+
+    private static Border BuildCorner(Thickness thickness, CornerRadius radius) => new()
+    {
+        Width = 12,
+        Height = 12,
+        BorderBrush = Brushes.White,
+        BorderThickness = thickness,
+        CornerRadius = radius,
+        IsHitTestVisible = false,
+        Visibility = Visibility.Collapsed,
+        Effect = new DropShadowEffect { BlurRadius = 1, ShadowDepth = 0, Color = Colors.Black, Opacity = 0.55 },
+    };
 
     private static Brush Res(string key) => (Brush)Application.Current.FindResource(key);
     private static FontFamily Font(string key) => (FontFamily)Application.Current.FindResource(key);
 
-    private Border BuildHint()
+    // The hint and the too-small notice are the same component: icon · lead · sep
+    // · end, in a fixed-height frosted top-center pill. The hint's end is an Esc
+    // key-cap + "to cancel"; the notice's is plain trailing text with a warn icon.
+    private Border BuildHint() =>
+        BuildGuidancePill(BuildSelectGlyph(Res("Fg2Brush")), "Drag to select a region", BuildHintEnd());
+
+    private Border BuildTooSmall() =>
+        BuildGuidancePill(BuildWarnGlyph(Res("WarnBrush")), "Region too small", BuildEndText("Drag a larger box"));
+
+    private Border BuildGuidancePill(FrameworkElement icon, string lead, FrameworkElement end)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-        var glyph = BuildSelectGlyph();
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        panel.Children.Add(glyph);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        panel.Children.Add(icon);
 
         panel.Children.Add(new TextBlock
         {
-            Text = "Drag to select a region",
-            Foreground = Res("Fg2Brush"),
+            Text = lead,
+            Foreground = Res("FgBrush"),
             FontFamily = Font("SansFont"),
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
@@ -529,34 +689,24 @@ public sealed class RegionSelector : IDisposable
         panel.Children.Add(new Border
         {
             Width = 1,
-            Height = 16,
+            Height = 15,
             Background = Res("HairlineBrush"),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(12, 0, 12, 0),
+            Margin = new Thickness(11, 0, 0, 0),
         });
 
-        var esc = BuildKeyCap("Esc");
-        esc.VerticalAlignment = VerticalAlignment.Center;
-        panel.Children.Add(esc);
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "to cancel",
-            Foreground = Res("Fg2Brush"),
-            FontFamily = Font("SansFont"),
-            FontSize = 13,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 0, 0),
-        });
+        end.VerticalAlignment = VerticalAlignment.Center;
+        end.Margin = new Thickness(11, 0, 0, 0);
+        panel.Children.Add(end);
 
         return new Border
         {
-            Height = 42,
-            CornerRadius = new CornerRadius(21),
-            Background = new SolidColorBrush(Color.FromArgb(0xE6, 0x14, 0x15, 0x17)),
+            Height = 40,
+            CornerRadius = new CornerRadius(20),
+            Background = new SolidColorBrush(Color.FromArgb(0xEB, 0x14, 0x15, 0x17)),  // rgba(20,21,23,0.92)
             BorderBrush = Res("HairlineStrongBrush"),
             BorderThickness = new Thickness(1),
-            Padding = new Thickness(16, 0, 10, 0),
+            Padding = new Thickness(18, 0, 18, 0),
             Child = panel,
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed,
@@ -564,46 +714,39 @@ public sealed class RegionSelector : IDisposable
         };
     }
 
-    private Border BuildTooSmall()
+    private FrameworkElement BuildHintEnd()
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-
-        var glyph = BuildTooSmallGlyph();
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        panel.Children.Add(glyph);
-
-        var text = new TextBlock
+        var sp = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        sp.Children.Add(BuildKbd("Esc"));
+        sp.Children.Add(new TextBlock
         {
+            Text = "to cancel",
+            Foreground = Res("Fg3Brush"),
             FontFamily = Font("SansFont"),
             FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(9, 0, 0, 0),
-        };
-        text.Inlines.Add(new Run("That region is too small. ") { Foreground = Res("FgBrush") });
-        text.Inlines.Add(new Run("Drag a larger box.") { Foreground = Res("Fg3Brush") });
-        panel.Children.Add(text);
-
-        return new Border
-        {
-            CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x14, 0x15, 0x17)),
-            BorderBrush = Res("HairlineStrongBrush"),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(15, 11, 15, 11),
-            Child = panel,
-            IsHitTestVisible = false,
-            Visibility = Visibility.Collapsed,
-            Effect = new DropShadowEffect { BlurRadius = 40, ShadowDepth = 10, Direction = 270, Opacity = 0.55, Color = Colors.Black },
-        };
+            Margin = new Thickness(7, 0, 0, 0),
+        });
+        return sp;
     }
 
-    private static Border BuildKeyCap(string text) => new()
+    private FrameworkElement BuildEndText(string text) => new TextBlock
+    {
+        Text = text,
+        Foreground = Res("Fg3Brush"),
+        FontFamily = Font("SansFont"),
+        FontSize = 13,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private static Border BuildKbd(string text) => new()
     {
         Background = Res("SurfaceBrush"),
         BorderBrush = Res("HairlineBrush"),
         BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(5),
-        Padding = new Thickness(8, 3, 8, 3),
+        Padding = new Thickness(7, 2, 7, 2),
+        VerticalAlignment = VerticalAlignment.Center,
         Child = new TextBlock
         {
             Text = text,
@@ -616,13 +759,13 @@ public sealed class RegionSelector : IDisposable
     };
 
     /// <summary>The crop-frame "select a region" glyph (corner brackets + inner square).</summary>
-    private static FrameworkElement BuildSelectGlyph()
+    private static FrameworkElement BuildSelectGlyph(Brush stroke)
     {
         var grid = new Grid { Width = 16, Height = 16 };
         grid.Children.Add(new Path
         {
             Data = Geometry.Parse("M2.5,5.5 V3.5 H4.5 M11.5,3.5 H13.5 V5.5 M13.5,10.5 V12.5 H11.5 M4.5,12.5 H2.5 V10.5"),
-            Stroke = Res("Fg2Brush"),
+            Stroke = stroke,
             StrokeThickness = 1.5,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
@@ -634,7 +777,7 @@ public sealed class RegionSelector : IDisposable
             Height = 4,
             RadiusX = 1,
             RadiusY = 1,
-            Stroke = Res("Fg2Brush"),
+            Stroke = stroke,
             StrokeThickness = 1.2,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -642,25 +785,25 @@ public sealed class RegionSelector : IDisposable
         return grid;
     }
 
-    /// <summary>The "too small" glyph: a rounded square with a short bar.</summary>
-    private static FrameworkElement BuildTooSmallGlyph()
+    /// <summary>The too-small glyph: a rounded square with a short centered bar.</summary>
+    private static FrameworkElement BuildWarnGlyph(Brush stroke)
     {
         var grid = new Grid { Width = 16, Height = 16 };
         grid.Children.Add(new Border
         {
             Width = 11,
             Height = 11,
-            CornerRadius = new CornerRadius(3),
-            BorderBrush = Res("Fg3Brush"),
+            CornerRadius = new CornerRadius(2.5),
+            BorderBrush = stroke,
             BorderThickness = new Thickness(1.5),
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         });
         grid.Children.Add(new Rectangle
         {
-            Width = 5,
+            Width = 4,
             Height = 1.5,
-            Fill = Res("Fg3Brush"),
+            Fill = stroke,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         });
@@ -709,24 +852,26 @@ internal static class SelectorMath
     }
 
     /// <summary>
-    /// Positions the dimensions label 12px outside the bottom-right of the
-    /// selection rectangle, or 12px inside it if that would clip past the
-    /// virtual screen.
+    /// Positions the dimensions readout just outside the selection's bottom-right
+    /// corner (where the cursor is), with its right edge aligned to the region's
+    /// right edge and sitting just below the bottom edge — flipping above when
+    /// there's no room — and clamped to stay on the virtual screen.
     /// </summary>
-    public static (double X, double Y) PositionLabel(Rect selection, Size labelSize, double virtualWidth, double virtualHeight, double padding)
+    public static (double X, double Y) PositionLabel(Rect selection, Size labelSize, double virtualWidth, double virtualHeight)
     {
-        // Outside placement
-        double x = selection.Right + padding;
-        double y = selection.Bottom + padding;
+        const double pad = 8, off = 10;
+        double right = selection.Right, bottom = selection.Bottom;
 
-        if (x + labelSize.Width > virtualWidth)
-            x = selection.Right - labelSize.Width - padding;
-        if (y + labelSize.Height > virtualHeight)
-            y = selection.Bottom - labelSize.Height - padding;
+        double y = bottom + off;                                   // just below the corner
+        if (y + labelSize.Height > virtualHeight - pad)
+            y = bottom - labelSize.Height - off;                   // no room below → above, inside
+        if (y < pad) y = pad;
 
-        // Final guards so the label is never off the left/top edge either
-        x = Math.Max(0, x);
-        y = Math.Max(0, y);
+        // Align the readout's right edge to the region's right edge; keep on-screen.
+        double rightGap = virtualWidth - right;
+        rightGap = Math.Max(pad, Math.Min(rightGap, virtualWidth - labelSize.Width - pad));
+        double x = virtualWidth - rightGap - labelSize.Width;
+
         return (x, y);
     }
 }

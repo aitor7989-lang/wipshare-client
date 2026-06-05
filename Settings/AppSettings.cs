@@ -25,7 +25,10 @@ public static class AppSettings
     // Region capture
     public const int MinRegionWidth  = 50;
     public const int MinRegionHeight = 50;
-    public const double BackdropOpacity = 0.4;
+    // Selection dim (design region-overlay.html): darker while choosing a region,
+    // eases lighter once the region is locked in.
+    public const double BackdropOpacity = 0.55;
+    public const double LockedBackdropOpacity = 0.40;
 
     public const string HotkeyName = "WipShareToggleRecord";
 
@@ -98,6 +101,13 @@ public static class AppSettings
         set { _current.AutoCopyLink = value; Save(); }
     }
 
+    /// <summary>When true, a completed upload opens the clip's viewer URL in the browser.</summary>
+    public static bool OpenLinkAfterRecording
+    {
+        get => _current.OpenLinkAfterRecording;
+        set { _current.OpenLinkAfterRecording = value; Save(); }
+    }
+
     /// <summary>When false, the local .mp4 is deleted after a confirmed successful upload.</summary>
     public static bool KeepLocalCopy
     {
@@ -143,6 +153,7 @@ public static class AppSettings
         public bool CountdownEnabled { get; set; } = true;
         public string? OutputFolder { get; set; }   // null → DefaultOutputDirectory
         public bool AutoCopyLink { get; set; } = true;
+        public bool OpenLinkAfterRecording { get; set; } = false;
         public bool KeepLocalCopy { get; set; } = true;
 
         public static Persisted Load()

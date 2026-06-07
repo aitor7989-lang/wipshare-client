@@ -29,13 +29,13 @@ public partial class RecordingPill : Window
     private POINT _dragCursorStart;
     private int _winStartX, _winStartY;
 
-    /// <summary>Cancel — discard the recording (red X, or Esc via the app hook).</summary>
+    /// <summary>Cancel - discard the recording (red X, or Esc via the app hook).</summary>
     public event Action? CancelRequested;
-    /// <summary>Finish — stop early but keep + upload the clip (indigo check).</summary>
+    /// <summary>Finish - stop early but keep + upload the clip (indigo check).</summary>
     public event Action? FinishRequested;
     /// <summary>Pause/Resume toggle (pause button). The bool is the new paused state.</summary>
     public event Action<bool>? PauseToggleRequested;
-    /// <summary>Restart — discard the take and re-enter the 3-2-1 countdown (circular arrow).</summary>
+    /// <summary>Restart - discard the take and re-enter the 3-2-1 countdown (circular arrow).</summary>
     public event Action? RestartRequested;
 
     private bool _paused;
@@ -93,7 +93,7 @@ public partial class RecordingPill : Window
         ProgressFill.Visibility = Visibility.Visible;
         SetControlsEnabled(true);   // pause, restart, finish all live once recording starts
 
-        // The timer is wider than a single digit, so the pill grew — re-center it
+        // The timer is wider than a single digit, so the pill grew - re-center it
         // below the region. But NOT if the user has dragged it (e.g. before a
         // restart): their chosen position must stick.
         if (!_userDragged)
@@ -172,7 +172,7 @@ public partial class RecordingPill : Window
     /// Clips the pill's content to its rounded inner rectangle so the flush
     /// bottom progress line follows the pill's bottom corners. A ROUNDED clip
     /// (not the rectangular ClipToBounds, which drew a faint box) on the
-    /// non-shadowed content grid — the shadow stays on the outer border.
+    /// non-shadowed content grid - the shadow stays on the outer border.
     /// </summary>
     private void OnPillGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -209,7 +209,7 @@ public partial class RecordingPill : Window
     /// <summary>
     /// Always places the pill horizontally centered on the drawn region, just
     /// below its bottom edge (the 16px transparent window margin supplies the
-    /// gap). No remembered position — the region drawn this time is the only
+    /// gap). No remembered position - the region drawn this time is the only
     /// context. Flips above / clamps to the work area when there's no room below.
     /// </summary>
     private void PlacePill()
@@ -234,7 +234,7 @@ public partial class RecordingPill : Window
 
     private static int Clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
 
-    // ----- drag (physical pixels — DPI-robust; in-session only, not persisted) -----
+    // ----- drag (physical pixels - DPI-robust; in-session only, not persisted) -----
 
     private void OnPillMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -254,7 +254,7 @@ public partial class RecordingPill : Window
         if (!GetCursorPos(out POINT cur)) return;
         int dx = cur.X - _dragCursorStart.X;
         int dy = cur.Y - _dragCursorStart.Y;
-        // Treat as a real drag (not a click) once it moves a few px — then the
+        // Treat as a real drag (not a click) once it moves a few px - then the
         // pill stays where the user put it, even across a restart.
         if (Math.Abs(dx) > 3 || Math.Abs(dy) > 3) _userDragged = true;
         SetWindowPos(Handle, HWND_TOPMOST, _winStartX + dx, _winStartY + dy, 0, 0, (uint)(SWP_NOSIZE | SWP_NOACTIVATE));

@@ -134,7 +134,7 @@
         </Style>
 
         <!-- overlay scrollbar: a thin pill thumb that floats over the right margin
-             (no reserved gutter), fading in while the window is hovered — design's
+             (no reserved gutter), fading in while the window is hovered - design's
              custom .cscroll. 4px wide, 6px on hover; white 16% → 30% → 38% on drag. -->
         <Style x:Key="OverlayScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="11" />

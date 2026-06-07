@@ -137,7 +137,7 @@ public partial class ToastWindow : Window
                 IconWrap.Background = new SolidColorBrush(Color.FromArgb(0x26, 0xE3, 0x5D, 0x6A));
                 SetIcon(IconAlert, err, 1.8);
                 TitleText.Text = "Upload failed";
-                DescText.Text = "Saved locally — your clip is safe. We’ll keep retrying.";
+                DescText.Text = "Saved locally - your clip is safe. We’ll keep retrying.";
                 Actions.Visibility = Visibility.Visible;
                 BtnRetry.Visibility = Visibility.Visible;
                 break;
@@ -153,24 +153,24 @@ public partial class ToastWindow : Window
                 break;
 
             case ToastKind.Interrupted:
-                IconWrap.Background = surface2;   // calm, informational — not an error
+                IconWrap.Background = surface2;   // calm, informational - not an error
                 SetIcon(IconInterrupted, fg2, 1.5);
                 TitleText.Text = "Recording stopped early";
                 DescText.TextWrapping = TextWrapping.Wrap;            // …but full sentences wrap
                 DescText.TextTrimming = TextTrimming.None;
                 DescText.Text = Model.ClipSeconds > 0
-                    ? $"The recording ended early — your {Model.ClipSeconds}-second clip was saved and is uploading."
-                    : "The recording ended early — your clip was saved and is uploading.";
+                    ? $"The recording ended early - your {Model.ClipSeconds}-second clip was saved and is uploading."
+                    : "The recording ended early - your clip was saved and is uploading.";
                 Countdown.Visibility = Visibility.Visible;
                 break;
 
             case ToastKind.Offline:
-                IconWrap.Background = surface2;   // calm, informational — not an error
+                IconWrap.Background = surface2;   // calm, informational - not an error
                 SetIcon(IconOffline, fg2, 1.5);
                 TitleText.Text = "You’re offline";
                 DescText.TextWrapping = TextWrapping.Wrap;
                 DescText.TextTrimming = TextTrimming.None;
-                DescText.Text = "Clip saved — it’ll upload automatically when you’re back online.";
+                DescText.Text = "Clip saved - it’ll upload automatically when you’re back online.";
                 Countdown.Visibility = Visibility.Visible;
                 break;
         }

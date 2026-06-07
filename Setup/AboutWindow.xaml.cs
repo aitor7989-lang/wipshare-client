@@ -22,7 +22,7 @@ public partial class AboutWindow : Window
         InitializeComponent();
 
         var v = typeof(AboutWindow).Assembly.GetName().Version;
-        VersionText.Text = v is null ? "—" : $"{v.Major}.{v.Minor}.{v.Build}";
+        VersionText.Text = v is null ? "-" : $"{v.Major}.{v.Minor}.{v.Build}";
 
         var host = new Uri(Constants.UploadBaseUrl).Host;
         WebsiteText.Text = host;

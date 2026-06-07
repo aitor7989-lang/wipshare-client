@@ -137,7 +137,7 @@ internal static unsafe class D3D11Interop
         fn(pContext, pDstResource, dstSubresource, dstX, dstY, dstZ, pSrcResource, srcSubresource, &srcBox);
     }
 
-    /// <summary>ID3D11DeviceContext::Map — vtable slot 14.</summary>
+    /// <summary>ID3D11DeviceContext::Map - vtable slot 14.</summary>
     public static int ContextMap(IntPtr pContext, IntPtr pResource, uint subresource, uint mapType, uint mapFlags, out D3D11_MAPPED_SUBRESOURCE mapped)
     {
         var vtbl = *(void***)pContext;
@@ -148,7 +148,7 @@ internal static unsafe class D3D11Interop
         return hr;
     }
 
-    /// <summary>ID3D11DeviceContext::Unmap — vtable slot 15.</summary>
+    /// <summary>ID3D11DeviceContext::Unmap - vtable slot 15.</summary>
     public static void ContextUnmap(IntPtr pContext, IntPtr pResource, uint subresource)
     {
         var vtbl = *(void***)pContext;
@@ -156,7 +156,7 @@ internal static unsafe class D3D11Interop
         fn(pContext, pResource, subresource);
     }
 
-    /// <summary>ID3D11DeviceContext::Flush — vtable slot 111. Submits queued
+    /// <summary>ID3D11DeviceContext::Flush - vtable slot 111. Submits queued
     /// commands to the GPU. Useful when handing the result off to another
     /// subsystem that doesn't share our command queue.</summary>
     public static void ContextFlush(IntPtr pContext)
@@ -261,7 +261,7 @@ internal static unsafe class D3D11Interop
             try
             {
                 // 3. Call IDirect3DDxgiInterfaceAccess::GetInterface (vtable slot 3
-                //    — first method after IUnknown's QI/AddRef/Release).
+                //    - first method after IUnknown's QI/AddRef/Release).
                 var vtbl = *(void***)pAccess;
                 var fn = (delegate* unmanaged<IntPtr, Guid*, IntPtr*, int>)vtbl[3];
                 Guid iidTex = IID_ID3D11Texture2D;
@@ -329,7 +329,7 @@ internal sealed class D3D11Bundle : IDisposable
 }
 
 /// <summary>
-/// IDirect3DDxgiInterfaceAccess — private WinRT helper that bridges projected
+/// IDirect3DDxgiInterfaceAccess - private WinRT helper that bridges projected
 /// IDirect3DSurface / IDirect3DDevice objects back to their underlying DXGI/D3D11
 /// COM interfaces. Defined in windows.graphics.directx.direct3d11.interop.h.
 /// </summary>

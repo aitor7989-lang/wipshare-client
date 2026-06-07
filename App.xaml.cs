@@ -75,7 +75,7 @@ public partial class App : Application
         _trayApp.SettingsRequested += (_, _) => ShowSettingsWindow();
         _trayApp.AboutRequested += (_, _) => ShowAboutWindow();
 
-        // Toast stack — created regardless of upload config (the local-only toast
+        // Toast stack - created regardless of upload config (the local-only toast
         // fires from the capture path when there's no invite code).
         _toastHost = new ToastHost(_loggerFactory);
 
@@ -112,7 +112,7 @@ public partial class App : Application
     /// <summary>
     /// On startup: load access identity, migrate any legacy plaintext secret into
     /// Credential Manager, then either start the upload pipeline (code present) or
-    /// show the first-run window (no code). Non-blocking — the tray icon is always
+    /// show the first-run window (no code). Non-blocking - the tray icon is always
     /// available regardless.
     /// </summary>
     private void InitializeUpload()
@@ -127,7 +127,7 @@ public partial class App : Application
         }
         else
         {
-            _logger?.LogInformation("No invite code yet — showing first-run window (recordings stay local until connected)");
+            _logger?.LogInformation("No invite code yet - showing first-run window (recordings stay local until connected)");
             ShowFirstRunWindow();
         }
     }
@@ -182,14 +182,14 @@ public partial class App : Application
         bool autoUpload = AppSettings.AutoUpload;
         if (!autoUpload)
         {
-            _logger?.LogInformation("Auto-upload disabled in settings — recordings stay local");
+            _logger?.LogInformation("Auto-upload disabled in settings - recordings stay local");
             return;
         }
 
         var code = _accessConfig?.GetCode();
         if (string.IsNullOrWhiteSpace(code))
         {
-            _logger?.LogInformation("No invite code available — upload stays off");
+            _logger?.LogInformation("No invite code available - upload stays off");
             return;
         }
 
@@ -223,7 +223,7 @@ public partial class App : Application
         TearDownUploadPipeline();
         StartUploadPipeline();
         _trayApp?.SetConfigured(_accessConfig?.HasCode ?? false);
-        _trayApp?.ShowBalloon("WipShare", "Connected — uploads are on.");
+        _trayApp?.ShowBalloon("WipShare", "Connected - uploads are on.");
     }
 
     private void TearDownUploadPipeline()
@@ -247,7 +247,7 @@ public partial class App : Application
         var active = _activeSelector;
         if (active is { IsSelecting: true })
         {
-            _logger?.LogInformation("Hotkey re-press during selection — restarting");
+            _logger?.LogInformation("Hotkey re-press during selection - restarting");
             active.RestartSelection();
             return;
         }
@@ -260,7 +260,7 @@ public partial class App : Application
 
         try
         {
-            // For diagnostic context only — region capture doesn't gate on the
+            // For diagnostic context only - region capture doesn't gate on the
             // focused window like Phase 1's window capture did.
             var hwnd = Win32Interop.GetForegroundWindow();
             _logger?.LogInformation("Hotkey pressed; foreground HWND=0x{Hwnd:X} title='{Title}'",
@@ -295,7 +295,7 @@ public partial class App : Application
         switch (result.Outcome)
         {
             case SelectionOutcome.Canceled:
-                _logger?.LogInformation("Selection canceled — no recording");
+                _logger?.LogInformation("Selection canceled - no recording");
                 return;
             case SelectionOutcome.TooSmall:
                 // The overlay now handles "too small" inline (message + retry) and
@@ -321,7 +321,7 @@ public partial class App : Application
         // One Esc hook spans the whole capture (countdown + recording). The
         // overlays never steal focus, so the recorded app stays active.
         using var escHook = new GlobalEscHook();
-        using var cts = new CancellationTokenSource();        // discard (Cancel/Esc) — whole flow
+        using var cts = new CancellationTokenSource();        // discard (Cancel/Esc) - whole flow
         using var finishCts = new CancellationTokenSource();  // stop early & keep (Finish)
         bool canceled = false;
         bool finished = false;
@@ -342,14 +342,14 @@ public partial class App : Application
         {
             if (canceled || finished) return;
             finished = true;
-            _logger?.LogInformation("Finish requested — stopping early, keeping clip");
+            _logger?.LogInformation("Finish requested - stopping early, keeping clip");
             try { finishCts.Cancel(); } catch { /* ignore */ }
         }
         void RequestRestart()
         {
             if (canceled) return;
             restartRequested = true;
-            _logger?.LogInformation("Restart requested — discarding take, re-counting down");
+            _logger?.LogInformation("Restart requested - discarding take, re-counting down");
             try { activeRestartCts?.Cancel(); } catch { /* ignore */ }
         }
         escHook.Pressed += RequestCancel;
@@ -380,7 +380,7 @@ public partial class App : Application
                     bool counted = await pill.RunCountdownAsync(cts.Token);
                     if (!counted || canceled)
                     {
-                        _logger?.LogInformation("Canceled during countdown — no file");
+                        _logger?.LogInformation("Canceled during countdown - no file");
                         return;
                     }
                 }
@@ -428,7 +428,7 @@ public partial class App : Application
                 }
                 if (canceled)
                 {
-                    _logger?.LogInformation("Recording aborted — discarding {Path}", outputPath);
+                    _logger?.LogInformation("Recording aborted - discarding {Path}", outputPath);
                     DiscardRecording(outputPath);
                     return;
                 }
@@ -462,13 +462,13 @@ public partial class App : Application
     {
         if (!File.Exists(path))
         {
-            _logger?.LogWarning("Cannot reveal in Explorer — file missing: {Path}", path);
+            _logger?.LogWarning("Cannot reveal in Explorer - file missing: {Path}", path);
             return;
         }
 
         try
         {
-            // explorer.exe /select,"path" — quoting the path with embedded comma per shell convention.
+            // explorer.exe /select,"path" - quoting the path with embedded comma per shell convention.
             Process.Start(new ProcessStartInfo
             {
                 FileName = "explorer.exe",
@@ -489,7 +489,7 @@ public partial class App : Application
             var mp4 = new FileInfo(result.OutputPath);
             if (!mp4.Exists || mp4.Length == 0)
             {
-                _logger?.LogWarning("Skipping upload — MP4 missing or empty: {Path}", result.OutputPath);
+                _logger?.LogWarning("Skipping upload - MP4 missing or empty: {Path}", result.OutputPath);
                 RevealInExplorer(result.OutputPath);
                 return;
             }
@@ -500,7 +500,7 @@ public partial class App : Application
             {
                 var jpg = new FileInfo(jpgPath);
                 if (jpg.Exists && jpg.Length > 0) jpgSize = jpg.Length;
-                else jpgPath = null; // generated thumbnail missing — upload without it
+                else jpgPath = null; // generated thumbnail missing - upload without it
             }
 
             var job = new UploadJob
@@ -608,7 +608,7 @@ public partial class App : Application
                 w.TransitionToSuccess(url!, job.ClipLocalJpgPath);
 
             // "Keep a local copy = off" → remove the mp4 (+poster) now that the upload
-            // is confirmed. This path only runs on a successful upload — never local-only.
+            // is confirmed. This path only runs on a successful upload - never local-only.
             if (!AppSettings.KeepLocalCopy)
                 DeleteLocalCopyAfterUpload(job);
         });
@@ -642,7 +642,7 @@ public partial class App : Application
                 if (offline) w.TransitionToOffline();
                 else w.TransitionToFailed();
             }
-            else _trayApp?.ShowBalloon("WipShare", "Upload failed — will retry on restart.", BalloonIcon.Warning);
+            else _trayApp?.ShowBalloon("WipShare", "Upload failed - will retry on restart.", BalloonIcon.Warning);
         });
     }
 

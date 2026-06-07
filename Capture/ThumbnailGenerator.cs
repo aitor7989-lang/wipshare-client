@@ -10,7 +10,7 @@ namespace WipShare.Client.Capture;
 
 /// <summary>
 /// Turns a tightly-packed BGRA frame buffer into a downscaled JPEG poster
-/// thumbnail. Best-effort: returns false (and logs) on any failure — a missing
+/// thumbnail. Best-effort: returns false (and logs) on any failure - a missing
 /// thumbnail must never block the recording or its upload.
 ///
 /// Uses System.Drawing (already in the dependency graph via the tray icon and

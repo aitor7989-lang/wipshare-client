@@ -11,7 +11,7 @@ namespace WipShare.Client.Tray;
 /// The tray icon, its tooltip, and the context menu. Drives a small state machine
 /// (idle / recording / uploading / failed / not-set-up) off capture + upload
 /// events, swapping a composed icon and tooltip per state. The "link copied"
-/// moment is owned by the toast system — never duplicated here.
+/// moment is owned by the toast system - never duplicated here.
 /// </summary>
 public sealed class TrayApp : IDisposable
 {
@@ -48,7 +48,7 @@ public sealed class TrayApp : IDisposable
 
         _trayIcon = new TaskbarIcon
         {
-            ToolTipText = "WipShare — Ready",
+            ToolTipText = "WipShare - Ready",
             Icon = _icons[TrayState.Idle],
         };
 
@@ -99,27 +99,27 @@ public sealed class TrayApp : IDisposable
             string tooltip, status;
             if (_recording)
             {
-                state = TrayState.Recording; tooltip = "WipShare — Recording…"; status = "Recording…";
+                state = TrayState.Recording; tooltip = "WipShare - Recording…"; status = "Recording…";
             }
             else if (_uploadingCount > 0)
             {
                 state = TrayState.Uploading;
-                tooltip = $"WipShare — Uploading {_uploadingCount}…";
+                tooltip = $"WipShare - Uploading {_uploadingCount}…";
                 status = $"Uploading {_uploadingCount}…";
             }
             else if (_failedCount > 0)
             {
                 state = TrayState.Failed;
-                tooltip = "Upload failed — click to retry";
+                tooltip = "Upload failed - click to retry";
                 status = _failedCount == 1 ? "1 upload failed" : $"{_failedCount} uploads failed";
             }
             else if (!_configured)
             {
-                state = TrayState.NotSetUp; tooltip = "Local only — add an invite code to share"; status = "Local only";
+                state = TrayState.NotSetUp; tooltip = "Local only - add an invite code to share"; status = "Local only";
             }
             else
             {
-                state = TrayState.Idle; tooltip = "WipShare — Ready"; status = "Ready";
+                state = TrayState.Idle; tooltip = "WipShare - Ready"; status = "Ready";
             }
 
             _trayIcon.ToolTipText = tooltip;

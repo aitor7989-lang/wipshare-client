@@ -9,8 +9,8 @@ namespace WipShare.Client.Tray;
 internal enum TrayState { Idle, Recording, Uploading, Failed, NotSetUp }
 
 /// <summary>
-/// Composes the tray icon per state from the WipShare mark — an accent rounded
-/// square with a bg "hole", plus a state tint and a corner badge — rather than
+/// Composes the tray icon per state from the WipShare mark - an accent rounded
+/// square with a bg "hole", plus a state tint and a corner badge - rather than
 /// shipping five .ico assets. Built as PNG-backed icons so the antialiased edges
 /// keep clean alpha on the taskbar.
 /// </summary>
@@ -71,7 +71,7 @@ internal static class TrayIconFactory
                     g.FillRectangle(white, cx - 0.9f, br.Y + 3f, 1.8f, 4.6f);
                     g.FillEllipse(white, cx - 1f, br.Y + 8.6f, 2f, 2f);
                 }
-                else // uploading — a small open ring reads as "in progress"
+                else // uploading - a small open ring reads as "in progress"
                 {
                     using var pen = new Pen(Color.FromArgb(225, 255, 255, 255), 1.4f);
                     g.DrawArc(pen, br.X + 3f, br.Y + 3f, br.Width - 6f, br.Height - 6f, -90, 280);

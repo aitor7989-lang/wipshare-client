@@ -65,7 +65,7 @@ public sealed class HotkeyManager : IDisposable
 
         try
         {
-            // AddOrReplace unregisters the old id and registers the new — if the
+            // AddOrReplace unregisters the old id and registers the new - if the
             // new one is taken it throws, having dropped the old.
             NHotkeyManager.Current.AddOrReplace(AppSettings.HotkeyName, newKey, newMods, OnHotkey);
             _registered = true;

@@ -25,7 +25,7 @@ public sealed class MfRuntime : IDisposable
     {
         if (!_started) return;
         _started = false;
-        // Ignore the HRESULT — shutdown failures during teardown have nowhere useful to go.
+        // Ignore the HRESULT - shutdown failures during teardown have nowhere useful to go.
         MediaFoundationInterop.MFShutdown();
     }
 }

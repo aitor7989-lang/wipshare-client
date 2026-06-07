@@ -107,7 +107,7 @@ public sealed class UploadQueue : IDisposable
 
             if (!File.Exists(job.ClipLocalMp4Path))
             {
-                _logger.LogWarning("Dropping orphaned upload — MP4 missing: {Path}", job.ClipLocalMp4Path);
+                _logger.LogWarning("Dropping orphaned upload - MP4 missing: {Path}", job.ClipLocalMp4Path);
                 job.DeleteSidecar(_logger);
                 continue;
             }

@@ -142,7 +142,7 @@
                 <!-- description (plain) -->
                 <TextBlock x:Name="DescText" Margin="0,3,0,0" FontSize="12"
                            Foreground="{StaticResource Fg2Brush}" TextTrimming="CharacterEllipsis" />
-                <!-- description (mono — the viewer URL, success) -->
+                <!-- description (mono - the viewer URL, success) -->
                 <TextBlock x:Name="DescMono" Margin="0,3,0,0" FontFamily="{StaticResource MonoFont}"
                            FontSize="11.5" Foreground="{StaticResource FgBrush}"
                            TextTrimming="CharacterEllipsis" Visibility="Collapsed" />

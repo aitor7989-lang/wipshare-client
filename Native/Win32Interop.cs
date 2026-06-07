@@ -209,7 +209,7 @@ internal static class Win32Interop
 }
 
 /// <summary>
-/// Static factory interface for GraphicsCaptureItem — bridges raw HWND/HMONITOR
+/// Static factory interface for GraphicsCaptureItem - bridges raw HWND/HMONITOR
 /// handles into the projected WinRT type. Defined in Windows.Graphics.Capture.Interop.h.
 /// </summary>
 [ComImport]

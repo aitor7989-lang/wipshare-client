@@ -17,7 +17,7 @@ namespace WipShare.Client.Capture;
 /// then walks just the region, not the whole monitor.
 ///
 /// We use D3D11_USAGE_STAGING + D3D11_CPU_ACCESS_READ on the staging texture so
-/// we can Map it directly into managed memory — that's bulletproof, whereas the
+/// we can Map it directly into managed memory - that's bulletproof, whereas the
 /// "wrap-as-IDirect3DSurface then let SoftwareBitmap.CreateCopyFromSurfaceAsync
 /// read it" path turned out to produce subtly corrupt MP4s. CPU pixel readback
 /// goes through Map → row-pitch-aware memcpy → byte[] handed to the encoder.
@@ -45,7 +45,7 @@ public sealed class MonitorCapture : IDisposable
     /// <summary>Native monitor resolution (the framepool's buffer size).</summary>
     public SizeInt32 MonitorSize { get; private set; }
 
-    /// <summary>Output dimensions delivered to subscribers — equals the crop
+    /// <summary>Output dimensions delivered to subscribers - equals the crop
     /// region size if cropping, else <see cref="MonitorSize"/>.</summary>
     public SizeInt32 OutputSize { get; private set; }
 
@@ -53,7 +53,7 @@ public sealed class MonitorCapture : IDisposable
 
     /// <summary>
     /// Fires when the underlying <see cref="GraphicsCaptureItem"/> reports
-    /// Closed — typically because the monitor was disconnected. Caller should
+    /// Closed - typically because the monitor was disconnected. Caller should
     /// finalize the recording gracefully.
     /// </summary>
     public event Action? ItemClosed;
@@ -99,7 +99,7 @@ public sealed class MonitorCapture : IDisposable
             // encoder requires even width/height; it packs each frame at
             // stride = width*4. If we handed it an ODD-width readback buffer, the
             // encoder would shrink the width to width-1 yet keep consuming our
-            // width*4 packed rows — sliding every row 1px left of the one above,
+            // width*4 packed rows - sliding every row 1px left of the one above,
             // i.e. a diagonal shear across the whole clip. Even dimensions keep
             // our packed stride and the encoder's stride identical → no skew.
             // Cost: at most a 1px crop on the right/bottom edge of odd selections.
@@ -141,7 +141,7 @@ public sealed class MonitorCapture : IDisposable
     /// Copies the cropped region from <paramref name="source"/> into the
     /// staging texture, Maps it, and returns the BGRA bytes tightly packed
     /// (row stride == OutputSize.Width * 4). Returns the same backing byte[]
-    /// every call — callers must consume it before the next call.
+    /// every call - callers must consume it before the next call.
     ///
     /// Must be called serially from a consumer loop.
     /// </summary>
@@ -213,7 +213,7 @@ public sealed class MonitorCapture : IDisposable
     private void AllocateStaging(int width, int height)
     {
         // STAGING + CPU_ACCESS_READ: we map this directly to read pixels. No
-        // bind flags — staging-usage textures can't bind to the pipeline.
+        // bind flags - staging-usage textures can't bind to the pipeline.
         var desc = new D3D11_TEXTURE2D_DESC
         {
             Width  = (uint)width,

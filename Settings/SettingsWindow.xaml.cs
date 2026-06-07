@@ -20,7 +20,7 @@ public partial class SettingsWindow : Window
 {
     private enum HkMode { Default, Capturing, Candidate }
 
-    // Combos owned by another app / the OS — a friendly pre-filter (the real check
+    // Combos owned by another app / the OS - a friendly pre-filter (the real check
     // is the RegisterHotKey attempt on Set).
     private static readonly Dictionary<string, string> Reserved = new()
     {
@@ -175,7 +175,7 @@ public partial class SettingsWindow : Window
         var mods = Keyboard.Modifiers;
         if (Keyboard.IsKeyDown(Key.LWin) || Keyboard.IsKeyDown(Key.RWin)) mods |= ModifierKeys.Windows;
 
-        // still building — a modifier is held but no main key yet
+        // still building - a modifier is held but no main key yet
         if (IsModifierKey(key))
         {
             HkListenText.Text = mods == ModifierKeys.None ? "Press a key combination…" : DescribeMods(mods) + " + …";
@@ -326,7 +326,7 @@ public partial class SettingsWindow : Window
         ConnDot.Fill = (Brush)FindResource(has ? "OkBrush" : "WarnBrush");
         ConnLabel.Text = has ? "Connected" : "Local only";
         ConnSub.Text = has
-            ? "Sharing is on — clips upload and you get a link."
+            ? "Sharing is on - clips upload and you get a link."
             : "Add an invite code to upload and share links.";
         ConnAction.Content = has ? "Change" : "Set up";
     }

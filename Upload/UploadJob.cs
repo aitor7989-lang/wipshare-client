@@ -54,7 +54,7 @@ public sealed class UploadJob
 
     /// <summary>
     /// Atomically writes the sidecar (temp file then move-overwrite). Best-effort:
-    /// logs and swallows on failure — a sidecar write must never crash an upload.
+    /// logs and swallows on failure - a sidecar write must never crash an upload.
     /// </summary>
     public void Save(ILogger logger)
     {

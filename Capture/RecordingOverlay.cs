@@ -17,8 +17,8 @@ namespace WipShare.Client.Capture;
 /// Takes over the <see cref="RegionSelector"/>'s window for the countdown +
 /// recording. This is the design's "locked" region-overlay state: the dim stays
 /// (eased lighter to <see cref="AppSettings.LockedBackdropOpacity"/>) as the
-/// recording-region frame — a white 1px border with a faint black outer edge and
-/// white corner ticks around the live region — so finishing the drag never makes
+/// recording-region frame - a white 1px border with a faint black outer edge and
+/// white corner ticks around the live region - so finishing the drag never makes
 /// the dim flash off. The window is click-through and excluded from screen capture
 /// so it never films itself or the dim. The recording-state signal (timer,
 /// progress, cancel) lives on the separate floating pill, not here.
@@ -92,7 +92,7 @@ public sealed class RecordingOverlay : IDisposable
 
             if (!Win32Interop.SetWindowDisplayAffinity(hwnd, Win32Interop.WDA_EXCLUDEFROMCAPTURE))
             {
-                // Pre-2004 Windows 10 doesn't support EXCLUDEFROMCAPTURE — the
+                // Pre-2004 Windows 10 doesn't support EXCLUDEFROMCAPTURE - the
                 // border will end up in the recording. Not fatal.
                 _logger.LogWarning("SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) failed: {Err}",
                     Marshal.GetLastWin32Error());
@@ -151,7 +151,7 @@ public sealed class RecordingOverlay : IDisposable
     }
 
     /// <summary>
-    /// Closes the overlay window. Idempotent — safe to call multiple times.
+    /// Closes the overlay window. Idempotent - safe to call multiple times.
     /// </summary>
     public void Close()
     {

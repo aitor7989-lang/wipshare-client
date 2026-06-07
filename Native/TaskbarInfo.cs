@@ -7,7 +7,7 @@ namespace WipShare.Client.Native;
 /// The placement target for the toast stack: the work area (in physical pixels)
 /// of the monitor that hosts the tray, plus extra clearance when the taskbar is
 /// auto-hidden. We anchor to the work area rather than assuming a 48px bottom bar
-/// — that already accounts for the taskbar's real edge, size, and DPI.
+/// - that already accounts for the taskbar's real edge, size, and DPI.
 /// </summary>
 internal readonly record struct ToastAnchor(RECT WorkArea, int AutoHideClearance);
 

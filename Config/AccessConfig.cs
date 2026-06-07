@@ -10,9 +10,9 @@ namespace WipShare.Client.Config;
 
 /// <summary>
 /// Owns the two pieces of connection identity:
-///  • the invite code (== the shared upload secret) — stored in Windows
+///  • the invite code (== the shared upload secret) - stored in Windows
 ///    Credential Manager, never in plaintext;
-///  • a per-device owner_token (a GUID) — stored in identity.json (not a secret).
+///  • a per-device owner_token (a GUID) - stored in identity.json (not a secret).
 ///
 /// On first construction it migrates any legacy plaintext secret from config.json
 /// into Credential Manager, then leaves config.json alone.
@@ -61,7 +61,7 @@ public sealed class AccessConfig
 
     /// <summary>
     /// The per-device owner_token, generated and persisted on first use. Stable
-    /// across runs. Not a secret — it only associates uploads with this device.
+    /// across runs. Not a secret - it only associates uploads with this device.
     /// </summary>
     public string GetOwnerToken()
     {

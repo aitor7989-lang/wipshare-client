@@ -3,7 +3,7 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!-- ============================================================
-         WipShare design tokens — translated from app.css (Claude Design).
+         WipShare design tokens - translated from app.css (Claude Design).
          Surfaces, text, accent, status; Inter (UI) / JetBrains Mono (values).
          Shared by every desktop surface (first-run, countdown, pill).
          ============================================================ -->
@@ -62,7 +62,7 @@
     <CornerRadius x:Key="Radius12">12</CornerRadius>
 
     <!-- ============================================================
-         Buttons — single shared template; each variant sets its own colors
+         Buttons - single shared template; each variant sets its own colors
          and hover triggers (Background uses TemplateBinding so Style.Triggers
          can recolor it without a per-variant template).
          ============================================================ -->
@@ -184,7 +184,7 @@
     </Style>
 
     <!-- ============================================================
-         Text input — rounded surface field with an accent focus ring
+         Text input - rounded surface field with an accent focus ring
          approximated by swapping the border to accent on keyboard focus.
          ============================================================ -->
     <Style x:Key="InputBase" TargetType="TextBox">
@@ -246,7 +246,7 @@
     </Style>
 
     <!-- ============================================================
-         kbd chip — small key cap (Ctrl / Shift / R). Compose as
+         kbd chip - small key cap (Ctrl / Shift / R). Compose as
          <Border Style="{StaticResource KbdChip}"><TextBlock Style="{StaticResource KbdText}" .../></Border>
          ============================================================ -->
     <Style x:Key="KbdChip" TargetType="Border">

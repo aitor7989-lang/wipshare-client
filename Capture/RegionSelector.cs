@@ -43,7 +43,7 @@ public sealed record SelectionResult(SelectionOutcome Outcome, SelectedRegion? R
 /// hint, a dim cut-out selection with a 1px white border (faint black outer edge),
 /// white corner ticks, a frosted dimensions readout clamped on-screen, and a calm
 /// inline "too small" message that re-arms. The window instance survives a confirmed
-/// selection — ownership is handed to <see cref="RecordingOverlay"/> which keeps the
+/// selection - ownership is handed to <see cref="RecordingOverlay"/> which keeps the
 /// dim (eased lighter) as the locked recording-region frame, so it never flashes off.
 /// </summary>
 public sealed class RegionSelector : IDisposable
@@ -123,7 +123,7 @@ public sealed class RegionSelector : IDisposable
             Top = SystemParameters.VirtualScreenTop,
             Width = SystemParameters.VirtualScreenWidth,
             Height = SystemParameters.VirtualScreenHeight,
-            Title = "WipShare — select region",
+            Title = "WipShare - select region",
             UseLayoutRounding = true,
         };
 
@@ -270,7 +270,7 @@ public sealed class RegionSelector : IDisposable
     private void OnMouseLeftDown(object sender, MouseButtonEventArgs e)
     {
         if (_state != SelectionState.Idle) return;
-        // A fresh press always starts a clean selection — clear any lingering
+        // A fresh press always starts a clean selection - clear any lingering
         // hint/too-small/crosshair chrome first so nothing stacks.
         HideTooSmall();
         HideHintNow();
@@ -322,7 +322,7 @@ public sealed class RegionSelector : IDisposable
         }
         catch (InvalidOperationException ex)
         {
-            // Window already gone (race during teardown) — treat as cancel.
+            // Window already gone (race during teardown) - treat as cancel.
             _logger.LogWarning(ex, "ResolveSelection failed; treating as cancel");
             Cancel();
             return;
@@ -478,7 +478,7 @@ public sealed class RegionSelector : IDisposable
 
         if (_tooSmallMsg != null && _window != null)
         {
-            // Same component, same spot as the hint — it cross-fades in its place.
+            // Same component, same spot as the hint - it cross-fades in its place.
             _tooSmallMsg.Visibility = Visibility.Visible;
             PositionTopCenter(_tooSmallMsg);
             _tooSmallMsg.BeginAnimation(UIElement.OpacityProperty,
@@ -854,8 +854,8 @@ internal static class SelectorMath
     /// <summary>
     /// Positions the dimensions readout just outside the selection's bottom-right
     /// corner (where the cursor is), with its right edge aligned to the region's
-    /// right edge and sitting just below the bottom edge — flipping above when
-    /// there's no room — and clamped to stay on the virtual screen.
+    /// right edge and sitting just below the bottom edge - flipping above when
+    /// there's no room - and clamped to stay on the virtual screen.
     /// </summary>
     public static (double X, double Y) PositionLabel(Rect selection, Size labelSize, double virtualWidth, double virtualHeight)
     {

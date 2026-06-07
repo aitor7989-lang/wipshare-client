@@ -10,7 +10,7 @@ namespace WipShare.Client.Settings;
 /// Persisted properties apply immediately and write through on change; reads fall
 /// back to sensible defaults if the file is missing or corrupt.
 ///
-/// (Launch-at-startup is intentionally NOT stored here — the HKCU Run registry
+/// (Launch-at-startup is intentionally NOT stored here - the HKCU Run registry
 /// value is its single source of truth; see Settings/StartupRegistry.cs.)
 /// </summary>
 public static class AppSettings
@@ -47,7 +47,7 @@ public static class AppSettings
     public static string LogFilePath => Path.Combine(LogDirectory, "log.txt");
     public static string ConfigFilePath => Path.Combine(LogDirectory, "config.json");
 
-    /// <summary>Per-device identity (owner_token). Not a secret — plain JSON.</summary>
+    /// <summary>Per-device identity (owner_token). Not a secret - plain JSON.</summary>
     public static string IdentityFilePath => Path.Combine(LogDirectory, "identity.json");
 
     /// <summary>Persisted user settings file.</summary>

@@ -38,7 +38,7 @@ public sealed class UploadException : Exception
 
 /// <summary>
 /// Typed wrapper over the WipShare backend. One reused HttpClient. Bearer auth
-/// is attached only to initiate/complete — never to the R2 PUT (the presigned
+/// is attached only to initiate/complete - never to the R2 PUT (the presigned
 /// URL carries its own auth). The secret is never logged.
 /// </summary>
 public sealed class WipShareApiClient : IDisposable
@@ -58,7 +58,7 @@ public sealed class WipShareApiClient : IDisposable
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    /// <param name="baseUrl">The backend base URL (from Constants — never user-editable).</param>
+    /// <param name="baseUrl">The backend base URL (from Constants - never user-editable).</param>
     /// <param name="secret">The invite code / bearer token (from Credential Manager via AccessConfig).</param>
     /// <param name="ownerToken">Per-device owner token, sent on initiate for a future library.</param>
     public WipShareApiClient(string baseUrl, string secret, string ownerToken, ILoggerFactory loggerFactory)
@@ -96,7 +96,7 @@ public sealed class WipShareApiClient : IDisposable
     }
 
     /// <summary>
-    /// PUTs a local file to a presigned R2 URL. No bearer token — the presign
+    /// PUTs a local file to a presigned R2 URL. No bearer token - the presign
     /// carries auth. Content-Type and Content-Length must match what initiate
     /// signed, so we stream the file with an explicit content type.
     /// </summary>

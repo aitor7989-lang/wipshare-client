@@ -92,7 +92,7 @@ public sealed class CaptureSession : IDisposable
         _capture = new MonitorCapture(_region.Monitor, _region, _loggerFactory);
         _capture.ItemClosed += () =>
         {
-            _logger.LogWarning("Monitor went away mid-recording — finalizing what's been written so far");
+            _logger.LogWarning("Monitor went away mid-recording - finalizing what's been written so far");
             linkedCts.Cancel();
         };
         await Task.Run(() => _capture.Initialize(), ct).ConfigureAwait(false);
@@ -111,7 +111,7 @@ public sealed class CaptureSession : IDisposable
         _encoder.Start();
 
         // The clip's true pixel dimensions (after the encoder's aspect-preserving
-        // fit + even rounding) — reported to the backend for og:video/og:image.
+        // fit + even rounding) - reported to the backend for og:video/og:image.
         int outputW = _encoder.OutputWidth;
         int outputH = _encoder.OutputHeight;
 
@@ -159,7 +159,7 @@ public sealed class CaptureSession : IDisposable
             // Budget is measured in FRAMES WRITTEN (recorded-time), not ticks, so
             // paused time never counts toward the 15s. The encoder timestamps each
             // sample by frame index, so simply not writing while paused keeps the
-            // output timeline continuous — no frozen gap, no offset bookkeeping.
+            // output timeline continuous - no frozen gap, no offset bookkeeping.
             while (encoded < totalFrames)
             {
                 bool moreTicks;
@@ -243,7 +243,7 @@ public sealed class CaptureSession : IDisposable
         }
 
         // Best-effort poster JPEG sibling to the MP4. A failure here must never
-        // sink the recording — TryGenerate logs and returns false.
+        // sink the recording - TryGenerate logs and returns false.
         string? thumbnailPath = null;
         if (posterBgra != null && posterW > 0 && posterH > 0)
         {

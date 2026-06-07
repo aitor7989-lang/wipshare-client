@@ -40,7 +40,7 @@ public sealed class VideoEncoder : IDisposable
     /// <summary>Actual encoded MP4 height in pixels (after aspect-preserving fit + even rounding).</summary>
     public int OutputHeight => _outputHeight;
 
-    // Reusable per-frame staging — avoids per-frame GC churn.
+    // Reusable per-frame staging - avoids per-frame GC churn.
     private Windows.Storage.Streams.Buffer? _stagingBuffer;
     private byte[]? _stagingBytes;
 
@@ -100,7 +100,7 @@ public sealed class VideoEncoder : IDisposable
 
         Directory.CreateDirectory(Path.GetDirectoryName(_outputPath)!);
 
-        // Container attributes — force MPEG-4 muxer regardless of .mp4 extension.
+        // Container attributes - force MPEG-4 muxer regardless of .mp4 extension.
         IntPtr pContainerAttrs = IntPtr.Zero;
         try
         {
@@ -211,7 +211,7 @@ public sealed class VideoEncoder : IDisposable
     }
 
     /// <summary>
-    /// Legacy IDirect3DSurface path — retained for callers that still pass a
+    /// Legacy IDirect3DSurface path - retained for callers that still pass a
     /// captured Direct3D surface (e.g. the dead WindowCapture code path).
     /// Internally pulls BGRA bytes off the GPU via SoftwareBitmap and then
     /// delegates to the bytes path.

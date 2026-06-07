@@ -140,7 +140,7 @@ internal static unsafe class MediaFoundationInterop
         return fn(pAttrs, &key, value);
     }
 
-    // IMFAttributes:GetGUID / GetAllocatedString — kept for the probe.
+    // IMFAttributes:GetGUID / GetAllocatedString - kept for the probe.
     public static Guid AttrGetGuid(IntPtr pAttrs, Guid key)
     {
         // Not used since the probe uses the [ComImport] IMFAttributes; kept for symmetry.

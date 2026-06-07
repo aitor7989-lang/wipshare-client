@@ -3,7 +3,7 @@ using Microsoft.Win32;
 namespace WipShare.Client.Settings;
 
 /// <summary>
-/// Launch-at-startup, backed by the HKCU Run key — the OS is the single source of
+/// Launch-at-startup, backed by the HKCU Run key - the OS is the single source of
 /// truth (so the Settings toggle reflects reality even if changed elsewhere). All
 /// methods are best-effort and never throw.
 /// </summary>

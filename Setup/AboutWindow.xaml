@@ -68,8 +68,8 @@
                         <Ellipse Width="112" Height="112" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
                             <Ellipse.Fill>
                                 <RadialGradientBrush>
-                                    <GradientStop Color="#245E6AD2" Offset="0" />
-                                    <GradientStop Color="#005E6AD2" Offset="0.7" />
+                                    <GradientStop Color="#24FFFFFF" Offset="0" />
+                                    <GradientStop Color="#00FFFFFF" Offset="0.7" />
                                 </RadialGradientBrush>
                             </Ellipse.Fill>
                         </Ellipse>

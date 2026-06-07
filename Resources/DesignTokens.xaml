@@ -20,9 +20,15 @@
     <Color x:Key="Fg2Color">#FF8A8F98</Color>
     <Color x:Key="Fg3Color">#FF787C85</Color>
 
-    <Color x:Key="AccentColor">#FF5E6AD2</Color>
-    <Color x:Key="AccentHiColor">#FF7A85E0</Color>
-    <Color x:Key="AccentDimColor">#245E6AD2</Color>
+    <!-- Accent is neutral white (the brand "key colour" is white, not a hue). -->
+    <Color x:Key="AccentColor">#FFF7F8F8</Color>
+    <Color x:Key="AccentHiColor">#FFFFFFFF</Color>
+    <Color x:Key="AccentDimColor">#24FFFFFF</Color>
+
+    <!-- Primary button: light fill with dark text (never white-on-white). -->
+    <Color x:Key="PrimaryColor">#FFE9EAED</Color>
+    <Color x:Key="PrimaryHiColor">#FFFFFFFF</Color>
+    <Color x:Key="OnPrimaryColor">#FF0B0C0D</Color>
 
     <Color x:Key="OkColor">#FF3FB950</Color>
     <Color x:Key="WarnColor">#FFD29922</Color>
@@ -43,6 +49,10 @@
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
     <SolidColorBrush x:Key="AccentHiBrush" Color="{StaticResource AccentHiColor}" />
     <SolidColorBrush x:Key="AccentDimBrush" Color="{StaticResource AccentDimColor}" />
+
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
+    <SolidColorBrush x:Key="PrimaryHiBrush" Color="{StaticResource PrimaryHiColor}" />
+    <SolidColorBrush x:Key="OnPrimaryBrush" Color="{StaticResource OnPrimaryColor}" />
 
     <SolidColorBrush x:Key="OkBrush" Color="{StaticResource OkColor}" />
     <SolidColorBrush x:Key="WarnBrush" Color="{StaticResource WarnColor}" />
@@ -110,17 +120,17 @@
         <Setter Property="FontFamily" Value="{StaticResource SansFont}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="Medium" />
-        <Setter Property="Foreground" Value="{StaticResource WhiteBrush}" />
-        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        <Setter Property="Foreground" Value="{StaticResource OnPrimaryBrush}" />
+        <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template" Value="{StaticResource BtnTemplate}" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{StaticResource AccentHiBrush}" />
-                <Setter Property="BorderBrush" Value="{StaticResource AccentHiBrush}" />
+                <Setter Property="Background" Value="{StaticResource PrimaryHiBrush}" />
+                <Setter Property="BorderBrush" Value="Transparent" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.6" />

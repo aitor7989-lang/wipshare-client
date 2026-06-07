@@ -51,12 +51,12 @@
         <Style x:Key="ToastBtnPrimary" TargetType="Button">
             <Setter Property="Height" Value="27" />
             <Setter Property="Padding" Value="10,0" />
-            <Setter Property="Foreground" Value="{StaticResource WhiteBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource OnPrimaryBrush}" />
             <Setter Property="FontFamily" Value="{StaticResource SansFont}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="Medium" />
-            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -69,8 +69,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentHiBrush}" />
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentHiBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource PrimaryHiBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="Transparent" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

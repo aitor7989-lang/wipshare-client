@@ -34,7 +34,7 @@
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="track" Property="Background" Value="{StaticResource AccentBrush}" />
                                 <Setter TargetName="track" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                                <Setter TargetName="thumb" Property="Fill" Value="{StaticResource WhiteBrush}" />
+                                <Setter TargetName="thumb" Property="Fill" Value="{StaticResource OnPrimaryBrush}" />
                                 <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right" />
                             </Trigger>
                         </ControlTemplate.Triggers>

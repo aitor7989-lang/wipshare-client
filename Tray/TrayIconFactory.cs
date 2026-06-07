@@ -16,7 +16,7 @@ internal enum TrayState { Idle, Recording, Uploading, Failed, NotSetUp }
 /// </summary>
 internal static class TrayIconFactory
 {
-    private static readonly Color Accent = Color.FromArgb(0x5E, 0x6A, 0xD2);
+    private static readonly Color Accent = Color.FromArgb(0xF7, 0xF8, 0xF8);
     private static readonly Color Err    = Color.FromArgb(0xE3, 0x5D, 0x6A);
     private static readonly Color Warn   = Color.FromArgb(0xD2, 0x99, 0x22);
     private static readonly Color Muted  = Color.FromArgb(0x78, 0x7C, 0x85);  // = --fg-3

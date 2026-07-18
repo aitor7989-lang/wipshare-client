@@ -92,10 +92,12 @@ What still breaks and needs work:
 2. ~~Camera (follow + clamp + shake)~~ ✅ done.
 3. ~~Data-driven maps + richer cell model + a loader~~ ✅ done.
 4. ~~Status-effect system (turn-tick durations)~~ ✅ done.
-5. **Next:** hover path/MP + damage preview; crits; sound; overhead map layers; summons.
+5. Hover previews (MP cost + estimated damage) ✅ done; crits ✅ done.
+6. **Next:** sound; overhead map layers; summons; pre-fight placement.
 
-All of P1 is now implemented. The remaining work is the P2 (fidelity/feel) and P3
-(engineering) items above.
+All of P1 is implemented, plus much of the P2 combat depth (see `COMBAT-PARITY.md`) and a
+hardening pass. Remaining work is the rest of P2 (sound, overhead layers) and P3 (summons,
+placement phase, smarter mob AI).
 
 ## Sources
 

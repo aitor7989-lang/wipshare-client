@@ -16,7 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Copy the (gitignored) local sprite folder next to the exe so SpriteBank can find it. -->
+    <!-- Committed default art + the (gitignored) local override folder, copied next to the exe. -->
+    <None Include="assets-default\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

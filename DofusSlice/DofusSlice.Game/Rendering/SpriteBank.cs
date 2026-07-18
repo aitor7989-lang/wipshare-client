@@ -45,7 +45,6 @@ public sealed class SpriteSheet
 public sealed class SpriteBank
 {
     private readonly GraphicsDevice _gd;
-    private readonly string _dir;
     private readonly Dictionary<string, Texture2D?> _textures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (string path, int frames)> _index = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SpriteSheet?> _sheetCache = new(StringComparer.OrdinalIgnoreCase);
@@ -55,20 +54,21 @@ public sealed class SpriteBank
     public SpriteBank(GraphicsDevice gd)
     {
         _gd = gd;
-        _dir = Path.Combine(AppContext.BaseDirectory, "assets");
-        BuildIndex();
+        // Committed default art first, then the (gitignored) user folder overrides it.
+        IndexDir(Path.Combine(AppContext.BaseDirectory, "assets-default"));
+        IndexDir(Path.Combine(AppContext.BaseDirectory, "assets"));
     }
 
-    private void BuildIndex()
+    private void IndexDir(string dir)
     {
-        if (!Directory.Exists(_dir)) return;
-        foreach (var path in Directory.EnumerateFiles(_dir, "*.png"))
+        if (!Directory.Exists(dir)) return;
+        foreach (var path in Directory.EnumerateFiles(dir, "*.png"))
         {
             var key = Path.GetFileNameWithoutExtension(path);
             // A trailing _<digits> is the frame count; otherwise it's a single-frame image.
             int underscore = key.LastIndexOf('_');
             if (underscore > 0 && int.TryParse(key[(underscore + 1)..], out int frames) && frames > 0)
-                _index[key[..underscore]] = (path, frames);
+                _index[key[..underscore]] = (path, frames); // later dir wins (user overrides default)
             else
                 _index[key] = (path, 1);
         }

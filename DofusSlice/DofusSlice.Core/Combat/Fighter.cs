@@ -38,6 +38,12 @@ public sealed class Fighter
 
     public IReadOnlyList<SpellDef> Spells { get; init; } = Array.Empty<SpellDef>();
 
+    /// <summary>Active timed states (buffs, shields, poison, drains).</summary>
+    public List<StatusEffect> Statuses { get; } = new();
+
+    public int DamageBuffPercent => Statuses.Where(s => s.Kind == StatusKind.DamageBuff).Sum(s => s.Magnitude);
+    public int ShieldAmount => Statuses.Where(s => s.Kind == StatusKind.Shield).Sum(s => s.Magnitude);
+
     // Per-turn / cooldown bookkeeping.
     private readonly Dictionary<int, int> _readyOnRound = new();  // spellId -> earliest round castable
     private readonly Dictionary<int, int> _castsThisTurn = new(); // spellId -> casts used this turn

@@ -63,7 +63,21 @@ public static class SpellLibrary
         Description = "Melee shove: small damage and knock the enemy back two cells.",
     };
 
-    public static IReadOnlyList<SpellDef> IopSpells => new[] { Pressure, IopsWrath, Jump, Intimidation };
+    public static readonly SpellDef Power = new()
+    {
+        Id = 105,
+        Name = "Power",
+        ApCost = 3,
+        MinRange = 0,
+        MaxRange = 0,
+        NeedsTarget = false,
+        Cooldown = 4,
+        MaxCastsPerTurn = 1,
+        Effects = new[] { SpellEffect.ApplyStatus(StatusKind.DamageBuff, 50, 3) },
+        Description = "Self-buff: +50% damage for 3 turns.",
+    };
+
+    public static IReadOnlyList<SpellDef> IopSpells => new[] { Pressure, IopsWrath, Jump, Intimidation, Power };
 
     // ----- Mobs ----------------------------------------------------------------------
 
@@ -85,8 +99,12 @@ public static class SpellLibrary
         ApCost = 3,
         MinRange = 1,
         MaxRange = 1,
-        Effects = new[] { SpellEffect.Damage(Element.Neutral, 10, 15) },
-        Description = "Gobball's woolly headbutt.",
+        Effects = new[]
+        {
+            SpellEffect.Damage(Element.Neutral, 10, 15),
+            SpellEffect.ApplyStatus(StatusKind.Poison, 4, 2),
+        },
+        Description = "Gobball's woolly headbutt — leaves a lingering irritation.",
     };
 
     public static readonly SpellDef PiouPeck = new()

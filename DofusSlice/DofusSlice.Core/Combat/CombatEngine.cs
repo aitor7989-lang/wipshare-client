@@ -51,10 +51,45 @@ public sealed class CombatEngine
         _order.Sort((a, b) => b.Initiative.CompareTo(a.Initiative));
         Round = 1;
         _pointer = 0;
-        Current.BeginTurn();
         Emit($"=== Round 1 ===");
-        Emit($"{Current.Name}'s turn (INI {Current.Initiative}).");
-        Raise(new TurnStarted(Current, Round));
+        BeginTurnFor(Current);
+    }
+
+    /// <summary>Refresh points, tick this fighter's statuses, and announce the turn.</summary>
+    private void BeginTurnFor(Fighter f)
+    {
+        f.BeginTurn();
+        TickTurnStart(f);
+        Emit($"{f.Name}'s turn.");
+        Raise(new TurnStarted(f, Round));
+    }
+
+    /// <summary>Start-of-turn status processing: poison damage, MP drain, then age/expire.</summary>
+    private void TickTurnStart(Fighter f)
+    {
+        foreach (var s in f.Statuses)
+        {
+            if (s.Kind == StatusKind.Poison && f.IsAlive)
+            {
+                int dmg = Math.Max(0, s.Magnitude);
+                var at = f.Pos;
+                f.Hp = Math.Max(0, f.Hp - dmg);
+                Emit($"  {f.Name} suffers {dmg} poison damage ({f.Hp}/{f.MaxHp} HP).");
+                Raise(new DamageDealt(f, dmg, Element.Water, at, f.Hp));
+                if (!f.IsAlive) { Emit($"  {f.Name} succumbs!"); Raise(new FighterDied(f, at)); }
+            }
+            else if (s.Kind == StatusKind.MpDrain)
+            {
+                f.CurrentMp = Math.Max(0, f.CurrentMp - s.Magnitude);
+            }
+        }
+
+        foreach (var s in f.Statuses) s.Remaining--;
+        foreach (var s in f.Statuses.Where(s => s.Remaining <= 0).ToList())
+        {
+            f.Statuses.Remove(s);
+            Raise(new StatusExpired(f, s.Kind));
+        }
     }
 
     // ---- Movement -------------------------------------------------------------------
@@ -192,16 +227,36 @@ public sealed class CombatEngine
                 case EffectKind.Push:
                     ApplyPush(caster, victim, effect.Min);
                     break;
+                case EffectKind.ApplyStatus:
+                    ApplyStatusEffect(victim, effect.Status, effect.Min, effect.Max);
+                    break;
             }
         }
+    }
+
+    private void ApplyStatusEffect(Fighter target, StatusKind kind, int magnitude, int turns)
+    {
+        if (kind == StatusKind.None || turns <= 0) return;
+        var existing = target.Statuses.FirstOrDefault(s => s.Kind == kind);
+        if (existing != null)
+        {
+            existing.Magnitude = magnitude;
+            existing.Remaining = Math.Max(existing.Remaining, turns);
+        }
+        else
+        {
+            target.Statuses.Add(new StatusEffect(kind, magnitude, turns));
+        }
+        Emit($"  {target.Name} gains {kind} ({turns} turns).");
+        Raise(new StatusApplied(target, kind, turns));
     }
 
     private void ApplyDamage(Fighter caster, Fighter victim, SpellEffect effect)
     {
         int rolled = _rng.Roll(effect.Min, effect.Max);
-        int boosted = rolled * (100 + caster.PrimaryStatFor(effect.Element)) / 100;
+        int boosted = rolled * (100 + caster.PrimaryStatFor(effect.Element) + caster.DamageBuffPercent) / 100;
         int afterResist = boosted * (100 - victim.ResistanceFor(effect.Element)) / 100;
-        int dmg = Math.Max(0, afterResist);
+        int dmg = Math.Max(0, afterResist - victim.ShieldAmount);
         var at = victim.Pos;
         victim.Hp = Math.Max(0, victim.Hp - dmg);
         Emit($"  {victim.Name} takes {dmg} {effect.Element} damage ({victim.Hp}/{victim.MaxHp} HP).");
@@ -278,10 +333,13 @@ public sealed class CombatEngine
     public void EndTurn()
     {
         Emit($"{Current.Name} ends their turn.");
-        if (Outcome != FightOutcome.Ongoing) return;
 
-        for (int guard = 0; guard < _order.Count + 1; guard++)
+        // Advance to the next living fighter, beginning turns (which tick statuses) as we go.
+        // A fighter that dies to poison at the start of its turn is skipped.
+        for (int guard = 0; guard <= _order.Count * 2; guard++)
         {
+            if (Outcome != FightOutcome.Ongoing) return;
+
             _pointer++;
             if (_pointer >= _order.Count)
             {
@@ -289,12 +347,11 @@ public sealed class CombatEngine
                 Round++;
                 Emit($"=== Round {Round} ===");
             }
-            if (Current.IsAlive) break;
-        }
+            if (!Current.IsAlive) continue;
 
-        Current.BeginTurn();
-        Emit($"{Current.Name}'s turn.");
-        Raise(new TurnStarted(Current, Round));
+            BeginTurnFor(Current);
+            if (Current.IsAlive) return; // survived its start-of-turn ticks
+        }
     }
 
     public FightOutcome Outcome

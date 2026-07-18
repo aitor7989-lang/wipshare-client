@@ -53,7 +53,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private float _turnClock = TurnSeconds;
     private string _turnOwner = "";
 
-    private readonly Rectangle[] _spellButtons = new Rectangle[4];
+    private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
 
     public SliceGame()
@@ -73,7 +73,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     protected override void Initialize()
     {
-        for (int i = 0; i < 4; i++) _spellButtons[i] = new Rectangle(16 + i * 168, 636, 156, 104);
+        _spellButtons = new Rectangle[HeroSpells.Count];
+        for (int i = 0; i < _spellButtons.Length; i++)
+            _spellButtons[i] = new Rectangle(16 + i * 168, 636, 156, 104);
         _endTurnButton = new Rectangle(1080, 636, 184, 104);
         base.Initialize();
     }
@@ -210,6 +212,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.D2)) ToggleSpell(1);
         if (Pressed(Keys.D3)) ToggleSpell(2);
         if (Pressed(Keys.D4)) ToggleSpell(3);
+        if (Pressed(Keys.D5)) ToggleSpell(4);
         if (Pressed(Keys.Escape)) _selectedSpell = -1;
         if (Pressed(Keys.Space)) { EndPlayerTurn(); return; }
 
@@ -218,7 +221,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < _spellButtons.Length; i++)
             if (_spellButtons[i].Contains(m)) { ToggleSpell(i); return; }
         if (_endTurnButton.Contains(m)) { EndPlayerTurn(); return; }
         if (m.Y >= HudTop) return; // clicked empty HUD space
@@ -456,7 +459,31 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
 
         DrawHpBar(f, center.X, topY - 10);
+        DrawStatusPips(f, center.X, topY - 2);
     }
+
+    private void DrawStatusPips(Fighter f, float centerX, float y)
+    {
+        if (f.Statuses.Count == 0) return;
+        const int pw = 6, gap = 2;
+        int total = f.Statuses.Count * pw + (f.Statuses.Count - 1) * gap;
+        int x = (int)centerX - total / 2;
+        foreach (var s in f.Statuses)
+        {
+            _prim.FillRect(_sb, new Rectangle(x - 1, (int)y - 1, pw + 2, pw + 2), new Color(0, 0, 0, 160));
+            _prim.FillRect(_sb, new Rectangle(x, (int)y, pw, pw), StatusColor(s.Kind));
+            x += pw + gap;
+        }
+    }
+
+    private static Color StatusColor(StatusKind k) => k switch
+    {
+        StatusKind.DamageBuff => new Color(240, 160, 60),
+        StatusKind.Shield => new Color(90, 180, 240),
+        StatusKind.Poison => new Color(120, 200, 90),
+        StatusKind.MpDrain => new Color(170, 120, 210),
+        _ => Color.White,
+    };
 
     private static int FrameIndex(Pose pose, SpriteSheet sheet)
     {
@@ -598,7 +625,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawSpellBar(Fighter? hero)
     {
-        for (int i = 0; i < 4 && i < HeroSpells.Count; i++)
+        for (int i = 0; i < _spellButtons.Length; i++)
         {
             var spell = HeroSpells[i];
             var r = _spellButtons[i];
@@ -618,7 +645,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             var nameColor = usable ? Palette.Text : Palette.TextDim;
             _font.Draw(_sb, Trunc(spell.Name.ToUpperInvariant(), 12), r.X + 10, r.Y + 50, 1, nameColor);
             _font.Draw(_sb, $"{spell.ApCost} AP", r.X + 10, r.Y + 64, 1, Palette.ApPip);
-            string range = spell.MinRange == spell.MaxRange ? $"RNG {spell.MaxRange}" : $"RNG {spell.MinRange}-{spell.MaxRange}";
+            string range = spell.MaxRange == 0 ? "SELF"
+                : spell.MinRange == spell.MaxRange ? $"RNG {spell.MaxRange}"
+                : $"RNG {spell.MinRange}-{spell.MaxRange}";
             _font.Draw(_sb, range, r.X + 10, r.Y + 78, 1, Palette.TextDim);
             _font.DrawRight(_sb, spell.Cooldown > 0 ? "CD" : "", r.Right - 10, r.Y + 8, 1, Palette.EnemyColor);
         }

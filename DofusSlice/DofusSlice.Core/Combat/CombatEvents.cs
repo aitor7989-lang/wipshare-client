@@ -27,3 +27,7 @@ public sealed record DamageDealt(Fighter Target, int Amount, Element Element, Ce
 public sealed record HealApplied(Fighter Target, int Amount, CellCoord At, int RemainingHp) : CombatEvent;
 
 public sealed record FighterDied(Fighter Fighter, CellCoord At) : CombatEvent;
+
+public sealed record StatusApplied(Fighter Target, StatusKind Kind, int Turns) : CombatEvent;
+
+public sealed record StatusExpired(Fighter Target, StatusKind Kind) : CombatEvent;

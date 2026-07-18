@@ -207,10 +207,10 @@ public static class TitheTables
     // Sexton's court, then the altar teleports the crew out. The dive's big bet.
     public const string CryptJson = """
     [
-      { "name": "The Ossuary",        "comp": ["barrow_husk", "barrow_husk", "gravehound"] },
-      { "name": "The Nave",           "comp": ["crypt_warden", "grave_mite", "grave_mite", "gravehound"] },
-      { "name": "The Reliquary",      "comp": ["crypt_warden", "crypt_warden", "marrow_spitter", "gravehound", "gravehound"] },
-      { "name": "The Sexton's Court", "comp": ["sexton", "crypt_warden", "crypt_warden", "grave_mite", "grave_mite", "bone_piper"], "boss": true }
+      { "name": "The Ossuary",        "comp": ["barrow_husk", "barrow_husk", "gravehound"], "grade": 1 },
+      { "name": "The Nave",           "comp": ["crypt_warden", "grave_mite", "grave_mite", "gravehound"], "grade": 2 },
+      { "name": "The Reliquary",      "comp": ["crypt_warden", "crypt_warden", "marrow_spitter", "gravehound", "gravehound"], "grade": 2 },
+      { "name": "The Sexton's Court", "comp": ["sexton", "crypt_warden", "crypt_warden", "grave_mite", "grave_mite", "bone_piper"], "boss": true, "grade": 3 }
     ]
     """;
 
@@ -262,7 +262,9 @@ public static class TitheTables
     """;
 
     // The Graveyard floor: a real-time clock and the skeleton packs that drift on it. reach = the
-    // seconds it costs to travel to a pack (route knowledge is the resource); hunts = a wide-aggro
+    // seconds it costs to travel to a pack (route knowledge is the resource); grade = the Dofus
+    // 1.29 mob grade (deeper packs field harder grades: +30% HP, +15% stats, +25% XP/gold per
+    // grade step); hunts = a wide-aggro
     // type that closes on the crew. The Crypt entrance sits deepest. Clock is short for the
     // prototype loop (Bible's 12-minute floor is the production value).
     public const string GraveyardJson = """
@@ -270,12 +272,12 @@ public static class TitheTables
       "clockSeconds": 240,
       "cryptReach": 150,
       "packs": [
-        { "id": "husks-near", "comp": ["barrow_husk", "barrow_husk"],                                    "reach": 18, "hunts": false },
-        { "id": "bonewash",   "comp": ["barrow_husk", "marrow_spitter"],                                 "reach": 28, "hunts": false },
-        { "id": "warden-way", "comp": ["crypt_warden", "grave_mite", "grave_mite"],                      "reach": 36, "hunts": false },
-        { "id": "hound-pack", "comp": ["gravehound", "gravehound", "barrow_husk", "marrow_spitter"],     "reach": 46, "hunts": true  },
-        { "id": "deep-court", "comp": ["gravehound", "gravehound", "gravehound", "barrow_husk"],         "reach": 56, "hunts": true  },
-        { "id": "warband",    "comp": ["crypt_warden", "gravehound", "gravehound", "marrow_spitter", "barrow_husk"], "reach": 66, "hunts": true }
+        { "id": "husks-near", "comp": ["barrow_husk", "barrow_husk"],                                    "reach": 18, "hunts": false, "grade": 1 },
+        { "id": "bonewash",   "comp": ["barrow_husk", "marrow_spitter"],                                 "reach": 28, "hunts": false, "grade": 1 },
+        { "id": "warden-way", "comp": ["crypt_warden", "grave_mite", "grave_mite"],                      "reach": 36, "hunts": false, "grade": 2 },
+        { "id": "hound-pack", "comp": ["gravehound", "gravehound", "barrow_husk", "marrow_spitter"],     "reach": 46, "hunts": true,  "grade": 3 },
+        { "id": "deep-court", "comp": ["gravehound", "gravehound", "gravehound", "barrow_husk"],         "reach": 56, "hunts": true,  "grade": 3 },
+        { "id": "warband",    "comp": ["crypt_warden", "gravehound", "gravehound", "marrow_spitter", "barrow_husk"], "reach": 66, "hunts": true, "grade": 4 }
       ]
     }
     """;

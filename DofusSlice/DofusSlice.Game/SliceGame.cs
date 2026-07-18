@@ -514,7 +514,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void BeginCryptRoom()
     {
         var room = _cryptRooms[_cryptRoom];
-        BeginCombat(new DiveSession.PackState { Def = new TitheContent.PackDef($"crypt_{_cryptRoom}", room.Comp, 0, false) });
+        BeginCombat(new DiveSession.PackState { Def = new TitheContent.PackDef($"crypt_{_cryptRoom}", room.Comp, 0, false, room.Grade) });
     }
 
     private void EngagePack(DiveSession.PackState pack) { _cryptRun = false; BeginCombat(pack); }

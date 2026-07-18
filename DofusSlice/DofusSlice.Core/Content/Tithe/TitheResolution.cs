@@ -21,8 +21,8 @@ public static class TitheResolution
 
         var defeatedMobs = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive).ToList();
 
-        // XP pool = sum of the defeated mobs' table XP.
-        int pool = defeatedMobs.Sum(f => TitheContent.MobXp(f.Archetype));
+        // XP pool = sum of the defeated mobs' table XP, scaled by each mob's grade.
+        int pool = defeatedMobs.Sum(TitheContent.MobXpOf);
 
         // Loot rolls (only a won fight collects): each defeated mob rolls its essence and, separately,
         // a chance at an Adventurer-set piece (Bible §5 drop-table peaks). A gear roll yields a set

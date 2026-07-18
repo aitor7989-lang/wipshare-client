@@ -140,7 +140,7 @@ public static class CampaignSim
         {
             var room = rooms[i];
             var pack = new DiveSession.PackState
-            { Def = new TitheContent.PackDef($"crypt_{i}", room.Comp, 0, false) };
+            { Def = new TitheContent.PackDef($"crypt_{i}", room.Comp, 0, false, room.Grade) };
 
             var engine = dive.BeginFight(pack, chargeTravel: false);
             engine.Start();

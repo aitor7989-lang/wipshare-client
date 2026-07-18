@@ -52,7 +52,7 @@ public static class TitheContent
 
     public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
                                     int EssenceSell, int TitheEveryNDives, int TitheBase, int TitheGrowth);
-    public sealed record PackDef(string Id, string[] Comp, int Reach, bool Hunts);
+    public sealed record PackDef(string Id, string[] Comp, int Reach, bool Hunts, int Grade = 1);
     public sealed record GraveyardDef(int ClockSeconds, int CryptReach, PackDef[] Packs);
 
     // ----- Loaded, id-indexed tables (parsed once) ----------------------------------
@@ -216,8 +216,14 @@ public static class TitheContent
         };
     }
 
-    /// <summary>Build a skeleton mob of the given id at a cell.</summary>
-    public static Fighter MakeMob(string mobId, string unitId, CellCoord pos)
+    // Dofus 1.29 mob grades: a grade step is +30% HP, +15% stats, +25% XP/gold. Deep packs and
+    // Crypt rooms field higher grades — the depth gradient wearing mob levels (Bible §5, §8).
+    private static int GradeHp(int v, int g) => v * (100 + 30 * (Math.Max(1, g) - 1)) / 100;
+    private static int GradeStat(int v, int g) => v * (100 + 15 * (Math.Max(1, g) - 1)) / 100;
+    private static int GradeReward(int v, int g) => v * (100 + 25 * (Math.Max(1, g) - 1)) / 100;
+
+    /// <summary>Build a skeleton mob of the given id and grade at a cell.</summary>
+    public static Fighter MakeMob(string mobId, string unitId, CellCoord pos, int grade = 1)
     {
         var m = Mobs[mobId];
         var f = new Fighter
@@ -225,9 +231,11 @@ public static class TitheContent
             Id = unitId, Name = m.Name, Team = Team.Enemy, Archetype = m.Id,
             Policy = ParsePolicy(m.Policy),
             PreferredRangeMin = m.PrefRangeMin, PreferredRangeMax = m.PrefRangeMax,
-            MaxHp = m.MaxHp, Hp = m.MaxHp, BaseAp = m.Ap, BaseMp = m.Mp,
-            Strength = m.Strength, Intelligence = m.Intelligence, Chance = m.Chance,
-            Agility = m.Agility, Initiative = m.Initiative,
+            MaxHp = GradeHp(m.MaxHp, grade), Hp = GradeHp(m.MaxHp, grade), BaseAp = m.Ap, BaseMp = m.Mp,
+            Strength = GradeStat(m.Strength, grade), Intelligence = GradeStat(m.Intelligence, grade),
+            Chance = GradeStat(m.Chance, grade), Agility = GradeStat(m.Agility, grade),
+            Initiative = m.Initiative,
+            Level = Math.Max(1, grade), // a mob's Level IS its grade (drives reward scaling)
             Pos = pos, Spells = SkillsFor(m.Skills),
         };
         // Elemental armor (Bible §6.6 resist term). Percent reductions per element from the mob table.
@@ -239,6 +247,10 @@ public static class TitheContent
     }
 
     public static int MobXp(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Xp : 0;
+
+    /// <summary>Grade-aware rewards for a defeated mob fighter (its Level carries the grade).</summary>
+    public static int MobXpOf(Fighter mob) => GradeReward(MobXp(mob.Archetype), mob.Level);
+    public static int MobGoldOf(Fighter mob) => GradeReward(MobGold(mob.Archetype), mob.Level);
 
     /// <summary>The essence a mob can drop and its percent chance (Bible §5), or (null, 0).</summary>
     public static (string? essence, int rate) MobDrop(string mobId) =>
@@ -367,7 +379,7 @@ public static class TitheContent
         JsonSerializer.Deserialize<EncounterDto>(TitheTables.EncounterBossJson, J)!.Spawns.Select(s => s.Mob).ToList();
 
     /// <summary>The Crypt's linear room chain (Bible §6.8): escalating packs, the last a boss room.</summary>
-    public sealed record CryptRoom(string Name, string[] Comp, bool Boss);
+    public sealed record CryptRoom(string Name, string[] Comp, bool Boss, int Grade = 1);
     public static IReadOnlyList<CryptRoom> CryptRooms() =>
         JsonSerializer.Deserialize<CryptRoom[]>(TitheTables.CryptJson, J)!;
 
@@ -453,7 +465,7 @@ public static class TitheContent
     /// runs through the same watched-combat engine.
     /// </summary>
     public static CombatEngine BuildDiveFight(IReadOnlyList<CampaignUnit> party,
-                                              IReadOnlyList<string> packMobs, IRng rng)
+                                              IReadOnlyList<string> packMobs, IRng rng, int grade = 1)
     {
         var map = Arena();
         var field = map.ToBattlefield();
@@ -485,10 +497,10 @@ public static class TitheContent
             var cell = (map.IsWalkable(want) && fighters.All(f => f.Pos != want))
                 ? want : NearestFreeCell(map, fighters, want);
             if (cell == CellCoord.Invalid) continue;
-            fighters.Add(MakeMob(mob, $"mob_{n++}_{mob}", cell));
+            fighters.Add(MakeMob(mob, $"mob_{n++}_{mob}", cell, grade));
         }
 
-        return new CombatEngine(field, fighters, rng, (kind, team, cell, id) => MakeMob(kind, id, cell));
+        return new CombatEngine(field, fighters, rng, (kind, team, cell, id) => MakeMob(kind, id, cell, grade));
     }
 
     /// <summary>Nearest walkable, unoccupied cell to <paramref name="from"/> (ring search), or Invalid.</summary>

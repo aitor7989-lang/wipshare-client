@@ -94,7 +94,7 @@ public sealed class DiveSession
     {
         MendWithBread();
         if (chargeTravel) Clock -= pack.Def.Reach; // headless charges travel; the visual walks it in real time
-        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng);
+        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade);
     }
 
     /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>
@@ -109,7 +109,7 @@ public sealed class DiveSession
         {
             pack.Cleared = true;
             int gold = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
-                .Sum(f => TitheContent.MobGold(f.Archetype));
+                .Sum(TitheContent.MobGoldOf); // grade-aware: deep packs pay their risk premium
             _campaign.Gold += gold;
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;

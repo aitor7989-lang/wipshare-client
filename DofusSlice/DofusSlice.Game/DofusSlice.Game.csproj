@@ -19,6 +19,7 @@
     <!-- Committed default art + the (gitignored) local override folder, copied next to the exe. -->
     <None Include="assets-default\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="maps\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

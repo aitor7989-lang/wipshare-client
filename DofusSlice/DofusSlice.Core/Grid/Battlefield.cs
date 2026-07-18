@@ -12,6 +12,7 @@ public sealed class Battlefield
 
     private readonly bool[] _walkable;
     private readonly bool[] _blocksLos;
+    private readonly TileKind[] _kind;
 
     public Battlefield(int width, int height)
     {
@@ -19,7 +20,9 @@ public sealed class Battlefield
         Height = height;
         _walkable = new bool[width * height];
         _blocksLos = new bool[width * height];
+        _kind = new TileKind[width * height];
         Array.Fill(_walkable, true);
+        Array.Fill(_kind, TileKind.Grass);
     }
 
     public int CellCount => Width * Height;
@@ -32,21 +35,23 @@ public sealed class Battlefield
 
     public bool BlocksLineOfSight(CellCoord c) => InBounds(c) && _blocksLos[Index(c)];
 
-    /// <summary>Marks a cell as a solid obstacle (not walkable, blocks sight) — e.g. a rock or wall.</summary>
-    public void SetObstacle(CellCoord c, bool obstacle = true)
+    public TileKind TileAt(CellCoord c) => InBounds(c) ? _kind[Index(c)] : TileKind.Void;
+
+    /// <summary>Set a cell's tile kind; walkability and line-of-sight follow from the kind.</summary>
+    public void SetTile(CellCoord c, TileKind kind)
     {
         if (!InBounds(c)) return;
-        _walkable[Index(c)] = !obstacle;
-        _blocksLos[Index(c)] = obstacle;
+        int i = Index(c);
+        _kind[i] = kind;
+        _walkable[i] = TileKindInfo.IsWalkable(kind);
+        _blocksLos[i] = TileKindInfo.BlocksLineOfSight(kind);
     }
 
+    /// <summary>Marks a cell as a solid obstacle (not walkable, blocks sight) — e.g. a rock or wall.</summary>
+    public void SetObstacle(CellCoord c, bool obstacle = true) => SetTile(c, obstacle ? TileKind.Rock : TileKind.Grass);
+
     /// <summary>A hole/void a fighter cannot stand on but can still see across.</summary>
-    public void SetHole(CellCoord c)
-    {
-        if (!InBounds(c)) return;
-        _walkable[Index(c)] = false;
-        _blocksLos[Index(c)] = false;
-    }
+    public void SetHole(CellCoord c) => SetTile(c, TileKind.Void);
 
     public IEnumerable<CellCoord> Orthogonal(CellCoord c)
     {

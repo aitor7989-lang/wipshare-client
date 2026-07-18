@@ -34,6 +34,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Camera2D _camera = null!;
 
     private CombatEngine _engine = null!;
+    private MapData _map = null!;
     private BattleAnimator _anim = null!;
     private int _seed = 1;
     private readonly List<string> _log = new();
@@ -83,7 +84,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
-        _proj = IsoProjector.Centered(Encounter.Width, Encounter.Height, TileW, TileH,
+
+        _map = LoadMap();
+        _proj = IsoProjector.Centered(_map.Width, _map.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
         _anim = new BattleAnimator(_proj);
 
@@ -91,9 +94,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _camera = new Camera2D(ScreenW, HudTop);
         var corners = new[]
         {
-            _proj.CellCenter(0, 0), _proj.CellCenter(Encounter.Width - 1, 0),
-            _proj.CellCenter(0, Encounter.Height - 1),
-            _proj.CellCenter(Encounter.Width - 1, Encounter.Height - 1),
+            _proj.CellCenter(0, 0), _proj.CellCenter(_map.Width - 1, 0),
+            _proj.CellCenter(0, _map.Height - 1),
+            _proj.CellCenter(_map.Width - 1, _map.Height - 1),
         };
         var min = new Vector2(corners.Min(c => c.X) - TileW, corners.Min(c => c.Y) - TileH * 2f);
         var max = new Vector2(corners.Max(c => c.X) + TileW, corners.Max(c => c.Y) + TileH);
@@ -103,9 +106,21 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         StartFight();
     }
 
+    /// <summary>Load the external map if present, else the embedded default.</summary>
+    private static MapData LoadMap()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "maps", "incarnam.json");
+        try
+        {
+            if (File.Exists(path)) return MapLoader.Parse(File.ReadAllText(path));
+        }
+        catch { /* fall back to the embedded default on any parse/IO error */ }
+        return Encounter.DefaultMap();
+    }
+
     private void StartFight()
     {
-        _engine = Encounter.CreateIncarnamSandbox(new SystemRng(_seed));
+        _engine = Encounter.FromMap(_map, new SystemRng(_seed));
         _anim.Reset(_engine.Fighters);
         _log.Clear();
         _engine.Logged += line =>
@@ -271,25 +286,44 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private static bool IsObstacle(Battlefield f, CellCoord c) =>
         !f.IsWalkable(c) && f.BlocksLineOfSight(c);
 
-    /// <summary>The flat ground: every cell's grass tile (sprite or procedural checker).</summary>
+    /// <summary>The flat ground: each cell's tile by kind (sprite, or a procedural fallback).</summary>
     private void DrawFloor()
     {
-        var grass = _sprites.Get("tile_grass");
         foreach (var c in CellsByDepth())
         {
             var center = _proj.CellCenter(c);
-            if (grass != null)
+            var kind = _engine.Field.TileAt(c);
+            if (kind == TileKind.Void)
             {
-                _sb.Draw(grass, new Vector2(center.X - TileW / 2f, center.Y - TileH / 2f), Color.White);
+                _prim.DiamondAt(_sb, center, new Color(16, 18, 24)); // a pit
+                continue;
+            }
+
+            string spriteName = kind switch
+            {
+                TileKind.Grass2 => "tile_grass2",
+                TileKind.Dirt or TileKind.Path => "tile_dirt",
+                _ => "tile_grass",
+            };
+            var tile = _sprites.Get(spriteName) ?? _sprites.Get("tile_grass");
+            if (tile != null)
+            {
+                _sb.Draw(tile, new Vector2(center.X - TileW / 2f, center.Y - TileH / 2f), Color.White);
             }
             else
             {
-                Color baseColor = ((c.X + c.Y) % 2 == 0) ? Palette.TileA : Palette.TileB;
-                _prim.DiamondAt(_sb, center, baseColor);
+                _prim.DiamondAt(_sb, center, FloorColor(kind, c));
                 DrawTileOutline(center, Palette.TileEdge);
             }
         }
     }
+
+    private static Color FloorColor(TileKind k, CellCoord c) => k switch
+    {
+        TileKind.Grass2 => new Color(92, 116, 74),
+        TileKind.Dirt or TileKind.Path => new Color(122, 98, 72),
+        _ => ((c.X + c.Y) % 2 == 0) ? Palette.TileA : Palette.TileB,
+    };
 
     private void DrawTileOutline(Vector2 center, Color color)
     {

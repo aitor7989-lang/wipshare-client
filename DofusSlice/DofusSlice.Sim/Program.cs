@@ -9,7 +9,7 @@ var engine = Encounter.CreateIncarnamSandbox(new SystemRng(seed));
 engine.Logged += Console.WriteLine;
 
 Console.WriteLine($"Incarnam combat sandbox — headless sim (seed {seed})");
-Console.WriteLine($"Map {Encounter.Width}x{Encounter.Height}, {engine.Fighters.Count} fighters.\n");
+Console.WriteLine($"Map {engine.Field.Width}x{engine.Field.Height}, {engine.Fighters.Count} fighters.\n");
 
 engine.Start();
 

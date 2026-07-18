@@ -157,5 +157,6 @@ save("piou_idle_se", [creature(**PIOU, bob=0), creature(**PIOU, bob=3)])
 # Tiles
 iso_tile((78, 120, 78), (54, 86, 56)).save(os.path.join(OUT, "tile_grass.png"))
 iso_tile((92, 116, 74), (62, 84, 52)).save(os.path.join(OUT, "tile_grass2.png"))
+iso_tile((132, 104, 74), (96, 74, 52)).save(os.path.join(OUT, "tile_dirt.png"))
 rock_tile().save(os.path.join(OUT, "tile_rock.png"))
 print("tiles written; done ->", OUT)

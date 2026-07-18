@@ -160,6 +160,10 @@ public static class TitheContent
     /// <summary>Coin a mob drops (Bible §6.11). One dial for the prototype: gold == XP value.</summary>
     public static int MobGold(string mobId) => MobXp(mobId);
 
+    /// <summary>The Sexton's court — the Crypt's boss encounter, as a mob composition.</summary>
+    public static IReadOnlyList<string> CryptComp() =>
+        JsonSerializer.Deserialize<EncounterDto>(TitheTables.EncounterBossJson, J)!.Spawns.Select(s => s.Mob).ToList();
+
     public static int ClassMaxHp(string classId) => Classes.TryGetValue(classId, out var c) ? c.MaxHp : 0;
 
     /// <summary>Build a combat fighter from a persistent campaign unit (applies carried HP, Wounded, level).</summary>

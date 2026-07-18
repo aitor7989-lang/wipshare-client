@@ -74,11 +74,19 @@ loot → arrange, restock, dive again.**
 
 In the **City** you click the **Tithe-Keeper** (pay the tithe, buy Hard Bread, sell essences), the
 **Temple Sister** (treat the Wounded), and the **Hiring Post** (replace lost mercenaries), then step
-through the **Lychgate**. The **Graveyard** shows the skeleton **packs** on a danger-by-depth
-gradient with the floor clock draining; engage one and it plays out as a full watched fight, then
-you press on or the bell ejects you. A downed mercenary **dies for good**, a downed avatar comes out
-**Wounded**, a fight lost outright is **campaign over**, and every third return the **tithe**
-escalates. HP carries between fights (Hard Bread mends it; the city is safe rest).
+through the **Lychgate**.
+
+![TITHE — roaming the Graveyard](docs/tithe-graveyard.png)
+
+The **Graveyard** is real click-to-move exploration: click a cell and the crew walks there
+(pathfinding around tombstones), the floor clock draining the whole time. The skeleton **packs** sit
+on a danger-by-depth gradient (`x2` easy → `x5` lethal) — walk onto one to engage it as a full
+watched fight; as the bell runs low the deeper packs grey out to **"TOO FAR"**. Deepest of all is
+**THE CRYPT**, a level-gated door: reach it under-levelled and the crew is "too green", but at
+**level 3** it opens onto **The Sexton's court** — the boss. Clear a pack and you bank its gold,
+XP and essences (`PACK CLEARED`), then press on or the bell ejects you. A downed mercenary **dies for
+good**, a downed avatar comes out **Wounded**, a fight lost outright is **campaign over**, and every
+third return the **tithe** escalates. HP carries between fights (Hard Bread mends it; the city rests).
 
 ```bash
 dotnet run --project DofusSlice.Game                     # play the campaign loop (default)
@@ -88,9 +96,13 @@ dotnet run --project DofusSlice.Sim campaign survey 40   # cautious vs greedy ri
 ```
 
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.
-**Graveyard:** **1–6** (or click a pack) to engage; the bell ejects you when it tolls. The whole
-spine is pure logic in `Core/Content/Tithe/` (`Campaign`, `DiveSession`), so the economics are
-testable headless — the `survey` lands the Bible's Pillar 4, *ruin traces to a choice*: cautious
+**Graveyard:** click a cell to move; click a pack (or **1–6**) to walk over and fight it; walk to the
+Crypt to face the Sexton at level 3; the bell ejects you when it tolls.
+
+![TITHE — a pack cleared on the dive](docs/tithe-dive-report.png)
+
+The whole spine is pure logic in `Core/Content/Tithe/` (`Campaign`, `DiveSession`), so the economics
+are testable headless — the `survey` lands the Bible's Pillar 4, *ruin traces to a choice*: cautious
 play (skim the shallow safe packs) survives indefinitely, greedy play (chase the deep, loot-rich,
 lethal packs) wipes in a couple of dives.
 

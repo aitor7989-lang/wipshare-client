@@ -90,10 +90,10 @@ public sealed class DiveSession
     /// for the party versus the pack. The game plays this out visually then calls
     /// <see cref="ApplyResult"/>; the headless <see cref="Engage"/> runs it immediately.
     /// </summary>
-    public CombatEngine BeginFight(PackState pack)
+    public CombatEngine BeginFight(PackState pack, bool chargeTravel = true)
     {
         MendWithBread();
-        Clock -= pack.Def.Reach;
+        if (chargeTravel) Clock -= pack.Def.Reach; // headless charges travel; the visual walks it in real time
         return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng);
     }
 

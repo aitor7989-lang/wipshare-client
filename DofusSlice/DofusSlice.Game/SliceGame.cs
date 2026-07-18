@@ -39,6 +39,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private int _openNpc = -1;                        // which City building's panel is open
     private MapData _cityMap = null!, _graveMap = null!;
     private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
+
+    // Graveyard roaming: real click-to-move party + a level-gated Crypt entrance.
+    private Battlefield _graveField = null!;
+    private CellCoord _partyCell;
+    private Vector2 _partyWorld;
+    private readonly Queue<CellCoord> _partyPath = new();
+    private DiveSession.PackState? _engageOnArrive;
+    private bool _cryptOnArrive, _cryptCleared, _inCrypt;
+    private string _cryptMsg = "";
+    private float _cryptMsgTimer;
+    private static readonly CellCoord PartyStart = new(1, 6), CryptCell = new(13, 11);
+    private const int CryptLevel = 3;
     private const int ScreenW = 1280;
     private const int ScreenH = 760;
     private const int TileW = 64;
@@ -320,6 +332,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _scene = Scene.Graveyard;
         SetupView(_graveMap);
         AssignPackCells();
+
+        _graveField = _graveMap.ToBattlefield();
+        _partyCell = PartyStart;
+        _partyWorld = _proj.CellCenter(PartyStart);
+        _partyPath.Clear();
+        _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _inCrypt = false;
+        _cryptMsg = ""; _cryptMsgTimer = 0f;
     }
 
     private static readonly CellCoord[] PackCells =
@@ -340,24 +359,84 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive == null) { EnterCity(); return; }
         _dive.Tick(dt);
         if (_dive.Ended) { EnterCity(); return; }
+        if (_cryptMsgTimer > 0f) _cryptMsgTimer -= dt;
 
-        // Number keys engage packs in reach order (also: click a pack token).
+        MovePartyAlongPath(dt);
+
+        // Number keys walk the party to packs in reach order (a quick shortcut).
         var ordered = _dive.Packs.Where(p => !p.Cleared).OrderBy(p => p.Def.Reach).ToList();
         for (int i = 0; i < ordered.Count && i < 6; i++)
-            if (Pressed(Keys.D1 + i) && _dive.CanAfford(ordered[i])) { EngagePack(ordered[i]); return; }
+            if (Pressed(Keys.D1 + i)) { WalkToPack(ordered[i]); return; }
 
-        if (!LeftClicked()) return;
+        if (!LeftClicked() || _mouse.Y >= HudTop) return;
+        var target = _hover;
+        if (!_graveField.InBounds(target)) return;
+
         foreach (var p in _dive.Packs)
-        {
-            if (p.Cleared) continue;
-            if (_packCells.TryGetValue(p.Def.Id, out var cell) && cell == _hover && _dive.CanAfford(p))
-            { EngagePack(p); return; }
-        }
+            if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell) && cell == target) { WalkToPack(p); return; }
+        if (target == CryptCell) { WalkTo(CryptCell, null, crypt: true); return; }
+        if (_graveMap.IsWalkable(target)) WalkTo(target, null, crypt: false);
     }
 
-    private void EngagePack(DiveSession.PackState pack)
+    // ----- Graveyard roaming --------------------------------------------------------
+
+    private void WalkTo(CellCoord goal, DiveSession.PackState? engage, bool crypt)
     {
-        _engine = _dive!.BeginFight(pack);
+        var path = Pathfinding.FindPath(_graveField, _partyCell, goal, _ => false, allowOccupiedGoal: true);
+        _partyPath.Clear();
+        _engageOnArrive = engage;
+        _cryptOnArrive = crypt;
+        if (path == null) return;
+        foreach (var c in path.Skip(1)) _partyPath.Enqueue(c);
+        if (_partyPath.Count == 0) ArriveAtTarget(); // already standing on it
+    }
+
+    private void WalkToPack(DiveSession.PackState p)
+    {
+        if (_packCells.TryGetValue(p.Def.Id, out var cell)) WalkTo(cell, p, crypt: false);
+    }
+
+    private void MovePartyAlongPath(float dt)
+    {
+        if (_partyPath.Count == 0) return;
+        const float speed = 200f; // world px/sec
+        var tgt = _proj.CellCenter(_partyPath.Peek());
+        var delta = tgt - _partyWorld;
+        float dist = delta.Length();
+        if (dist <= speed * dt)
+        {
+            _partyWorld = tgt;
+            _partyCell = _partyPath.Dequeue();
+            if (_partyPath.Count == 0) ArriveAtTarget();
+        }
+        else _partyWorld += delta / dist * speed * dt;
+    }
+
+    private void ArriveAtTarget()
+    {
+        if (_engageOnArrive is { } p) { _engageOnArrive = null; EngagePack(p); }
+        else if (_cryptOnArrive) { _cryptOnArrive = false; TryEnterCrypt(); }
+    }
+
+    private void TryEnterCrypt()
+    {
+        if (_cryptCleared) { _cryptMsg = "The altar is spent — the Sexton is dead."; _cryptMsgTimer = 2.5f; return; }
+        int lvl = _campaign.Avatar?.Level ?? 1;
+        if (lvl < CryptLevel) { _cryptMsg = $"The crew is too green — reach level {CryptLevel} to face the Sexton."; _cryptMsgTimer = 3f; return; }
+
+        _inCrypt = true;
+        var crypt = new DiveSession.PackState
+        {
+            Def = new TitheContent.PackDef("crypt", TitheContent.CryptComp().ToArray(), 0, false),
+        };
+        BeginCombat(crypt);
+    }
+
+    private void EngagePack(DiveSession.PackState pack) { _inCrypt = false; BeginCombat(pack); }
+
+    private void BeginCombat(DiveSession.PackState pack)
+    {
+        _engine = _dive!.BeginFight(pack, chargeTravel: false); // the walk was the travel cost
         _map = _graveMap;
         _pendingPack = pack;
         _combatResolved = false;
@@ -395,6 +474,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             {
                 _fightReport = _dive!.ApplyResult(_pendingPack!, _engine);
                 _combatResolved = true;
+                if (_inCrypt) { _cryptCleared = _fightReport.Outcome == FightOutcome.Victory; _inCrypt = false; }
             }
             if (_combatResolved && (Pressed(Keys.Space) || Pressed(Keys.Enter) || LeftClicked()))
             {
@@ -1445,28 +1525,58 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
         DrawPlaneTiles(_graveMap);
+
+        // Path preview + hover highlight.
+        foreach (var c in _partyPath)
+            _prim.DiscAt(_sb, _proj.CellCenter(c), 4, new Color(232, 222, 140, 150));
+        if (_graveField != null && _graveField.InBounds(_hover))
+        {
+            bool interactive = _hover == CryptCell ||
+                (_dive != null && _dive.Packs.Any(p => !p.Cleared && _packCells.TryGetValue(p.Def.Id, out var pc) && pc == _hover));
+            if (interactive || _graveMap.IsWalkable(_hover))
+                _prim.DiamondAt(_sb, _proj.CellCenter(_hover), Palette.CurrentRing * (interactive ? 0.35f : 0.16f));
+        }
+
         foreach (var c in PlaneCellsByDepth(_graveMap))
         {
             var k = _graveMap.Tile(c.X, c.Y);
             if (k is TileKind.Rock or TileKind.Tree) DrawObstacleKind(_proj.CellCenter(c), k);
         }
-        DrawPartyToken(new CellCoord(1, 6));
+        DrawCrypt();
         if (_dive != null)
             foreach (var p in _dive.Packs)
                 if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell))
                     DrawPackToken(cell, p);
+        DrawPartyToken(_partyWorld);
         _sb.End();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, "CLICK A PACK TO ENGAGE   ·   THE BELL EJECTS YOU WHEN IT TOLLS", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   REACH THE CRYPT AT LEVEL {CryptLevel}", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
+        if (_cryptMsgTimer > 0f)
+            _font.DrawCentered(_sb, _cryptMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
         _sb.End();
     }
 
-    private void DrawPartyToken(CellCoord c)
+    private void DrawCrypt()
     {
-        var center = _proj.CellCenter(c);
+        var center = _proj.CellCenter(CryptCell);
+        bool locked = (_campaign.Avatar?.Level ?? 1) < CryptLevel;
+        var col = _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 36, 44), new Color(14, 14, 18));
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 15, (int)center.Y - 38, 30, 38), col * 0.55f);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 9, (int)center.Y - 32, 18, 32), new Color(6, 6, 10));
+        _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - 56, 1,
+            _cryptCleared ? Palette.TextDim : new Color(204, 172, 224));
+        string sub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
+        _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, 1,
+            locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
+    }
+
+    private void DrawPartyToken(Vector2 center)
+    {
         var col = new Color(120, 190, 120);
         var outline = new Color(16, 16, 20);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);

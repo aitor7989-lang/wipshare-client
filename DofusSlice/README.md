@@ -101,26 +101,30 @@ dotnet run --project DofusSlice.Sim campaign crypt [seed]   # a level-3 crew thr
 dotnet run --project DofusSlice.Sim campaign progression    # stats, leveling & the Adventurer set on paper
 ```
 
-### Stats, leveling & gear (Dofus 1.29 block)
+### Stats, elements, leveling & gear (Dofus 1.29 block)
 
-Every unit carries the **1.29 characteristic block** (Bible §6.2): Vitality → HP, **Strength → the
-single active damage stat** (elements deferred), Agility → the lock/escape contest, Wisdom → XP
-bonus and AP/MP-loss resistance, plus Initiative for turn order. Spells are empowered by the
-Dofus formula the engine already runs — `base × (100 + Strength) / 100 − flat resist` — so raising
-Strength lifts *every* spell's damage. **Levels** follow the real 1.29 XP curve (cheap early, then
-stretching); on each level a unit auto-spends 5 characteristic points by its **class ratio**
-(Bulwark banks Vitality, Cannon banks Strength, Archer splits Strength/Agility — mercs level the
-same way but keep their hire kit, Bible §6.6.9). **Loot** now includes the **Adventurer set** (the
-Dofus slot list — weapon, hat, cape, amulet, ring, belt, boots): pieces drop from graveyard mobs at
-low rates and from the Sexton at a peak rate, land in a shared stash, and the avatar auto-equips
-upgrades. Each piece is modest; assembling the full panoply is a **screaming find** — the set-bonus
-tiers roughly double a light unit's HP and add ~55% to its spell damage. Watch it on paper:
+Every unit carries the **full 1.29 characteristic block** (Bible §6.2): Vitality → HP, the four
+**elemental damage stats** (Strength→Earth, Intelligence→Fire, Chance→Water, Agility→Air, exactly
+the 1.29 mapping), Wisdom → **+1% XP per point** and AP/MP-loss resistance, plus Initiative for
+turn order. The three classes are element-themed — the **Bulwark is Earth** (Strength), the
+**Archer is Air** (Agility), the **Cannon is Fire** (Intelligence) — and every spell runs the Dofus
+formula `base × (100 + elementStat + Power) / 100 − % resist − flat resist`, so mobs' **elemental
+armor** matters (a Crypt Warden shrugs 35% of Earth hits; the Sexton resists everything a little).
+**Levels** follow a 1.29-shaped XP curve — cheap early bands that stretch hard (the mined table
+lands with the §9 pass, paired with per-mob XP); on each level a unit auto-spends 5 characteristic
+points by its **class ratio** (Bulwark banks Vitality, Cannon banks Intelligence, Archer banks
+Agility — mercs level the same way but keep their hire kit, Bible §6.6.9). **Loot** includes the
+**Adventurer set** (the Dofus slot list — weapon, hat, cape, amulet, ring, belt, boots): pieces
+drop from graveyard mobs at low rates and from the Sexton at a peak rate, land in a shared stash,
+and the avatar auto-equips upgrades. Pieces are modest and stat-broad (every element served, plus
+**Power**, the all-element damage stat); assembling the full panoply is a **screaming find** — it
+roughly quadruples a light unit's HP and nearly doubles its spell damage. Watch it on paper:
 
 ```
-STATE                      LVL   HP  STR  AGI  WIS  SET  RUIN BOLT
-fresh (level 1, naked)       1   42   30   10   12   0/7  23-31
-leveled to 12               12   53   63   21   12   0/7  29-39
-+ full Adventurer set       12  166  105   46   31   7/7  36-49
+STATE                      LVL   HP  INT  POW  AGI  WIS  SET  RUIN BOLT
+fresh (level 1, naked)       1   42   30    0   10   12   0/7  23-31
+leveled to 12               12   53   74    0   10   12   0/7  31-41
++ full Adventurer set       12  166  115   22   35   31   7/7  42-56
 ```
 
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.

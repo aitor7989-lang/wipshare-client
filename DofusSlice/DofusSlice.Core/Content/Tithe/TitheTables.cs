@@ -21,18 +21,18 @@ public static class TitheTables
     // Archer splits Strength/Agility. Wisdom feeds the XP bonus and AP/MP-loss resistance.
     public const string ClassesJson = """
     [
-      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "baseHp": 24, "ap": 6, "mp": 4,
-        "vitality": 12, "strength": 22, "agility": 18, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
-        "growth": { "vitality": 1, "strength": 2, "agility": 2 },
-        "skills": ["piercing_shot"], "blurb": "Keeps max distance, shoots the softest target; Long Shot hits harder from afar." },
-      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "baseHp": 38, "ap": 6, "mp": 3,
-        "vitality": 40, "strength": 20, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
-        "growth": { "vitality": 3, "strength": 1, "agility": 1 },
-        "skills": ["slam"], "blurb": "Advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied." },
-      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "baseHp": 27, "ap": 7, "mp": 3,
-        "vitality": 15, "strength": 30, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
-        "growth": { "vitality": 1, "strength": 3, "agility": 1 },
-        "skills": ["ruin_bolt"], "blurb": "Holds a sightline and nukes; Overchannel banks its unspent AP into the hit." }
+      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 24, "ap": 6, "mp": 4,
+        "vitality": 12, "strength": 6, "intelligence": 4, "chance": 4, "agility": 22, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
+        "growth": { "vitality": 1, "agility": 4 },
+        "skills": ["piercing_shot"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
+      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 38, "ap": 6, "mp": 3,
+        "vitality": 40, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
+        "growth": { "vitality": 3, "strength": 2 },
+        "skills": ["slam"], "blurb": "An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage." },
+      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "element": "fire", "baseHp": 27, "ap": 7, "mp": 3,
+        "vitality": 15, "strength": 6, "intelligence": 30, "chance": 4, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
+        "growth": { "vitality": 1, "intelligence": 4 },
+        "skills": ["ruin_bolt"], "blurb": "A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage." }
     ]
     """;
 
@@ -47,14 +47,14 @@ public static class TitheTables
         "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 18,
         "essence": "Seize", "drop": 6, "gear": 4 },
       { "id": "marrow_spitter","name": "Marrow Spitter", "policy": "ranged",  "maxHp": 30, "ap": 6, "mp": 3,
-        "strength": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
+        "strength": 14, "chance": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
         "skills": ["marrow_spit"], "xp": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
         "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22,
-        "essence": "Pounce", "drop": 5, "gear": 5 },
+        "essence": "Pounce", "drop": 5, "gear": 5, "resAir": 20 },
       { "id": "crypt_warden",  "name": "Crypt Warden",  "policy": "melee",   "maxHp": 72, "ap": 6, "mp": 2,
         "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 26,
-        "essence": "Ironhide", "drop": 5, "gear": 7 },
+        "essence": "Ironhide", "drop": 5, "gear": 7, "resEarth": 35, "resFire": 15 },
       { "id": "grave_mite",    "name": "Grave Mite",    "policy": "flanker", "maxHp": 12, "ap": 6, "mp": 4,
         "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 6,
         "essence": "Sap", "drop": 10, "gear": 2 },
@@ -63,7 +63,7 @@ public static class TitheTables
         "skills": ["piper_gift"], "xp": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
         "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 120,
-        "essence": "Sexton's Toll", "drop": 100, "gear": 65 }
+        "essence": "Sexton's Toll", "drop": 100, "gear": 65, "resEarth": 20, "resFire": 20, "resAir": 20, "resWater": 20 }
     ]
     """;
 
@@ -72,25 +72,25 @@ public static class TitheTables
     public const string SkillsJson = """
     [
       { "key": "piercing_shot", "name": "Piercing Shot", "ap": 3, "min": 4, "max": 8, "los": true,
-        "effects": [ { "kind": "damage", "min": 11, "max": 16 } ] },
+        "effects": [ { "kind": "damage", "element": "air", "min": 11, "max": 16 } ] },
       { "key": "slam", "name": "Slam", "ap": 4, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 12, "max": 18 }, { "kind": "push", "cells": 1 } ] },
+        "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 }, { "kind": "push", "cells": 1 } ] },
       { "key": "ruin_bolt", "name": "Ruin Bolt", "ap": 4, "min": 3, "max": 6, "los": true,
-        "effects": [ { "kind": "damage", "min": 18, "max": 24 } ] },
+        "effects": [ { "kind": "damage", "element": "fire", "min": 18, "max": 24 } ] },
       { "key": "husk_strike", "name": "Husk Strike", "ap": 3, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 12, "max": 18 } ] },
+        "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 } ] },
       { "key": "marrow_spit", "name": "Marrow Spit", "ap": 3, "min": 3, "max": 6, "los": true,
-        "effects": [ { "kind": "damage", "min": 10, "max": 15 } ] },
+        "effects": [ { "kind": "damage", "element": "water", "min": 10, "max": 15 } ] },
       { "key": "grave_bite", "name": "Grave Bite", "ap": 3, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 16, "max": 24 } ] },
+        "effects": [ { "kind": "damage", "element": "air", "min": 16, "max": 24 } ] },
       { "key": "warden_ironhide", "name": "Ironhide", "ap": 2, "min": 0, "max": 0, "los": false, "cooldown": 2,
         "effects": [ { "kind": "status", "status": "shield", "mag": 8, "turns": 1 } ] },
       { "key": "mite_sap", "name": "Sap", "ap": 2, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 4, "max": 7 }, { "kind": "status", "status": "mpdrain", "mag": 1, "turns": 1 } ] },
+        "effects": [ { "kind": "damage", "element": "air", "min": 4, "max": 7 }, { "kind": "status", "status": "mpdrain", "mag": 1, "turns": 1 } ] },
       { "key": "piper_gift", "name": "Piper's Gift", "ap": 3, "min": 1, "max": 4, "los": true, "castsPerTurn": 1,
         "effects": [ { "kind": "grant_ap", "min": 2 } ] },
       { "key": "sexton_smash", "name": "Sexton's Toll", "ap": 5, "min": 1, "max": 1, "los": true, "cooldown": 2,
-        "effects": [ { "kind": "damage", "min": 22, "max": 32 }, { "kind": "push", "cells": 2 } ] }
+        "effects": [ { "kind": "damage", "element": "earth", "min": 22, "max": 32 }, { "kind": "push", "cells": 2 } ] }
     ]
     """;
 
@@ -187,13 +187,13 @@ public static class TitheTables
     // are honest placeholders for the §9 mining / M5 tuning pass.
     public const string ItemsJson = """
     [
-      { "id": "adv_blade",  "name": "Adventurer Blade",  "slot": "weapon", "set": "adventurer", "strength": 8 },
-      { "id": "adv_hat",    "name": "Adventurer Hat",    "slot": "hat",    "set": "adventurer", "vitality": 8, "wisdom": 4 },
-      { "id": "adv_cape",   "name": "Adventurer Cape",   "slot": "cape",   "set": "adventurer", "strength": 4, "agility": 4 },
-      { "id": "adv_amulet", "name": "Adventurer Amulet", "slot": "amulet", "set": "adventurer", "vitality": 10, "wisdom": 3 },
-      { "id": "adv_ring",   "name": "Adventurer Ring",   "slot": "ring",   "set": "adventurer", "strength": 5, "vitality": 6 },
-      { "id": "adv_belt",   "name": "Adventurer Belt",   "slot": "belt",   "set": "adventurer", "vitality": 8, "strength": 3 },
-      { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "vitality": 6 }
+      { "id": "adv_blade",  "name": "Adventurer Blade",  "slot": "weapon", "set": "adventurer", "strength": 6, "intelligence": 6, "power": 3 },
+      { "id": "adv_hat",    "name": "Adventurer Hat",    "slot": "hat",    "set": "adventurer", "vitality": 8, "intelligence": 4, "wisdom": 4 },
+      { "id": "adv_cape",   "name": "Adventurer Cape",   "slot": "cape",   "set": "adventurer", "strength": 4, "agility": 4, "power": 2 },
+      { "id": "adv_amulet", "name": "Adventurer Amulet", "slot": "amulet", "set": "adventurer", "vitality": 10, "intelligence": 5, "wisdom": 3 },
+      { "id": "adv_ring",   "name": "Adventurer Ring",   "slot": "ring",   "set": "adventurer", "strength": 4, "intelligence": 4, "vitality": 6 },
+      { "id": "adv_belt",   "name": "Adventurer Belt",   "slot": "belt",   "set": "adventurer", "vitality": 8, "strength": 3, "power": 2 },
+      { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "chance": 4, "vitality": 6 }
     ]
     """;
 
@@ -206,11 +206,11 @@ public static class TitheTables
     [
       { "id": "adventurer", "name": "Adventurer Set", "tiers": [
         { "pieces": 2, "vitality": 10 },
-        { "pieces": 3, "vitality": 18, "strength": 3 },
-        { "pieces": 4, "vitality": 28, "strength": 6,  "agility": 3 },
-        { "pieces": 5, "vitality": 40, "strength": 10, "agility": 6,  "wisdom": 4 },
-        { "pieces": 6, "vitality": 55, "strength": 15, "agility": 10, "wisdom": 8 },
-        { "pieces": 7, "vitality": 75, "strength": 22, "agility": 15, "wisdom": 12 }
+        { "pieces": 3, "vitality": 18, "strength": 3,  "intelligence": 3,  "power": 2 },
+        { "pieces": 4, "vitality": 28, "strength": 6,  "intelligence": 6,  "agility": 3,  "power": 4 },
+        { "pieces": 5, "vitality": 40, "strength": 10, "intelligence": 10, "agility": 6,  "wisdom": 4,  "power": 6 },
+        { "pieces": 6, "vitality": 55, "strength": 15, "intelligence": 15, "agility": 10, "wisdom": 8,  "power": 10 },
+        { "pieces": 7, "vitality": 75, "strength": 22, "intelligence": 22, "agility": 15, "wisdom": 12, "power": 15 }
       ] }
     ]
     """;

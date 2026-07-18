@@ -50,8 +50,10 @@ public static class CampaignSim
             if (campaign.Avatar is { } av)
             {
                 var s = TitheContent.StatsOf(av);
+                var el = TitheContent.ClassElement(av.ClassId);
                 int set = TitheContent.SetPiecesEquipped(av, TitheContent.GraveyardSet);
-                Console.WriteLine($"Avatar kit: {set}/7 Adventurer pieces  →  {s.MaxHp} HP, STR {s.Strength}, AGI {s.Agility}, WIS {s.Wisdom}"
+                Console.WriteLine($"Avatar kit: {set}/7 Adventurer pieces  →  {s.MaxHp} HP, "
+                    + $"{el.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, el)}, AGI {s.Agility}, WIS {s.Wisdom}"
                     + (av.Equipment.Count > 0 ? $"  [{string.Join(", ", av.Equipment.Select(TitheContent.ItemName))}]" : ""));
             }
         }
@@ -151,23 +153,28 @@ public static class CampaignSim
     /// <summary>
     /// Show the Dofus stat block, leveling, and gear empowering spells (Bible §6.2/§6.3/§6.6/§6.10)
     /// on paper: an avatar's characteristics grow with level (auto-spent by the class ratio) and with
-    /// the Adventurer set, and every point of Strength lifts its spell damage by 1% — watch Ruin
-    /// Bolt's range climb. This is the Door Test for the progression systems before any equip UI.
+    /// the Adventurer set, and every point of its element's stat (+Power) lifts its spell damage by
+    /// 1% — watch Ruin Bolt's range climb. The Door Test for progression before any equip UI.
     /// </summary>
     public static int Progression(int seed)
     {
         var c = Campaign.NewGame("cannon");
         var avatar = c.Avatar!;
 
-        Console.WriteLine("TITHE — stats, leveling & gear (the Cannon avatar)\n");
-        Console.WriteLine($"{"STATE",-26} {"LVL",3} {"HP",4} {"STR",4} {"AGI",4} {"WIS",4}  {"SET",3}  RUIN BOLT");
+        // The Cannon is the Fire class: Ruin Bolt (18-24) scales on Intelligence + Power,
+        // base × (100 + INT + POW)/100 — the same formula every element runs through.
+        var elem = TitheContent.ClassElement("cannon");
+        int dmg0 = TitheContent.DamageStatFor(TitheContent.StatsOf(avatar), elem);
+
+        Console.WriteLine($"TITHE — stats, leveling & gear (the Cannon avatar, {elem} class)\n");
+        Console.WriteLine($"{"STATE",-26} {"LVL",3} {"HP",4} {"INT",4} {"POW",4} {"AGI",4} {"WIS",4}  {"SET",3}  RUIN BOLT");
         void Row(string label)
         {
             var s = TitheContent.StatsOf(avatar);
             int set = TitheContent.SetPiecesEquipped(avatar, TitheContent.GraveyardSet);
-            // Ruin Bolt is a Neutral spell (18-24), so Strength is its damage stat: base × (100+STR)/100.
-            int lo = 18 * (100 + s.Strength) / 100, hi = 24 * (100 + s.Strength) / 100;
-            Console.WriteLine($"{label,-26} {avatar.Level,3} {s.MaxHp,4} {s.Strength,4} {s.Agility,4} {s.Wisdom,4}  {set,2}/7  {lo}-{hi}");
+            int dmg = TitheContent.DamageStatFor(s, elem);
+            int lo = 18 * (100 + dmg) / 100, hi = 24 * (100 + dmg) / 100;
+            Console.WriteLine($"{label,-26} {avatar.Level,3} {s.MaxHp,4} {s.Intelligence,4} {s.Power,4} {s.Agility,4} {s.Wisdom,4}  {set,2}/7  {lo}-{hi}");
         }
 
         Row("fresh (level 1, naked)");
@@ -189,10 +196,11 @@ public static class CampaignSim
         }
 
         var final = TitheContent.StatsOf(avatar);
-        // Damage lift = (100+STR_now)/(100+STR_base) − 1, the actual multiplier on every spell.
-        int dmgLift = 100 * (100 + final.Strength) / (100 + 30) - 100;
+        int dmgNow = TitheContent.DamageStatFor(final, elem);
+        // Damage lift = (100+stat_now)/(100+stat_base) − 1, the actual multiplier on its spells.
+        int dmgLift = 100 * (100 + dmgNow) / (100 + dmg0) - 100;
         Console.WriteLine($"\n  Full kit vs fresh L1: +{final.MaxHp - TitheContent.ClassMaxHp("cannon")} HP, "
-            + $"Strength 30 → {final.Strength} (every spell hits ~{dmgLift}% harder than a naked L1).");
+            + $"{elem} damage stat {dmg0} → {dmgNow} (its spells hit ~{dmgLift}% harder than a naked L1).");
         return 0;
     }
 

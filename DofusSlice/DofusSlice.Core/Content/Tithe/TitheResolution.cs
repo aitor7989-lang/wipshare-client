@@ -57,6 +57,7 @@ public static class TitheResolution
             bool died = down && !wounded;
             int xp = (won && (f.IsAlive || wounded) && totalWeight > 0)
                 ? pool * f.Level / totalWeight : 0;
+            xp = xp * (100 + f.Wisdom) / 100; // 1.29 rule: each point of Wisdom is +1% XP
 
             if (won && (f.IsAlive || wounded))
             {

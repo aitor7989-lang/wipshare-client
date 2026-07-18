@@ -1671,9 +1671,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             string tag = u.IsAvatar ? "AVATAR" : "MERC";
             _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
                 x + 22, y + 3, 1, u.Wounded ? new Color(230, 200, 70) : Palette.Text);
-            // Effective Dofus stats (grown by level + gear) — the avatar also shows its set progress.
+            // Effective Dofus stats (grown by level + gear) — the class's own damage element leads
+            // (Fire Cannon reads INT, Air Archer AGI, Earth Bulwark STR), then the utility stats.
             var s = TitheContent.StatsOf(u);
-            string sheet = $"{s.MaxHp} HP  STR {s.Strength}  AGI {s.Agility}  WIS {s.Wisdom}";
+            var elem = TitheContent.ClassElement(u.ClassId);
+            string sheet = $"{s.MaxHp} HP  {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}"
+                + $"  AGI {s.Agility}  WIS {s.Wisdom}";
             if (u.IsAvatar)
             {
                 int set = TitheContent.SetPiecesEquipped(u, TitheContent.GraveyardSet);

@@ -23,9 +23,10 @@ public sealed class CampaignUnit
     public List<string> Equipment { get; init; } = new();
 
     /// <summary>
-    /// Cumulative XP to reach each level — the Dofus 1.29 / Incarnam curve (Bible §6.3, §9), index =
-    /// level. Early bands are cheap so the first levels come fast then stretch, exactly the 1.29
-    /// feel. The slice band is ~15; beyond the table we extrapolate on the curve's last step.
+    /// Cumulative XP to reach each level, index = level. A 1.29-SHAPED placeholder: cheap early
+    /// bands that stretch hard, matching the Incarnam feel — but NOT the mined table. The real
+    /// 1.29 values (L2=110, L3=650, L4=1500…) must land together with per-mob XP values in the
+    /// §9 mining pass, since curve and mob XP only pace correctly as a pair (Bible §6.3).
     /// </summary>
     private static readonly int[] XpCurve =
     {
@@ -158,11 +159,13 @@ public sealed class Campaign
         return true;
     }
 
-    /// <summary>A rough "how good is this piece" score — the avatar is the carry, so Strength leads.</summary>
+    /// <summary>A rough "how good is this piece" score. Every damage stat counts the same (the four
+    /// elemental channels are equivalent in Dofus); Power counts extra since it feeds all of them.</summary>
     private static int GearWeight(string itemId)
     {
         var it = TitheContent.Item(itemId);
-        return it == null ? 0 : it.Vitality + it.Strength * 3 + it.Agility + it.Wisdom;
+        return it == null ? 0
+            : it.Vitality + (it.Strength + it.Intelligence + it.Chance + it.Agility) * 2 + it.Wisdom + it.Power * 3;
     }
 
     /// <summary>Equip a stashed piece on a unit, filling a free slot or displacing a weaker one back

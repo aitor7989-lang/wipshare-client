@@ -12,6 +12,12 @@ public sealed class MapData
     public CellCoord PlayerSpawn { get; set; }
     public List<(string kind, CellCoord cell)> Enemies { get; } = new();
 
+    /// <summary>Cells the player may place the hero on before the fight begins.</summary>
+    public List<CellCoord> PlayerStartCells { get; } = new();
+
+    public bool InBounds(CellCoord c) => c.X >= 0 && c.X < Width && c.Y >= 0 && c.Y < Height;
+    public bool IsWalkable(CellCoord c) => InBounds(c) && TileKindInfo.IsWalkable(Tile(c.X, c.Y));
+
     public TileKind Tile(int x, int y) => Tiles[y * Width + x];
 
     /// <summary>First walkable cell not already claimed by a spawn (used as a hero-spawn fallback).</summary>

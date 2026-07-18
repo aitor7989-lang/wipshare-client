@@ -58,8 +58,12 @@ public static class MapLoader
                     case 'p': kind = TileKind.Path; break;
                     case '#': kind = TileKind.Rock; break;
                     case 'o': kind = TileKind.Void; break;
-                    case 'P': // stands on grass; ignore a duplicate 'P'
+                    case 's': // a placement cell (stands on grass)
+                        map.PlayerStartCells.Add(cell);
+                        break;
+                    case 'P': // default spawn + a placement cell; ignore a duplicate 'P'
                         if (!hasPlayerSpawn) { map.PlayerSpawn = cell; hasPlayerSpawn = true; taken.Add(cell); }
+                        map.PlayerStartCells.Add(cell);
                         break;
                     default:
                         // A non-null legend entry on a fresh cell spawns that mob.
@@ -78,6 +82,21 @@ public static class MapLoader
             var spawn = map.FirstWalkableCell(taken);
             if (spawn is not CellCoord ok) throw new FormatException("map: no free cell for the player");
             map.PlayerSpawn = ok;
+            map.PlayerStartCells.Add(ok);
+        }
+
+        // No explicit placement cells? Offer a small zone around the spawn (walkable, mob-free).
+        if (map.PlayerStartCells.Count <= 1)
+        {
+            var enemyCells = map.Enemies.Select(e => e.cell).ToHashSet();
+            for (int dy = -2; dy <= 2; dy++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    var cell = map.PlayerSpawn.Offset(dx, dy);
+                    if (map.PlayerSpawn.DistanceTo(cell) <= 2 && map.IsWalkable(cell)
+                        && !enemyCells.Contains(cell) && !map.PlayerStartCells.Contains(cell))
+                        map.PlayerStartCells.Add(cell);
+                }
         }
 
         return map;

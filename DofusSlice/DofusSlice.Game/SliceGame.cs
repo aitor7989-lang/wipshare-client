@@ -39,6 +39,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private int _seed = 1;
     private readonly List<string> _log = new();
     private bool _enemyActed;
+    private bool _placing;
 
     private MouseState _mouse, _prevMouse;
     private KeyboardState _keys, _prevKeys;
@@ -132,24 +133,28 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         try
         {
             _engine = Encounter.FromMap(_map, new SystemRng(_seed));
-            _anim.Reset(_engine.Fighters);
-            WireEngine();
-            _engine.Start();
         }
         catch
         {
             _map = Encounter.DefaultMap();
             _engine = Encounter.FromMap(_map, new SystemRng(_seed));
-            _anim.Reset(_engine.Fighters);
-            WireEngine();
-            _engine.Start();
         }
+        _anim.Reset(_engine.Fighters);
+        WireEngine();
 
         _selectedSpell = -1;
         _enemyTimer = 0f;
         _enemyActed = false;
         _turnClock = TurnSeconds;   // fresh clock so an R-restart never inherits a timed-out turn
         _turnOwner = "";
+        _placing = true;            // choose the hero's start cell before combat begins
+    }
+
+    /// <summary>Leave the placement phase and start the turn-based fight.</summary>
+    private void BeginFight()
+    {
+        _placing = false;
+        _engine.Start();
     }
 
     private void WireEngine()
@@ -184,6 +189,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
         _camera.Update(dt, follow);
 
+        if (_placing) { UpdatePlacement(); base.Update(gameTime); return; }
+
         if (_engine.Outcome != FightOutcome.Ongoing) { base.Update(gameTime); return; }
 
         // A change of active fighter starts a fresh turn clock.
@@ -201,6 +208,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             UpdateEnemyTurn(dt); // enemies AND allied summons are AI-driven
 
         base.Update(gameTime);
+    }
+
+    private void UpdatePlacement()
+    {
+        var hero = Hero;
+        if (hero == null) { BeginFight(); return; }
+
+        if (Pressed(Keys.Space)) { BeginFight(); return; }
+
+        if (LeftClicked())
+        {
+            var m = new Point(_mouse.X, _mouse.Y);
+            if (_endTurnButton.Contains(m)) { BeginFight(); return; } // "FIGHT!" button
+            if (m.Y < HudTop && _map.PlayerStartCells.Contains(_hover) && _engine.FighterAt(_hover) is null)
+                hero.Pos = _hover;
+        }
     }
 
     private void UpdateEnemyTurn(float dt)
@@ -296,16 +319,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         // World pass — everything on the map moves/zooms/shakes with the camera.
         _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
         DrawFloor();
-        DrawFloorOverlays();
+        if (_placing) DrawPlacementCells(); else DrawFloorOverlays();
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
         _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
         _sb.End();
 
         // HUD pass — screen space, unaffected by the camera.
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        DrawHud();
-        // Hold the end screen until the final death/hit animation has played out.
-        if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
+        if (_placing)
+        {
+            DrawPlacementHud();
+        }
+        else
+        {
+            DrawHud();
+            // Hold the end screen until the final death/hit animation has played out.
+            if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
+        }
         _sb.End();
 
         base.Draw(gameTime);
@@ -414,6 +444,35 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         if (_engine.Field.InBounds(_hover) && _hover.Y >= 0)
             DrawTileOutline(_proj.CellCenter(_hover), Color.White);
+    }
+
+    private void DrawPlacementCells()
+    {
+        foreach (var cell in _map.PlayerStartCells)
+            if (_engine.FighterAt(cell) is null)
+                _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.PlacementCell);
+
+        if (_engine.Field.InBounds(_hover) && _hover.Y >= 0)
+            DrawTileOutline(_proj.CellCenter(_hover), Color.White);
+    }
+
+    private void DrawPlacementHud()
+    {
+        _font.Draw(_sb, "PLACEMENT", 16, 12, 3, Palette.Text);
+        _font.Draw(_sb, "CLICK A BLUE CELL TO POSITION YOUR IOP", 16, 40, 1, Palette.TextDim);
+        _font.Draw(_sb, "THEN PRESS FIGHT (OR SPACE) TO BEGIN", 16, 54, 1, Palette.TextDim);
+        DrawTurnTimeline(); // preview the fighters you'll face
+
+        _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
+        _font.DrawCentered(_sb, "POSITION YOUR HERO ON A BLUE STARTING CELL, THEN FIGHT",
+            ScreenW / 2, HudTop + 60, 2, Palette.Text);
+
+        var r = _endTurnButton;
+        bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
+        _prim.FillRect(_sb, r, hover ? Palette.HudPanelLight : Palette.HudPanel);
+        _prim.StrokeRect(_sb, r, 2, Palette.HpFill);
+        _font.DrawCentered(_sb, "FIGHT!", r.Center.X, r.Y + 34, 4, Palette.Text);
+        _font.DrawCentered(_sb, "(SPACE)", r.Center.X, r.Y + 80, 1, Palette.TextDim);
     }
 
     /// <summary>Draw a small centered label floating just above a cell (world space).</summary>

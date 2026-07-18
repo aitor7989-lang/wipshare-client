@@ -42,10 +42,11 @@ sim; "Still missing" is honest scope not yet built.
 ## Still missing (honest scope)
 
 **Bigger systems**
-- **Summons** — creatures added mid-fight that take their own turn (needs a dynamic fighter
-  list + initiative insertion; the engine currently fixes the roster at fight start).
+- ~~Summons~~ ✅ **done** — the engine takes an injected summon factory and adds creatures to
+  the turn order mid-fight; allied summons are AI-run and fight for you (Iop's "Companion").
+- ~~Pre-fight placement phase~~ ✅ **done** — position the hero on blue starting cells, preview
+  the enemies, then press FIGHT.
 - **Weapons** as a system distinct from spells (own AP cost / damage / crit).
-- **Pre-fight placement phase** (position on starting cells; team placement).
 - **Spell levels/variants** (a spell's stats change by level 1–6).
 
 **Mechanics depth**

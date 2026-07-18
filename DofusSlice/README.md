@@ -39,6 +39,8 @@ tension: with the default placement, ~86% of dives are contained (usually costin
 ~14% snowball into a wipe. Tucking the backline away from the Gravehounds' lanes is what turns a
 costly win into a clean one — placement is the skill.
 
+![TITHE — a campaign-over defeat](docs/tithe-defeat.png)
+
 ```bash
 cd DofusSlice
 dotnet run --project DofusSlice.Game            # TITHE watched combat (default)

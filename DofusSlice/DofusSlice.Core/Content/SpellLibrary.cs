@@ -20,6 +20,7 @@ public static class SpellLibrary
         MinRange = 1,
         MaxRange = 6,
         RequiresLineOfSight = true,
+        CriticalChanceOneIn = 25,
         Effects = new[] { SpellEffect.Damage(Element.Neutral, 12, 16) },
         Description = "Ranged neutral strike. The Iop's reliable poke.",
     };
@@ -33,6 +34,8 @@ public static class SpellLibrary
         MaxRange = 1,
         Cooldown = 2,
         MaxCastsPerTurn = 1,
+        CriticalChanceOneIn = 20,
+        CriticalFailureOneIn = 50,
         Effects = new[] { SpellEffect.Damage(Element.Earth, 25, 35) },
         Description = "A devastating melee earth blow. Long cooldown.",
     };
@@ -59,6 +62,7 @@ public static class SpellLibrary
         ApCost = 2,
         MinRange = 1,
         MaxRange = 1,
+        CriticalChanceOneIn = 30,
         Effects = new SpellEffect[] { SpellEffect.Damage(Element.Neutral, 6, 10), SpellEffect.Push(2) },
         Description = "Melee shove: small damage and knock the enemy back two cells.",
     };
@@ -77,7 +81,23 @@ public static class SpellLibrary
         Description = "Self-buff: +50% damage for 3 turns.",
     };
 
-    public static IReadOnlyList<SpellDef> IopSpells => new[] { Pressure, IopsWrath, Jump, Intimidation, Power };
+    public static readonly SpellDef SwordOfJudgment = new()
+    {
+        Id = 106,
+        Name = "Judgment",
+        ApCost = 4,
+        MinRange = 2,
+        MaxRange = 5,
+        RequiresLineOfSight = true,
+        LineOnly = true,
+        Area = AreaShape.Line(2),
+        CriticalChanceOneIn = 25,
+        Effects = new[] { SpellEffect.Damage(Element.Earth, 14, 20) },
+        Description = "A sweeping earth blade that strikes everything in a line.",
+    };
+
+    public static IReadOnlyList<SpellDef> IopSpells =>
+        new[] { Pressure, IopsWrath, Jump, Intimidation, Power, SwordOfJudgment };
 
     // ----- Mobs ----------------------------------------------------------------------
 
@@ -115,7 +135,8 @@ public static class SpellLibrary
         MinRange = 1,
         MaxRange = 4,
         RequiresLineOfSight = true,
-        Effects = new[] { SpellEffect.Damage(Element.Air, 6, 10) },
-        Description = "Piou's darting ranged peck.",
+        CriticalChanceOneIn = 30,
+        Effects = new[] { SpellEffect.Lifesteal(Element.Air, 6, 10) },
+        Description = "Piou's darting peck that saps vitality to heal itself.",
     };
 }

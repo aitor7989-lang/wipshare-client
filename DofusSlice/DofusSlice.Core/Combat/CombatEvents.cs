@@ -22,7 +22,9 @@ public sealed record FighterTeleported(Fighter Fighter, CellCoord From, CellCoor
 
 public sealed record FighterPushed(Fighter Fighter, IReadOnlyList<CellCoord> Path, int CollisionDamage) : CombatEvent;
 
-public sealed record DamageDealt(Fighter Target, int Amount, Element Element, CellCoord At, int RemainingHp) : CombatEvent;
+public sealed record DamageDealt(Fighter Target, int Amount, Element Element, CellCoord At, int RemainingHp, bool Critical = false) : CombatEvent;
+
+public sealed record SpellFizzled(Fighter Caster, SpellDef Spell) : CombatEvent;
 
 public sealed record HealApplied(Fighter Target, int Amount, CellCoord At, int RemainingHp) : CombatEvent;
 

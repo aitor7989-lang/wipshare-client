@@ -29,6 +29,15 @@ public sealed class SpellDef
     /// <summary>Turns before it can be recast (0 = every turn).</summary>
     public int Cooldown { get; init; }
 
+    /// <summary>Critical-hit rate as "1 in N" (0 = never crits). A crit multiplies damage.</summary>
+    public int CriticalChanceOneIn { get; init; }
+
+    /// <summary>Critical-failure rate as "1 in N" (0 = never). A failure fizzles the cast.</summary>
+    public int CriticalFailureOneIn { get; init; }
+
+    /// <summary>Bonus damage multiplier on a critical hit (e.g. 0.5 = +50%).</summary>
+    public float CriticalBonus { get; init; } = 0.5f;
+
     /// <summary>Maximum casts of this spell during one of the caster's turns.</summary>
     public int MaxCastsPerTurn { get; init; } = int.MaxValue;
 

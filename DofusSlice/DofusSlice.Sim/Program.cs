@@ -2,6 +2,12 @@ using DofusSlice.Core.Combat;
 using DofusSlice.Core.Content;
 using DofusSlice.Sim;
 
+if (args.Length > 0 && args[0] == "effects")
+{
+    Console.WriteLine("Combat effects self-test:\n");
+    return EffectsTest.Run();
+}
+
 int seed = args.Length > 0 && int.TryParse(args[0], out int s) ? s : 12345;
 int maxRounds = 40;
 

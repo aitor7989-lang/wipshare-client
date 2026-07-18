@@ -368,7 +368,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastRange);
 
             if (castable.Contains(_hover))
-                foreach (var cell in _engine.AreaCells(spell, _hover))
+                foreach (var cell in _engine.AreaCells(spell, _hover, hero!.Pos))
                     _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.Aoe);
         }
 

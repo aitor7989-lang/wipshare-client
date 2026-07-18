@@ -60,7 +60,7 @@ public sealed class BattleAnimator
                     _proj.CellCenter(c.Target), c.Spell, this));
                 break;
             case DamageDealt d:
-                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this));
+                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical));
                 break;
             case HealApplied h:
                 _queue.Enqueue(new HitAnim(h.Target.Id, _proj.CellCenter(h.At), -h.Amount, this));
@@ -342,12 +342,13 @@ internal sealed class HitAnim : IAnim
     private readonly Vector2 _at;
     private readonly int _amount;
     private readonly BattleAnimator _a;
+    private readonly bool _crit;
     private float _t;
     private bool _spawned;
 
-    public HitAnim(string id, Vector2 at, int amount, BattleAnimator a)
+    public HitAnim(string id, Vector2 at, int amount, BattleAnimator a, bool crit = false)
     {
-        _id = id; _at = at; _amount = amount; _a = a;
+        _id = id; _at = at; _amount = amount; _a = a; _crit = crit;
     }
 
     public bool Done => _t >= Dur;
@@ -358,11 +359,14 @@ internal sealed class HitAnim : IAnim
         {
             _spawned = true;
             _a.SetFlash(_id, 0.3f);
-            if (_amount > 0) _a.RequestShake(Math.Min(9f, 3f + _amount * 0.12f));
+            if (_amount > 0) _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));
             bool heal = _amount < 0;
-            string text = (heal ? "+" : "-") + Math.Abs(_amount);
-            var color = heal ? new Color(120, 220, 130) : new Color(255, 120, 110);
-            _a.AddOverlay(new FloatingText(_at + new Vector2(0, -30), text, color));
+            string text = (heal ? "+" : "-") + Math.Abs(_amount) + (_crit ? "!" : "");
+            var color = heal ? new Color(120, 220, 130)
+                : _crit ? new Color(255, 210, 90)          // gold crit
+                : new Color(255, 120, 110);
+            int scale = _crit ? 3 : 2;
+            _a.AddOverlay(new FloatingText(_at + new Vector2(0, -30), text, color, scale));
         }
         _t += dt;
     }
@@ -413,16 +417,20 @@ internal sealed class FloatingText : Overlay
     private Vector2 _pos;
     private readonly string _text;
     private readonly Color _color;
+    private readonly int _scale;
     private float _t;
 
-    public FloatingText(Vector2 pos, string text, Color color) { _pos = pos; _text = text; _color = color; }
+    public FloatingText(Vector2 pos, string text, Color color, int scale = 2)
+    {
+        _pos = pos; _text = text; _color = color; _scale = scale;
+    }
     public override bool Done => _t >= Dur;
     public override void Update(float dt) { _t += dt; _pos.Y -= dt * 34f; }
 
     public override void Draw(SpriteBatch sb, Primitives prim, PixelFont font)
     {
         float a = 1f - _t / Dur;
-        font.DrawCentered(sb, _text, (int)_pos.X, (int)_pos.Y, 2, _color * a);
+        font.DrawCentered(sb, _text, (int)_pos.X, (int)_pos.Y, _scale, _color * a);
     }
 }
 

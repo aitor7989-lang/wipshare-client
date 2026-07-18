@@ -29,8 +29,19 @@ public sealed class Fighter
     public int Chance { get; init; }
     public int Agility { get; init; }
 
+    // Secondary combat characteristics (Dofus-style).
+    public int Power { get; init; }         // adds to damage scaling like a primary stat
+    public int DamagePercent { get; init; } // flat % damage bonus (from gear)
+    public int FlatDamage { get; init; }    // added after % scaling
+    public int Wisdom { get; init; }        // resistance to AP/MP loss (dodge)
+
     /// <summary>Percent elemental resistance, keyed by element (0-100).</summary>
     public Dictionary<Element, int> Resistances { get; } = new();
+
+    /// <summary>Flat elemental resistance subtracted after % reduction.</summary>
+    public Dictionary<Element, int> FlatResistances { get; } = new();
+
+    public int FlatResistanceFor(Element element) => FlatResistances.TryGetValue(element, out int r) ? r : 0;
 
     public int Initiative { get; init; }
 
@@ -43,6 +54,9 @@ public sealed class Fighter
 
     public int DamageBuffPercent => Statuses.Where(s => s.Kind == StatusKind.DamageBuff).Sum(s => s.Magnitude);
     public int ShieldAmount => Statuses.Where(s => s.Kind == StatusKind.Shield).Sum(s => s.Magnitude);
+    public int ReflectPercent => Statuses.Where(s => s.Kind == StatusKind.Reflect).Sum(s => s.Magnitude);
+    public bool IsRooted => Statuses.Any(s => s.Kind == StatusKind.Rooted);
+    public bool IsStabilized => Statuses.Any(s => s.Kind == StatusKind.Stabilized);
 
     // Per-turn / cooldown bookkeeping.
     private readonly Dictionary<int, int> _readyOnRound = new();  // spellId -> earliest round castable

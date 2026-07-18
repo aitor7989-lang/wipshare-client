@@ -35,7 +35,7 @@ public static class MobBrain
             .FirstOrDefault();
 
     private static IEnumerable<SpellDef> DamageSpells(Fighter self) =>
-        self.Spells.Where(s => s.Effects.Any(e => e.Kind == EffectKind.Damage));
+        self.Spells.Where(s => s.Effects.Any(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal));
 
     private static bool TryAttack(CombatEngine engine, Fighter self, Fighter target)
     {

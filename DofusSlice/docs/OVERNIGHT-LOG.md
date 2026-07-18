@@ -66,8 +66,16 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       BALANCE NOTE: survey greedy went 100% wipes → 83% (avg 8.8 dives) — gear +
       essences + ranks give deep gambles a real chance. Cautious still 0% risk;
       M5 must add risk to cautious play, not nerf greedy hope.
-- [ ] **4. City inventory & equip screen.** View the stash, equip/unequip per unit
-      with stat deltas, manual characteristic spend for the avatar (Bible §6.13).
+- [x] **4. City equip screen (stash & kit).** DONE (screen half): E in the City
+      opens STASH & KIT — equipped list (click to strip) vs stash list (click to
+      equip), per-piece stat lines, and a live effective-block readout (HP, damage
+      element, AGI/WIS/POW, +AP/+MP, set count) so every click's consequence is
+      visible. Avatar-only re-gearing (§6.6.9). Campaign.Equip/Unequip exposed;
+      manual ops proven headless (strip the Blade: Fire 137→116 → re-equip 137,
+      set-tier recompute included). VISUAL PASS PENDING: Xvfb refused to start
+      this session (exit 144) — screenshot the screen when the display env works.
+      Manual characteristic spend (stat points UI) still open — fold into a later
+      pass with the level-up notification (Bible §6.13).
 - [ ] **5. More skills per class + AI use.** Give each class/mob 2–3 skills with AI
       trigger conditions so fights read richer (closer to Dofus spell variety).
 - [ ] **6. Temple, survivors & temperament (M4 social).** Vetting, essence removal,

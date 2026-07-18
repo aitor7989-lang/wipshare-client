@@ -234,6 +234,18 @@ public sealed class Campaign
             EquipFromStash(a, id);
     }
 
+    /// <summary>Manually equip a stashed piece on a unit (City equip screen, Bible §6.13).</summary>
+    public bool Equip(CampaignUnit u, string itemId) =>
+        Stash.Contains(itemId) && EquipFromStash(u, itemId);
+
+    /// <summary>Manually strip an equipped piece back to the stash.</summary>
+    public bool Unequip(CampaignUnit u, string itemId)
+    {
+        if (!u.Equipment.Remove(itemId)) return false;
+        Stash.Add(itemId);
+        return true;
+    }
+
     // ----- The tithe (Bible §3.1.3, §5) ---------------------------------------------
 
     /// <summary>The tithe falls due every Nth return to the city; the amount escalates.</summary>

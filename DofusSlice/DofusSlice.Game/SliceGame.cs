@@ -37,6 +37,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private DiveSession.FightReport? _fightReport;    // the just-finished fight's result
     private bool _combatResolved;                     // ApplyResult already folded this fight in
     private int _openNpc = -1;                        // which City building's panel is open
+    private bool _equipOpen;                          // the stash & kit screen (E in the City)
     private MapData _cityMap = null!, _graveMap = null!;
     private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
 
@@ -272,10 +273,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (Pressed(Keys.R)) { _diveRng = new SystemRng(++_seed); _campaign = Campaign.NewGame("cannon"); EnterCity(); }
             return;
         }
-        if (Pressed(Keys.Escape)) { _openNpc = -1; return; }
+        if (Pressed(Keys.Escape)) { _openNpc = -1; _equipOpen = false; return; }
+        if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; _openNpc = -1; return; } // stash & kit
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
+
+        if (_equipOpen) { ClickEquipPanel(m); return; }
 
         if (_openNpc >= 0)
         {
@@ -292,6 +296,71 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     }
 
     private static Rectangle PanelButton(int i) => new(360, 344 + i * 52, 560, 44);
+
+    // ----- The stash & kit screen (Bible §6.13: manage the stash and equip units) -----
+
+    private static Rectangle EquipRowRect(int i) => new(260, 214 + i * 34, 372, 30);
+    private static Rectangle StashRowRect(int i) => new(648, 214 + i * 34, 372, 30);
+
+    /// <summary>Click an equipped row to strip it to the stash; click a stash row to equip it.
+    /// Only the avatar re-gears (Bible §6.6.9 — mercs keep the kit they were hired with).</summary>
+    private void ClickEquipPanel(Point m)
+    {
+        var a = _campaign.Avatar;
+        if (a == null) return;
+        for (int i = 0; i < a.Equipment.Count; i++)
+            if (EquipRowRect(i).Contains(m)) { _campaign.Unequip(a, a.Equipment[i]); return; }
+        for (int i = 0; i < _campaign.Stash.Count; i++)
+            if (StashRowRect(i).Contains(m)) { _campaign.Equip(a, _campaign.Stash[i]); return; }
+    }
+
+    private void DrawEquipPanel()
+    {
+        var a = _campaign.Avatar;
+        if (a == null) return;
+        var r = new Rectangle(236, 150, 800, 470);
+        _prim.FillRect(_sb, r, new Color(22, 24, 30));
+        _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
+        _font.DrawCentered(_sb, "STASH & KIT — THE AVATAR", r.Center.X, r.Y + 14, 2, Palette.Text);
+        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 44, 1, Palette.TextDim);
+        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 44, 1, Palette.TextDim);
+
+        var mp = new Point(_mouse.X, _mouse.Y);
+        for (int i = 0; i < a.Equipment.Count; i++)
+        {
+            var b = EquipRowRect(i);
+            _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+            _prim.StrokeRect(_sb, b, 1, new Color(96, 150, 96));
+            string id = a.Equipment[i];
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
+        }
+        if (a.Equipment.Count == 0)
+            _font.Draw(_sb, "— nothing worn —", 268, 220, 1, Palette.TextDim);
+
+        for (int i = 0; i < _campaign.Stash.Count; i++)
+        {
+            var b = StashRowRect(i);
+            _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+            _prim.StrokeRect(_sb, b, 1, new Color(150, 140, 96));
+            string id = _campaign.Stash[i];
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
+        }
+        if (_campaign.Stash.Count == 0)
+            _font.Draw(_sb, "— the stash is empty —", 656, 220, 1, Palette.TextDim);
+
+        // Live effective block, so every click's consequence is visible immediately (Dofus idiom).
+        var s = TitheContent.StatsOf(a);
+        var elem = TitheContent.ClassElement(a.ClassId);
+        int set = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
+        _font.DrawCentered(_sb,
+            $"{s.MaxHp} HP   {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}   AGI {s.Agility}   WIS {s.Wisdom}   POW {s.Power}"
+            + (s.ApBonus != 0 ? $"   +{s.ApBonus} AP" : "") + (s.MpBonus != 0 ? $"   +{s.MpBonus} MP" : "")
+            + $"   ADV {set}/7",
+            r.Center.X, r.Bottom - 44, 1, new Color(240, 208, 120));
+        _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1, Palette.TextDim);
+    }
 
     /// <summary>The clickable services at each City building (label, affordable, effect).</summary>
     private List<(string label, bool ok, Action act)> NpcActions(int npc)
@@ -1492,9 +1561,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _sb.End();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   E: STASH & KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
-        if (_openNpc >= 0) DrawNpcPanel(_openNpc);
+        if (_openNpc >= 0 && !_equipOpen) DrawNpcPanel(_openNpc);
+        if (_equipOpen) DrawEquipPanel();
         if (_campaign.Over) DrawGameOver();
         _sb.End();
     }

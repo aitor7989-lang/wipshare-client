@@ -229,6 +229,13 @@ public static class CampaignSim
             + $"{ranked.Count} spell rank(s) bought ({avatar.SpellPoints} points banked)");
         Console.WriteLine("  Combat kit: " + string.Join(", ",
             fighter.Spells.Select(sp => $"{sp.Name} (AP{sp.ApCost}, {sp.MinRange}-{sp.MaxRange})")));
+
+        // The equip screen's manual ops (Bible §6.13): strip a piece, watch the block fall, re-equip.
+        c.Unequip(avatar, "adv_blade");
+        int stripped = TitheContent.DamageStatFor(TitheContent.StatsOf(avatar), elem);
+        c.Equip(avatar, "adv_blade");
+        int restored = TitheContent.DamageStatFor(TitheContent.StatsOf(avatar), elem);
+        Console.WriteLine($"  Equip screen ops: strip the Blade {restored} → {stripped}, re-equip → {restored}.");
         return 0;
     }
 

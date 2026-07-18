@@ -146,7 +146,9 @@ class template (signature first, then essence skills) until the manual spend scr
 consequence shows up in the risk data: with gear + essences + ranks, greedy play went from *always
 wipes* to surviving ~9 dives with 17% full runs — deep gambles now have a fighting chance.
 
-**City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.
+**City controls:** click a building to open its services; **E** opens **STASH & KIT** (click an
+equipped piece to strip it, a stashed piece to wear it — the effective stat block updates live);
+**Enter** (or click the Lychgate) to dive.
 **Graveyard:** click a cell to move; click a pack (or **1–6**) to walk over and fight it; walk to the
 Crypt to face the Sexton at level 3; the bell ejects you when it tolls.
 

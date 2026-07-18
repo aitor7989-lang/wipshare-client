@@ -271,6 +271,18 @@ public static class TitheContent
     public static string ItemName(string itemId) => Item(itemId)?.Name ?? itemId;
     public static string ItemSlot(string itemId) => Item(itemId)?.Slot ?? "";
 
+    /// <summary>Compact readout of a piece's stats for the equip screen ("+6 STR +6 INT +3 POW").</summary>
+    public static string ItemStatLine(string itemId)
+    {
+        if (Item(itemId) is not { } it) return "";
+        var parts = new List<string>();
+        void Add(int v, string tag) { if (v != 0) parts.Add($"+{v} {tag}"); }
+        Add(it.Vitality, "VIT"); Add(it.Strength, "STR"); Add(it.Intelligence, "INT");
+        Add(it.Chance, "CHA"); Add(it.Agility, "AGI"); Add(it.Wisdom, "WIS");
+        Add(it.Power, "POW"); Add(it.Ap, "AP"); Add(it.Mp, "MP");
+        return string.Join(" ", parts);
+    }
+
     /// <summary>Pick a random set piece not in <paramref name="owned"/>, or null if the set is complete.</summary>
     public static string? RandomUnownedPiece(string setId, Func<string, bool> owned, IRng rng)
     {

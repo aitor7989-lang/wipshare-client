@@ -79,14 +79,28 @@ public sealed class DiveSession
     public FightReport? Engage(PackState pack)
     {
         if (Ended || pack.Cleared) return null;
-
-        MendWithBread();
-        Clock -= pack.Def.Reach + FightCost(pack.Def);
-
-        var engine = TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng);
+        var engine = BeginFight(pack);
         RunCombat(engine);
-        var res = TitheResolution.Resolve(engine);
+        Clock -= FightCost(pack.Def);   // headless fight-time estimate (the game ticks real time)
+        return ApplyResult(pack, engine);
+    }
 
+    /// <summary>
+    /// Build the fight for a pack: mend with bread, pay the travel time, and return a fresh engine
+    /// for the party versus the pack. The game plays this out visually then calls
+    /// <see cref="ApplyResult"/>; the headless <see cref="Engage"/> runs it immediately.
+    /// </summary>
+    public CombatEngine BeginFight(PackState pack)
+    {
+        MendWithBread();
+        Clock -= pack.Def.Reach;
+        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng);
+    }
+
+    /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>
+    public FightReport ApplyResult(PackState pack, CombatEngine engine)
+    {
+        var res = TitheResolution.Resolve(engine);
         var lost = new List<string>();
         var wounded = new List<string>();
 

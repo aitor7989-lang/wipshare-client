@@ -25,6 +25,20 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private float _speed = 1f;                       // watched-mode playback: 1x / 2x / 4x
     private Fighter? _selCrew;                        // crew unit being positioned in placement
     private TitheResolution.Result? _aftermath;      // computed once the watched fight ends
+
+    // ----- M2 campaign loop (City -> Graveyard -> Combat -> ...) ---------------------
+    private enum Scene { Combat, City, Graveyard }
+    private readonly bool _loop;                      // full campaign loop vs a one-off direct fight
+    private Scene _scene = Scene.Combat;
+    private Campaign _campaign = null!;
+    private DiveSession? _dive;
+    private IRng _diveRng = null!;
+    private DiveSession.PackState? _pendingPack;      // the pack currently being fought
+    private DiveSession.FightReport? _fightReport;    // the just-finished fight's result
+    private bool _combatResolved;                     // ApplyResult already folded this fight in
+    private int _openNpc = -1;                        // which City building's panel is open
+    private MapData _cityMap = null!, _graveMap = null!;
+    private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
     private const int ScreenW = 1280;
     private const int ScreenH = 760;
     private const int TileW = 64;
@@ -65,11 +79,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
 
-    public SliceGame(bool tithe = false, int startSeed = 1, bool boss = false)
+    public SliceGame(bool tithe = false, int startSeed = 1, bool boss = false, bool loop = false)
     {
         _tithe = tithe;
         _seed = startSeed;
         _boss = boss;
+        _loop = loop;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = ScreenW,
@@ -107,25 +122,39 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
 
-        _map = LoadMap();
-        _proj = IsoProjector.Centered(_map.Width, _map.Height, TileW, TileH,
+        if (_loop)
+        {
+            _cityMap = MapLoader.Parse(TitheTables.CityMapJson);
+            _graveMap = TitheContent.Arena();
+            _diveRng = new SystemRng(_seed);
+            _campaign = Campaign.NewGame("cannon");
+            EnterCity();
+        }
+        else
+        {
+            _map = LoadMap();
+            SetupView(_map);
+            StartFight();
+        }
+    }
+
+    /// <summary>Build the iso projector, animator and clamped camera for a scene's map.</summary>
+    private void SetupView(MapData map)
+    {
+        _proj = IsoProjector.Centered(map.Width, map.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
         _anim = new BattleAnimator(_proj);
 
-        // Camera views the play area above the HUD; clamp to the map's world bounds.
         _camera = new Camera2D(ScreenW, HudTop);
         var corners = new[]
         {
-            _proj.CellCenter(0, 0), _proj.CellCenter(_map.Width - 1, 0),
-            _proj.CellCenter(0, _map.Height - 1),
-            _proj.CellCenter(_map.Width - 1, _map.Height - 1),
+            _proj.CellCenter(0, 0), _proj.CellCenter(map.Width - 1, 0),
+            _proj.CellCenter(0, map.Height - 1), _proj.CellCenter(map.Width - 1, map.Height - 1),
         };
         var min = new Vector2(corners.Min(c => c.X) - TileW, corners.Min(c => c.Y) - TileH * 2f);
         var max = new Vector2(corners.Max(c => c.X) + TileW, corners.Max(c => c.Y) + TileH);
         _camera.SetBounds(min, max);
         _camera.Center = (min + max) / 2f;
-
-        StartFight();
     }
 
     /// <summary>Load an external Tiled (.tmx) or JSON map if present, else the embedded default.</summary>
@@ -196,12 +225,201 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _engine.Emitted += _anim.OnEvent;
     }
 
+    // ===== M2 campaign loop ==========================================================
+
+    private static readonly CellCoord TitheCell = new(3, 4), TempleCell = new(6, 3),
+                                       HireCell = new(9, 4), LychgateCell = new(6, 8);
+
+    private void UpdateLoop(float dt)
+    {
+        _time += dt;
+        _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
+        switch (_scene)
+        {
+            case Scene.City: UpdateCity(); break;
+            case Scene.Graveyard: UpdateGraveyard(dt); break;
+            default: UpdateCampaignCombat(dt); break;
+        }
+    }
+
+    private void EnterCity()
+    {
+        _scene = Scene.City;
+        _openNpc = -1;
+        _dive = null;
+        if (!_campaign.Over) _campaign.RestCrew();
+        SetupView(_cityMap);
+    }
+
+    private void UpdateCity()
+    {
+        if (_campaign.Over)
+        {
+            if (Pressed(Keys.R)) { _diveRng = new SystemRng(++_seed); _campaign = Campaign.NewGame("cannon"); EnterCity(); }
+            return;
+        }
+        if (Pressed(Keys.Escape)) { _openNpc = -1; return; }
+        if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
+        if (!LeftClicked()) return;
+        var m = new Point(_mouse.X, _mouse.Y);
+
+        if (_openNpc >= 0)
+        {
+            var acts = NpcActions(_openNpc);
+            for (int i = 0; i < acts.Count; i++)
+                if (PanelButton(i).Contains(m)) { if (acts[i].ok) acts[i].act(); return; }
+        }
+
+        if (_hover == TitheCell) _openNpc = 0;
+        else if (_hover == TempleCell) _openNpc = 1;
+        else if (_hover == HireCell) _openNpc = 2;
+        else if (_hover == LychgateCell) StartDive();
+        else _openNpc = -1;
+    }
+
+    private static Rectangle PanelButton(int i) => new(360, 344 + i * 52, 560, 44);
+
+    /// <summary>The clickable services at each City building (label, affordable, effect).</summary>
+    private List<(string label, bool ok, Action act)> NpcActions(int npc)
+    {
+        var a = new List<(string, bool, Action)>();
+        var P = TitheContent.Prices;
+        switch (npc)
+        {
+            case 0: // the Tithe-Keeper
+                if (_campaign.TitheDue)
+                    a.Add(($"PAY THE TITHE  ({_campaign.TitheAmount}g)", _campaign.Gold >= _campaign.TitheAmount,
+                           () => _campaign.PayTithe()));
+                a.Add(($"BUY HARD BREAD  ({P.HardBread}g)   [have {_campaign.Bread}]", _campaign.Gold >= P.HardBread,
+                       () => _campaign.BuyBread()));
+                if (_campaign.Essences.Count > 0)
+                    a.Add(($"SELL ESSENCE: {_campaign.Essences[0].ToUpperInvariant()}  (+{P.EssenceSell}g)", true,
+                           () => _campaign.SellEssence(_campaign.Essences[0])));
+                break;
+            case 1: // the Temple Sister
+                var w = _campaign.Crew.FirstOrDefault(u => u.Wounded);
+                a.Add((w != null ? $"TREAT {w.Name.ToUpperInvariant()}'S WOUNDS  ({P.Draught}g)" : "NO ONE IS WOUNDED",
+                       w != null && (_campaign.Draughts > 0 || _campaign.Gold >= P.Draught),
+                       () => { if (_campaign.Draughts == 0) _campaign.BuyDraught(); if (w != null) _campaign.TreatWounded(w); }));
+                break;
+            default: // the Hiring Post
+                int lvl = Math.Max(1, _campaign.Avatar?.Level ?? 1);
+                int price = _campaign.HirePrice(lvl);
+                foreach (var cls in new[] { "bulwark", "archer", "cannon" })
+                    a.Add(($"HIRE A {cls.ToUpperInvariant()}  (L{lvl}, {price}g)",
+                           _campaign.Crew.Count < 3 && _campaign.Gold >= price,
+                           () => _campaign.Hire(cls, $"{cls}-merc", lvl)));
+                break;
+        }
+        return a;
+    }
+
+    private void StartDive()
+    {
+        _dive = new DiveSession(_campaign, _diveRng);
+        _scene = Scene.Graveyard;
+        SetupView(_graveMap);
+        AssignPackCells();
+    }
+
+    private static readonly CellCoord[] PackCells =
+    {
+        new(4, 3), new(6, 9), new(8, 5), new(10, 2), new(11, 10), new(13, 6),
+    };
+
+    private void AssignPackCells()
+    {
+        _packCells.Clear();
+        var ordered = _dive!.Packs.OrderBy(p => p.Def.Reach).ToList();
+        for (int i = 0; i < ordered.Count && i < PackCells.Length; i++)
+            _packCells[ordered[i].Def.Id] = PackCells[i];
+    }
+
+    private void UpdateGraveyard(float dt)
+    {
+        if (_dive == null) { EnterCity(); return; }
+        _dive.Tick(dt);
+        if (_dive.Ended) { EnterCity(); return; }
+
+        // Number keys engage packs in reach order (also: click a pack token).
+        var ordered = _dive.Packs.Where(p => !p.Cleared).OrderBy(p => p.Def.Reach).ToList();
+        for (int i = 0; i < ordered.Count && i < 6; i++)
+            if (Pressed(Keys.D1 + i) && _dive.CanAfford(ordered[i])) { EngagePack(ordered[i]); return; }
+
+        if (!LeftClicked()) return;
+        foreach (var p in _dive.Packs)
+        {
+            if (p.Cleared) continue;
+            if (_packCells.TryGetValue(p.Def.Id, out var cell) && cell == _hover && _dive.CanAfford(p))
+            { EngagePack(p); return; }
+        }
+    }
+
+    private void EngagePack(DiveSession.PackState pack)
+    {
+        _engine = _dive!.BeginFight(pack);
+        _map = _graveMap;
+        _pendingPack = pack;
+        _combatResolved = false;
+        _fightReport = null;
+        SetupView(_graveMap);
+        _anim.Reset(_engine.Fighters);
+        WireEngine();
+        _scene = Scene.Combat;
+        _placing = true;
+        _selCrew = _engine.Fighters.FirstOrDefault(f => f.Team == Team.Player);
+        _selectedSpell = -1; _enemyTimer = 0f; _enemyActed = false; _turnClock = TurnSeconds; _turnOwner = "";
+    }
+
+    private void UpdateCampaignCombat(float dt)
+    {
+        if (Pressed(Keys.D1)) _speed = 1f;
+        if (Pressed(Keys.D2)) _speed = 2f;
+        if (Pressed(Keys.D3)) _speed = 4f;
+        float sdt = dt * _speed;
+
+        _anim.Update(sdt, _engine.Fighters);
+        _camera.Shake(_anim.ConsumeShake());
+        int scroll = _mouse.ScrollWheelValue - _prevMouse.ScrollWheelValue;
+        if (scroll != 0) _camera.ZoomBy(scroll / 1200f);
+        var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
+        _camera.Update(dt, follow);
+
+        if (_placing) { UpdateTithePlacement(); return; }
+
+        _dive?.Tick(dt); // the floor clock never pauses, even in a fight (Bible §3.1.3)
+
+        if (_engine.Outcome != FightOutcome.Ongoing)
+        {
+            if (!_combatResolved && !_anim.IsBusy)
+            {
+                _fightReport = _dive!.ApplyResult(_pendingPack!, _engine);
+                _combatResolved = true;
+            }
+            if (_combatResolved && (Pressed(Keys.Space) || Pressed(Keys.Enter) || LeftClicked()))
+            {
+                if (_dive!.Ended) EnterCity();               // ejected, or campaign over
+                else { _scene = Scene.Graveyard; SetupView(_graveMap); }
+            }
+            return;
+        }
+
+        if (_engine.Current.Id != _turnOwner)
+        {
+            _turnOwner = _engine.Current.Id;
+            _turnClock = TurnSeconds; _enemyTimer = 0f; _enemyActed = false;
+        }
+        UpdateWatchedTurn(sdt);
+    }
+
     // ----- Update -------------------------------------------------------------------
 
     protected override void Update(GameTime gameTime)
     {
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         _prevKeys = _keys; _keys = Keyboard.GetState();
+
+        if (_loop) { UpdateLoop((float)gameTime.ElapsedGameTime.TotalSeconds); base.Update(gameTime); return; }
 
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
 
@@ -415,6 +633,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Palette.Background);
 
+        if (_loop && _scene == Scene.City) { DrawCity(); base.Draw(gameTime); return; }
+        if (_loop && _scene == Scene.Graveyard) { DrawGraveyard(); base.Draw(gameTime); return; }
+
+        DrawCombatScene();
+        if (_loop) DrawDiveCombatOverlay();
+        base.Draw(gameTime);
+    }
+
+    private void DrawCombatScene()
+    {
         // World pass — everything on the map moves/zooms/shakes with the camera.
         _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
         DrawFloor();
@@ -432,12 +660,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         else
         {
             DrawHud();
-            // Hold the end screen until the final death/hit animation has played out.
-            if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
+            // Non-loop: hold the end screen until the final death/hit animation has played out.
+            if (!_loop && _engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
         }
         _sb.End();
-
-        base.Draw(gameTime);
     }
 
     private IEnumerable<CellCoord> CellsByDepth() =>
@@ -646,10 +872,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             it.draw();
     }
 
-    private void DrawObstacle(CellCoord c)
+    private void DrawObstacle(CellCoord c) => DrawObstacleKind(_proj.CellCenter(c), _engine.Field.TileAt(c));
+
+    private void DrawObstacleKind(Vector2 center, TileKind kind)
     {
-        var center = _proj.CellCenter(c);
-        if (_engine.Field.TileAt(c) == TileKind.Tree)
+        if (kind == TileKind.Tree)
         {
             var tree = _sprites.Get("tile_tree");
             if (tree != null) { DrawSpriteFeet(tree, center, Color.White, TileH + 40); return; }
@@ -1102,6 +1329,259 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             Element.Earth => new Color(176, 132, 90),
             _ => new Color(200, 200, 206),
         };
+    }
+
+    // ===== M2 scene rendering ========================================================
+
+    private IEnumerable<CellCoord> PlaneCellsByDepth(MapData map)
+    {
+        var list = new List<CellCoord>();
+        for (int y = 0; y < map.Height; y++)
+            for (int x = 0; x < map.Width; x++)
+                list.Add(new CellCoord(x, y));
+        return list.OrderBy(c => c.X + c.Y);
+    }
+
+    /// <summary>Draw a scene map's floor tiles (reuses the combat tile look, off a MapData).</summary>
+    private void DrawPlaneTiles(MapData map)
+    {
+        foreach (var c in PlaneCellsByDepth(map))
+        {
+            var center = _proj.CellCenter(c);
+            var kind = map.Tile(c.X, c.Y);
+            if (kind == TileKind.Void) { _prim.DiamondAt(_sb, center, new Color(16, 18, 24)); continue; }
+            if (kind == TileKind.Water) { DrawWater(c, center); continue; }
+
+            string sprite = kind switch
+            {
+                TileKind.Grass2 => "tile_grass2",
+                TileKind.Dirt or TileKind.Path => "tile_dirt",
+                _ => "tile_grass",
+            };
+            var tile = _sprites.Get(sprite) ?? _sprites.Get("tile_grass");
+            if (tile != null)
+                _sb.Draw(tile, new Vector2(center.X - TileW / 2f, center.Y - TileH / 2f), Color.White);
+            else { _prim.DiamondAt(_sb, center, FloorColor(kind, c)); DrawTileOutline(center, Palette.TileEdge); }
+        }
+    }
+
+    // ----- City ---------------------------------------------------------------------
+
+    private void DrawCity()
+    {
+        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+        DrawPlaneTiles(_cityMap);
+        foreach (var cell in new[] { TitheCell, TempleCell, HireCell, LychgateCell })
+            if (cell == _hover) _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CurrentRing * 0.30f);
+        DrawBuilding(TitheCell, new Color(214, 176, 84), "T", "TITHE-KEEPER");
+        DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER");
+        DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST");
+        DrawLychgate(LychgateCell);
+        _sb.End();
+
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        DrawCampaignHud();
+        if (_openNpc >= 0) DrawNpcPanel(_openNpc);
+        if (_campaign.Over) DrawGameOver();
+        _sb.End();
+    }
+
+    private void DrawBuilding(CellCoord c, Color col, string glyph, string label)
+    {
+        var center = _proj.CellCenter(c);
+        var outline = new Color(16, 16, 20);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 14, Palette.Shadow);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 34, 28, 36), outline);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 32), col);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 7), col * 1.25f);
+        _font.DrawCentered(_sb, glyph, (int)center.X, (int)center.Y - 22, 2, Color.White);
+        _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
+    }
+
+    private void DrawLychgate(CellCoord c)
+    {
+        var center = _proj.CellCenter(c);
+        var col = new Color(120, 120, 140);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 8, 42), col);
+        _prim.FillRect(_sb, new Rectangle((int)center.X + 10, (int)center.Y - 42, 8, 42), col);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 20, (int)center.Y - 48, 40, 8), col);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 10, (int)center.Y - 40, 20, 40), new Color(8, 8, 12));
+        _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 62, 1, new Color(200, 200, 220));
+    }
+
+    private void DrawNpcPanel(int npc)
+    {
+        var r = new Rectangle(330, 296, 620, 300);
+        _prim.FillRect(_sb, r, new Color(22, 24, 30));
+        _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
+        string[] titles = { "THE TITHE-KEEPER", "THE TEMPLE SISTER", "THE HIRING POST" };
+        _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, Palette.Text);
+
+        var acts = NpcActions(npc);
+        for (int i = 0; i < acts.Count; i++)
+        {
+            var b = PanelButton(i);
+            bool hover = b.Contains(new Point(_mouse.X, _mouse.Y));
+            _prim.FillRect(_sb, b, acts[i].ok ? (hover ? Palette.HudPanelLight : Palette.HudPanel) : new Color(30, 30, 34));
+            _prim.StrokeRect(_sb, b, 1, acts[i].ok ? new Color(96, 150, 96) : new Color(60, 60, 66));
+            _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1, acts[i].ok ? Palette.Text : Palette.TextDim);
+        }
+        _font.DrawCentered(_sb, "(ESC TO CLOSE)", r.Center.X, r.Bottom - 20, 1, Palette.TextDim);
+    }
+
+    private void DrawGameOver()
+    {
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(0, 0, 0, 190));
+        _font.DrawCentered(_sb, "THE AVATAR HAS FALLEN", ScreenW / 2, 250, 5, Palette.HeroColor);
+        _font.DrawCentered(_sb, "the labyrinth keeps what it takes", ScreenW / 2, 320, 2, Palette.TextDim);
+        _font.DrawCentered(_sb, "PRESS R TO BEGIN A NEW CAMPAIGN", ScreenW / 2, 400, 2, Palette.Text);
+    }
+
+    // ----- Graveyard ----------------------------------------------------------------
+
+    private void DrawGraveyard()
+    {
+        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+        DrawPlaneTiles(_graveMap);
+        foreach (var c in PlaneCellsByDepth(_graveMap))
+        {
+            var k = _graveMap.Tile(c.X, c.Y);
+            if (k is TileKind.Rock or TileKind.Tree) DrawObstacleKind(_proj.CellCenter(c), k);
+        }
+        DrawPartyToken(new CellCoord(1, 6));
+        if (_dive != null)
+            foreach (var p in _dive.Packs)
+                if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell))
+                    DrawPackToken(cell, p);
+        _sb.End();
+
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        _font.Draw(_sb, "CLICK A PACK TO ENGAGE   ·   THE BELL EJECTS YOU WHEN IT TOLLS", 16, 44, 1, Palette.TextDim);
+        DrawCampaignHud();
+        DrawDiveClock(ScreenW / 2, 14, 300, 18);
+        _sb.End();
+    }
+
+    private void DrawPartyToken(CellCoord c)
+    {
+        var center = _proj.CellCenter(c);
+        var col = new Color(120, 190, 120);
+        var outline = new Color(16, 16, 20);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 8, (int)center.Y - 22, 16, 22), outline);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 6, (int)center.Y - 20, 12, 20), col);
+        var head = new Vector2(center.X, center.Y - 26);
+        _prim.DiscAt(_sb, head, 10, outline);
+        _prim.DiscAt(_sb, head, 8, col);
+        _font.DrawCentered(_sb, "CREW", (int)center.X, (int)center.Y - 44, 1, Palette.Text);
+    }
+
+    private void DrawPackToken(CellCoord c, DiveSession.PackState p)
+    {
+        var center = _proj.CellCenter(c);
+        bool afford = _dive!.CanAfford(p);
+        int size = p.Def.Comp.Length;
+        var col = !afford ? new Color(90, 90, 96)
+            : size >= 4 ? new Color(206, 84, 84)
+            : size == 3 ? new Color(212, 150, 80) : new Color(200, 190, 110);
+
+        if (c == _hover && afford) _prim.DiamondAt(_sb, center, Palette.CurrentRing * 0.30f);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 13, Palette.Shadow);
+        for (int i = 0; i < Math.Min(size, 4); i++)
+        {
+            var o = new Vector2((i - 1.5f) * 7, -6 - (i % 2) * 5);
+            _prim.DiscAt(_sb, center + o, 7, new Color(16, 16, 20));
+            _prim.DiscAt(_sb, center + o, 5, col);
+        }
+        _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - 30, 1,
+            afford ? Palette.Text : Palette.TextDim);
+    }
+
+    private void DrawDiveClock(int cx, int y, int w, int h)
+    {
+        if (_dive == null) return;
+        float frac = Math.Clamp(_dive.Clock / Math.Max(1, TitheContent.Graveyard.ClockSeconds), 0f, 1f);
+        int bx = cx - w / 2;
+        _prim.FillRect(_sb, new Rectangle(bx, y, w, h), Palette.HpBack);
+        var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
+        _prim.FillRect(_sb, new Rectangle(bx, y, (int)(w * frac), h), col);
+        _prim.StrokeRect(_sb, new Rectangle(bx, y, w, h), 1, new Color(80, 86, 98));
+        _font.DrawCentered(_sb, $"THE BELL — {(int)MathF.Ceiling(Math.Max(0, _dive.Clock))}S", cx, y + h + 6, 1, Palette.Text);
+    }
+
+    // ----- Shared campaign HUD + combat overlays ------------------------------------
+
+    private void DrawCampaignHud()
+    {
+        _font.Draw(_sb, _scene == Scene.City ? "THE CITY" : "THE GRAVEYARD", 16, 12, 3, Palette.Text);
+
+        _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
+        _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
+        _font.Draw(_sb, $"BREAD {_campaign.Bread}    DRAUGHTS {_campaign.Draughts}    ESSENCES {_campaign.Essences.Count}",
+            16, HudTop + 42, 1, Palette.TextDim);
+        int per = TitheContent.Prices.TitheEveryNDives;
+        string tithe = _campaign.TitheDue ? $"TITHE DUE: {_campaign.TitheAmount}g"
+            : $"tithe in {per - (_campaign.Dives % per)} dive(s)";
+        _font.Draw(_sb, tithe, 16, HudTop + 58, 1, _campaign.TitheDue ? new Color(226, 122, 82) : Palette.TextDim);
+
+        int x = 560, y = HudTop + 12;
+        _font.Draw(_sb, "CREW", x, y, 1, Palette.TextDim);
+        y += 16;
+        foreach (var u in _campaign.Crew)
+        {
+            var col = TitheTokenColor(u.ClassId);
+            _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 8, new Color(18, 18, 22));
+            _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 6, col);
+            _font.DrawCentered(_sb, TitheGlyph(u.ClassId), x + 8, y + 2, 1, Color.White);
+            string tag = u.IsAvatar ? "AVATAR" : "MERC";
+            _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
+                x + 22, y + 3, 1, u.Wounded ? new Color(230, 200, 70) : Palette.Text);
+            y += 20;
+        }
+    }
+
+    private void DrawDiveCombatOverlay()
+    {
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        if (_dive != null)
+        {
+            // A slim, always-visible bell bar at the very top so the floor clock reads during a fight.
+            float frac = Math.Clamp(_dive.Clock / Math.Max(1, TitheContent.Graveyard.ClockSeconds), 0f, 1f);
+            _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, 5), Palette.HpBack);
+            var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
+            _prim.FillRect(_sb, new Rectangle(0, 0, (int)(ScreenW * frac), 5), col);
+        }
+        if (_combatResolved && _fightReport != null && !_anim.IsBusy) DrawFightReport();
+        _sb.End();
+    }
+
+    private void DrawFightReport()
+    {
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(0, 0, 0, 155));
+        var r = _fightReport!;
+        bool win = r.Outcome == FightOutcome.Victory;
+        _font.DrawCentered(_sb, win ? "PACK CLEARED" : "THE CREW FALLS", ScreenW / 2, 175, 5,
+            win ? Palette.HpFill : Palette.HeroColor);
+
+        int y = 265;
+        if (win)
+        {
+            _font.DrawCentered(_sb, $"+{r.Gold} GOLD    +{r.Xp} XP", ScreenW / 2, y, 2, Palette.Text); y += 36;
+            if (r.Drops.Count > 0)
+            { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(200, 170, 240)); y += 24; }
+            if (r.Wounded.Count > 0)
+            { _font.DrawCentered(_sb, "WOUNDED: " + string.Join(", ", r.Wounded).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(230, 200, 70)); y += 24; }
+            if (r.Lost.Count > 0)
+            { _font.DrawCentered(_sb, "LOST: " + string.Join(", ", r.Lost).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(214, 96, 88)); y += 24; }
+        }
+        else { _font.DrawCentered(_sb, "CAMPAIGN OVER", ScreenW / 2, y, 2, Palette.HeroColor); y += 36; }
+
+        string next = _dive!.Ended
+            ? (_campaign.Over ? "PRESS SPACE — THE CAMPAIGN IS OVER" : "THE BELL TOLLS — PRESS SPACE TO BE EJECTED")
+            : "PRESS SPACE TO PRESS DEEPER";
+        _font.DrawCentered(_sb, next, ScreenW / 2, y + 22, 1, Palette.Text);
     }
 
     private static string Trunc(string s, int max) => s.Length <= max ? s : s[..max];

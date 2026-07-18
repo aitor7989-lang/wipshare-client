@@ -66,24 +66,33 @@ a new fight.
 
 ### The campaign loop (Bible M2)
 
-Around the fight sits the dungeon-crawl loop: **City → through the Lychgate → dive the Graveyard on
-a real-time clock → the bell ejects you back with your loot → arrange, restock, dive again.** The
-whole spine is pure logic in `Core/Content/Tithe/` (`Campaign`, `DiveSession`) so its economics are
-testable headless before any scene art:
+Around the fight sits the dungeon-crawl loop, now **playable end to end** as three scenes: **City →
+through the Lychgate → dive the Graveyard on a real-time clock → the bell ejects you back with your
+loot → arrange, restock, dive again.**
+
+![TITHE — the City](docs/tithe-city.png)
+
+In the **City** you click the **Tithe-Keeper** (pay the tithe, buy Hard Bread, sell essences), the
+**Temple Sister** (treat the Wounded), and the **Hiring Post** (replace lost mercenaries), then step
+through the **Lychgate**. The **Graveyard** shows the skeleton **packs** on a danger-by-depth
+gradient with the floor clock draining; engage one and it plays out as a full watched fight, then
+you press on or the bell ejects you. A downed mercenary **dies for good**, a downed avatar comes out
+**Wounded**, a fight lost outright is **campaign over**, and every third return the **tithe**
+escalates. HP carries between fights (Hard Bread mends it; the city is safe rest).
 
 ```bash
-dotnet run --project DofusSlice.Sim campaign [seed]     # play a full loop headless (city prep → dives → eject)
-dotnet run --project DofusSlice.Sim campaign survey 40  # cautious vs greedy risk profiles across 40 runs
+dotnet run --project DofusSlice.Game                     # play the campaign loop (default)
+dotnet run --project DofusSlice.Game pack                # drop into a one-off watched fight
+dotnet run --project DofusSlice.Sim campaign [seed]      # the loop headless (city prep → dives → eject)
+dotnet run --project DofusSlice.Sim campaign survey 40   # cautious vs greedy risk profiles
 ```
 
-A dive engages skeleton **packs** (each a watched fight through the same engine), banking gold, XP
-and essences and taking wounds; HP carries between fights and **Hard Bread** mends it, while the
-city is safe rest. A downed mercenary **dies for good**, a downed avatar comes out **Wounded** (cured
-only by a **Physicker's Draught**), and a fight lost outright is **campaign over**. Every third return
-the **tithe** falls due and escalates. Crucially the packs run a **danger-by-depth gradient**, so the
-`survey` shows the Bible's Pillar 4 — *ruin traces to a choice*: cautious play (skim the shallow safe
-packs) survives indefinitely, while greedy play (chase the deep, loot-rich, lethal packs) wipes in a
-couple of dives. The visual City and Graveyard scenes are the next step; the loop itself is proven.
+**City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.
+**Graveyard:** **1–6** (or click a pack) to engage; the bell ejects you when it tolls. The whole
+spine is pure logic in `Core/Content/Tithe/` (`Campaign`, `DiveSession`), so the economics are
+testable headless — the `survey` lands the Bible's Pillar 4, *ruin traces to a choice*: cautious
+play (skim the shallow safe packs) survives indefinitely, greedy play (chase the deep, loot-rich,
+lethal packs) wipes in a couple of dives.
 
 All rules and numbers live in JSON data tables (`DofusSlice.Core/Content/Tithe/TitheTables.cs`) —
 the single source of truth per the Bible; the current values are honest placeholders flagged for a

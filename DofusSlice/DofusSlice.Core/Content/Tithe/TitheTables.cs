@@ -135,6 +135,27 @@ public static class TitheTables
     }
     """;
 
+    // A little town square for the City scene (Bible §6.13: clickable NPCs, Dofus idiom). Just a
+    // floor — the NPCs and the Lychgate are placed by the game.
+    public const string CityMapJson = """
+    {
+      "name": "The City",
+      "rows": [
+        "ddddddddddddd",
+        "d.d.d.d.d.d.d",
+        "d.ppppppppp.d",
+        "d.p......p..d",
+        "d.p.pppp.p..d",
+        "d.p.p..p.p..d",
+        "d.p.pppp.p..d",
+        "d.p......p..d",
+        "d.ppppppppppd",
+        "d.d.d.d.d.d.d",
+        "ddddddddddddd"
+      ]
+    }
+    """;
+
     // Economy + services (Bible §5 tables, §8). Placeholders for the M5 tuning pass. Gold from a
     // mob equals its XP value (one dial for now); vendoring an essence returns essenceSell.
     public const string PricesJson = """

@@ -3,12 +3,16 @@ using System.IO;
 
 try
 {
-    // TITHE watched-combat prototype by default; pass "dofus" for the original piloted slice.
-    // An integer arg sets the starting RNG seed (handy for reproducing a specific fight).
-    bool tithe = !args.Any(a => a.Equals("dofus", StringComparison.OrdinalIgnoreCase));
+    // Default: the TITHE campaign loop (City → Graveyard → fights). "pack"/"boss" drop straight
+    // into a one-off watched fight; "dofus" is the original piloted slice. An integer arg sets the
+    // starting RNG seed.
+    bool dofus = args.Any(a => a.Equals("dofus", StringComparison.OrdinalIgnoreCase));
     bool boss = args.Any(a => a.Equals("boss", StringComparison.OrdinalIgnoreCase));
+    bool directFight = boss || args.Any(a => a.Equals("pack", StringComparison.OrdinalIgnoreCase));
+    bool tithe = !dofus;
+    bool loop = tithe && !directFight;
     int seed = args.Select(a => int.TryParse(a, out int s) ? s : (int?)null).FirstOrDefault(s => s != null) ?? 1;
-    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss);
+    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop);
     game.Run();
 }
 catch (Exception ex)

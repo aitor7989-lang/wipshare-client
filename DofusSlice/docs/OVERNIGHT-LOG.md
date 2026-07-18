@@ -76,8 +76,19 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       this session (exit 144) — screenshot the screen when the display env works.
       Manual characteristic spend (stat points UI) still open — fold into a later
       pass with the level-up notification (Bible §6.13).
-- [ ] **5. More skills per class + AI use.** Give each class/mob 2–3 skills with AI
-      trigger conditions so fights read richer (closer to Dofus spell variety).
+- [x] **5. Second signature skill per class.** DONE: Bulwark Bastion (self-shield),
+      Archer Crippling Arrow (2 AP, −1 MP filler; Piercing became the 4 AP big
+      shot after cast-count telemetry proved a 3-AP main mathematically starved
+      the filler), Cannon Flashfire (1-2 range burst + push, the dead-zone
+      escape). No AI changes needed. WARNING found by survey: crew power made
+      BOTH profiles riskless → fixed immediately by mob grades (below).
+- [x] **8-partial. Mob grades (Dofus 1.29).** DONE early because item 5 broke the
+      death spectrum: +30% HP / +15% stats / +25% XP+gold per grade, grade by
+      depth in data (packs g1→g4, crypt g1→g3), mob Fighter.Level carries the
+      grade. Measured result: greedy 43% wipes but HIGHER avg gold than cautious
+      (2709 vs 2581) — Pillar 4's gamble finally exists. Still open for M5:
+      cautious play has 0% risk (hunting packs that actually hunt — item 7 —
+      is the intended fix), and the real Dofus 5-grade tables come with §9.
 - [ ] **6. Temple, survivors & temperament (M4 social).** Vetting, essence removal,
       Grasping survivors that leave with loot when the haul is heavy and clock low.
 - [ ] **7. Placement depth (Jumped tier) + aggro-catch.** Enemy-defined scattered
@@ -110,3 +121,13 @@ dotnet run --project DofusSlice.Sim campaign survey 40
   Survey: greedy had its FIRST survivor (39/40 wipes) — gear + learned skills give
   deep gambles a sliver of hope; keep an eye on it in M5. Next: item 3 (crit
   wiring per-1.29-data + spell ranks) or item 4 (city equip screen).
+- 2026-07-18 (batch close): six commits pushed this stretch — real-1.29 leveling
+  + full-set MP (38f7bdf), essences (85cf7aa), spell ranks (d2221d5), equip
+  screen (94b1253), second skills (5bf1a8a), mob grades (ad0f9bf). Balance
+  spectrum in its best state yet (greedy 43% wipes / better avg gold). NEXT UP:
+  item 7 — hunting packs that actually hunt (real-time aggro on the yard, the
+  Jumped placement tier on catch). It doubles as the cautious-risk fix, so it
+  advances items 7 AND the rest of 8. Then Temple services (6a: exclusives need
+  either AI triggers for Blink/Blood Pact or a SelfHPCost effect — design note),
+  survivors/temperament (6b), and the visual pass on the equip screen when Xvfb
+  cooperates.

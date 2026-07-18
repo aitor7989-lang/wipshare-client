@@ -80,7 +80,9 @@ through the **Lychgate**.
 
 The **Graveyard** is real click-to-move exploration: click a cell and the crew walks there
 (pathfinding around tombstones), the floor clock draining the whole time. The skeleton **packs** sit
-on a danger-by-depth gradient (`x2` easy → `x5` lethal) — walk onto one to engage it as a full
+on a danger-by-depth gradient (`x2` easy → `x5` lethal) — and depth also sets each pack's **mob
+grade** (Dofus 1.29 grades: +30% HP, +15% stats, +25% XP/gold per step), so the deep packs are
+genuinely harder *and* pay a risk premium. Walk onto one to engage it as a full
 watched fight; as the bell runs low the deeper packs grey out to **"TOO FAR"**. Deepest of all is
 **THE CRYPT**, a level-gated door: reach it under-levelled and the crew is "too green", but at
 **level 3** it opens onto a strictly linear **sealing-door dungeon** — three escalating rooms (The

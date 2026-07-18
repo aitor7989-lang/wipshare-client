@@ -16,7 +16,8 @@ public static class Palette
     public static readonly Color ObstacleTop = new(120, 106, 92);
 
     public static readonly Color MoveRange = new(74, 140, 220, 150);
-    public static readonly Color CastRange = new(224, 150, 60, 150);
+    public static readonly Color CastReach = new(224, 150, 60, 70);   // spell's full geometric reach
+    public static readonly Color CastRange = new(240, 170, 70, 170);  // cells that are valid targets right now
     public static readonly Color Aoe = new(220, 70, 60, 170);
     public static readonly Color Hover = new(255, 255, 255, 90);
     public static readonly Color CurrentRing = new(255, 220, 120);

@@ -109,6 +109,28 @@ public sealed class CombatEngine
         return cells;
     }
 
+    /// <summary>
+    /// Cells the spell can geometrically reach — range, line-of-sight and line-only, but
+    /// ignoring whether a target/free cell is actually there. This is the "where can it go"
+    /// area the UI paints, so a targeted spell still shows its full reach, not just the
+    /// occupied cells that happen to be legal targets.
+    /// </summary>
+    public List<CellCoord> SpellReachCells(Fighter caster, SpellDef spell)
+    {
+        var cells = new List<CellCoord>();
+        foreach (var cell in Field.AllCells())
+        {
+            int dist = caster.Pos.DistanceTo(cell);
+            if (dist < spell.MinRange || dist > spell.MaxRange) continue;
+            if (spell.LineOnly && !caster.Pos.IsAlignedWith(cell)) continue;
+            if (spell.RequiresLineOfSight &&
+                !LineOfSight.HasLineOfSight(Field, caster.Pos, cell, c => c != cell && IsOccupied(c)))
+                continue;
+            cells.Add(cell);
+        }
+        return cells;
+    }
+
     public List<CellCoord> AreaCells(SpellDef spell, CellCoord impact) =>
         spell.Area.CellsAround(impact).Where(Field.InBounds).ToList();
 

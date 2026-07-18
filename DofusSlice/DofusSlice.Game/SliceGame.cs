@@ -241,6 +241,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (playerTurn && _selectedSpell >= 0)
         {
             var spell = HeroSpells[_selectedSpell];
+
+            // Dim wash over the spell's whole reach, brighter on cells that are legal targets.
+            foreach (var cell in _engine.SpellReachCells(hero!, spell))
+                _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastReach);
+
             var castable = _engine.CastableCells(hero!, spell);
             foreach (var cell in castable)
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastRange);

@@ -156,6 +156,17 @@ public static class TitheTables
     }
     """;
 
+    // The Crypt (Bible §4, §6.8): a strictly linear chain of sealing-door rooms, escalating to the
+    // Sexton's court, then the altar teleports the crew out. The dive's big bet.
+    public const string CryptJson = """
+    [
+      { "name": "The Ossuary",        "comp": ["barrow_husk", "barrow_husk", "gravehound"] },
+      { "name": "The Nave",           "comp": ["crypt_warden", "grave_mite", "grave_mite", "gravehound"] },
+      { "name": "The Reliquary",      "comp": ["crypt_warden", "crypt_warden", "marrow_spitter", "gravehound", "gravehound"] },
+      { "name": "The Sexton's Court", "comp": ["sexton", "crypt_warden", "crypt_warden", "grave_mite", "grave_mite", "bone_piper"], "boss": true }
+    ]
+    """;
+
     // Economy + services (Bible §5 tables, §8). Placeholders for the M5 tuning pass. Gold from a
     // mob equals its XP value (one dial for now); vendoring an essence returns essenceSell.
     public const string PricesJson = """

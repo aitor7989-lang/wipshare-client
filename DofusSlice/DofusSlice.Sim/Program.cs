@@ -15,6 +15,8 @@ if (args.Length > 0 && args[0] == "campaign")
     if (args.Contains("survey"))
         return CampaignSim.Survey(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null)
             .FirstOrDefault(v => v != null) ?? 40);
+    if (args.Contains("crypt"))
+        return CampaignSim.Crypt(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7);
     int cseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7;
     return CampaignSim.RunLoop(cseed, maxDives: 12, verbose: true);
 }

@@ -83,7 +83,11 @@ The **Graveyard** is real click-to-move exploration: click a cell and the crew w
 on a danger-by-depth gradient (`x2` easy → `x5` lethal) — walk onto one to engage it as a full
 watched fight; as the bell runs low the deeper packs grey out to **"TOO FAR"**. Deepest of all is
 **THE CRYPT**, a level-gated door: reach it under-levelled and the crew is "too green", but at
-**level 3** it opens onto **The Sexton's court** — the boss. Clear a pack and you bank its gold,
+**level 3** it opens onto a strictly linear **sealing-door dungeon** — three escalating rooms (The
+Ossuary → The Nave → The Reliquary), each door grinding open only once the room is cleared, then
+**The Sexton's court** and the boss himself, after which the altar tears the crew back out onto the
+floor (the door won't open again — the altar is spent). The clock runs and HP carries the whole way
+down. Clear a pack and you bank its gold,
 XP and essences (`PACK CLEARED`), then press on or the bell ejects you. A downed mercenary **dies for
 good**, a downed avatar comes out **Wounded**, a fight lost outright is **campaign over**, and every
 third return the **tithe** escalates. HP carries between fights (Hard Bread mends it; the city rests).
@@ -93,6 +97,7 @@ dotnet run --project DofusSlice.Game                     # play the campaign loo
 dotnet run --project DofusSlice.Game pack                # drop into a one-off watched fight
 dotnet run --project DofusSlice.Sim campaign [seed]      # the loop headless (city prep → dives → eject)
 dotnet run --project DofusSlice.Sim campaign survey 40   # cautious vs greedy risk profiles
+dotnet run --project DofusSlice.Sim campaign crypt [seed] # a level-3 crew through the Crypt to the Sexton
 ```
 
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.

@@ -46,7 +46,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Vector2 _partyWorld;
     private readonly Queue<CellCoord> _partyPath = new();
     private DiveSession.PackState? _engageOnArrive;
-    private bool _cryptOnArrive, _cryptCleared, _inCrypt;
+    private bool _cryptOnArrive, _cryptCleared, _cryptRun;
+    private int _cryptRoom;
+    private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
     private string _cryptMsg = "";
     private float _cryptMsgTimer;
     private static readonly CellCoord PartyStart = new(1, 6), CryptCell = new(13, 11);
@@ -337,8 +339,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyCell = PartyStart;
         _partyWorld = _proj.CellCenter(PartyStart);
         _partyPath.Clear();
-        _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _inCrypt = false;
-        _cryptMsg = ""; _cryptMsgTimer = 0f;
+        _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
+        _cryptRoom = 0; _cryptMsg = ""; _cryptMsgTimer = 0f;
     }
 
     private static readonly CellCoord[] PackCells =
@@ -422,17 +424,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (_cryptCleared) { _cryptMsg = "The altar is spent — the Sexton is dead."; _cryptMsgTimer = 2.5f; return; }
         int lvl = _campaign.Avatar?.Level ?? 1;
-        if (lvl < CryptLevel) { _cryptMsg = $"The crew is too green — reach level {CryptLevel} to face the Sexton."; _cryptMsgTimer = 3f; return; }
+        if (lvl < CryptLevel) { _cryptMsg = $"The crew is too green — reach level {CryptLevel} to enter the Crypt."; _cryptMsgTimer = 3f; return; }
 
-        _inCrypt = true;
-        var crypt = new DiveSession.PackState
-        {
-            Def = new TitheContent.PackDef("crypt", TitheContent.CryptComp().ToArray(), 0, false),
-        };
-        BeginCombat(crypt);
+        _cryptRooms = TitheContent.CryptRooms();
+        _cryptRun = true;
+        _cryptRoom = 0;
+        BeginCryptRoom();
     }
 
-    private void EngagePack(DiveSession.PackState pack) { _inCrypt = false; BeginCombat(pack); }
+    /// <summary>Fight the current Crypt room (sealing-door chain; HP and the clock carry through).</summary>
+    private void BeginCryptRoom()
+    {
+        var room = _cryptRooms[_cryptRoom];
+        BeginCombat(new DiveSession.PackState { Def = new TitheContent.PackDef($"crypt_{_cryptRoom}", room.Comp, 0, false) });
+    }
+
+    private void EngagePack(DiveSession.PackState pack) { _cryptRun = false; BeginCombat(pack); }
 
     private void BeginCombat(DiveSession.PackState pack)
     {
@@ -474,13 +481,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             {
                 _fightReport = _dive!.ApplyResult(_pendingPack!, _engine);
                 _combatResolved = true;
-                if (_inCrypt) { _cryptCleared = _fightReport.Outcome == FightOutcome.Victory; _inCrypt = false; }
             }
             if (_combatResolved && (Pressed(Keys.Space) || Pressed(Keys.Enter) || LeftClicked()))
-            {
-                if (_dive!.Ended) EnterCity();               // ejected, or campaign over
-                else { _scene = Scene.Graveyard; SetupView(_graveMap); }
-            }
+                AdvanceAfterCombat();
             return;
         }
 
@@ -490,6 +493,26 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _turnClock = TurnSeconds; _enemyTimer = 0f; _enemyActed = false;
         }
         UpdateWatchedTurn(sdt);
+    }
+
+    /// <summary>After a fight resolves: eject, chain to the next Crypt room, or return to the yard.</summary>
+    private void AdvanceAfterCombat()
+    {
+        if (_dive!.Ended) { _cryptRun = false; EnterCity(); return; } // bell tolled / campaign over
+
+        if (_cryptRun && _fightReport!.Outcome == FightOutcome.Victory)
+        {
+            if (_cryptRooms[_cryptRoom].Boss)
+            {
+                _cryptCleared = true; _cryptRun = false; // the altar tears the crew out of the Crypt
+                _scene = Scene.Graveyard; SetupView(_graveMap);
+            }
+            else { _cryptRoom++; BeginCryptRoom(); }     // the next sealing door grinds open
+            return;
+        }
+
+        _cryptRun = false;                               // a yard pack cleared
+        _scene = Scene.Graveyard; SetupView(_graveMap);
     }
 
     // ----- Update -------------------------------------------------------------------
@@ -1663,6 +1686,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
             _prim.FillRect(_sb, new Rectangle(0, 0, (int)(ScreenW * frac), 5), col);
         }
+        if (_cryptRun && !_placing)  // which sealing-door room you're in
+            _font.DrawCentered(_sb, $"THE CRYPT  —  {_cryptRooms[_cryptRoom].Name.ToUpperInvariant()}  ({_cryptRoom + 1}/{_cryptRooms.Count})",
+                ScreenW / 2, 552, 1, new Color(204, 172, 224));
         if (_combatResolved && _fightReport != null && !_anim.IsBusy) DrawFightReport();
         _sb.End();
     }
@@ -1672,8 +1698,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(0, 0, 0, 155));
         var r = _fightReport!;
         bool win = r.Outcome == FightOutcome.Victory;
-        _font.DrawCentered(_sb, win ? "PACK CLEARED" : "THE CREW FALLS", ScreenW / 2, 175, 5,
-            win ? Palette.HpFill : Palette.HeroColor);
+        bool bossRoom = _cryptRun && _cryptRooms[_cryptRoom].Boss;
+        string title = !win ? "THE CREW FALLS"
+            : bossRoom ? "THE SEXTON FALLS"
+            : _cryptRun ? "ROOM CLEARED" : "PACK CLEARED";
+        _font.DrawCentered(_sb, title, ScreenW / 2, 175, 5, win ? Palette.HpFill : Palette.HeroColor);
 
         int y = 265;
         if (win)
@@ -1690,7 +1719,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         string next = _dive!.Ended
             ? (_campaign.Over ? "PRESS SPACE — THE CAMPAIGN IS OVER" : "THE BELL TOLLS — PRESS SPACE TO BE EJECTED")
-            : "PRESS SPACE TO PRESS DEEPER";
+            : bossRoom ? "THE ALTAR TEARS THE CREW OUT — PRESS SPACE"
+            : _cryptRun ? "THE DOOR AHEAD GRINDS OPEN — PRESS SPACE TO PRESS DEEPER"
+            : "PRESS SPACE TO PRESS ON";
         _font.DrawCentered(_sb, next, ScreenW / 2, y + 22, 1, Palette.Text);
     }
 

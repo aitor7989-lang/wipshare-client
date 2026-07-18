@@ -1,3 +1,4 @@
+using DofusSlice.Core.AI;
 using DofusSlice.Core.Combat;
 using DofusSlice.Core.Content.Tithe;
 
@@ -99,6 +100,43 @@ public static class CampaignSim
             + $"+{r.Gold}g, +{r.Xp}xp"
             + (r.Essences.Count > 0 ? $", essences: {string.Join("/", r.Essences)}" : "")
             + (r.Lost.Count > 0 ? $"  LOST: {string.Join(", ", r.Lost)}" : ""));
+    }
+
+    /// <summary>Run a level-3 crew through the Crypt's sealing-door room chain to the Sexton.</summary>
+    public static int Crypt(int seed)
+    {
+        var rng = new SystemRng(seed);
+        var campaign = Campaign.NewGame("cannon");
+        foreach (var u in campaign.Crew) u.Level = 3; // as if progressed enough to enter
+
+        Console.WriteLine($"TITHE — the Crypt (seed {seed}, crew at L3)\n");
+        var dive = new DiveSession(campaign, rng);
+        var rooms = TitheContent.CryptRooms();
+
+        for (int i = 0; i < rooms.Count; i++)
+        {
+            var room = rooms[i];
+            var pack = new DiveSession.PackState
+            { Def = new TitheContent.PackDef($"crypt_{i}", room.Comp, 0, false) };
+
+            var engine = dive.BeginFight(pack, chargeTravel: false);
+            engine.Start();
+            while (engine.Outcome == FightOutcome.Ongoing && engine.Round <= 40)
+            { Policy.TakeTurn(engine, engine.Current); engine.EndTurn(); }
+            var r = dive.ApplyResult(pack, engine);
+
+            Console.WriteLine($"  Room {i + 1}/{rooms.Count} {room.Name,-20} {r.Outcome}"
+                + $"  +{r.Gold}g +{r.Xp}xp"
+                + (r.Drops.Count > 0 ? $"  essences: {string.Join("/", r.Drops)}" : "")
+                + (r.Wounded.Count > 0 ? $"  wounded: {string.Join(",", r.Wounded)}" : "")
+                + (r.Lost.Count > 0 ? $"  LOST: {string.Join(",", r.Lost)}" : ""));
+            if (r.Outcome != FightOutcome.Victory) { Console.WriteLine("\n  The crew fell in the Crypt — campaign over."); break; }
+        }
+
+        if (!campaign.Over)
+            Console.WriteLine($"\n  The altar tears the crew out. Gold {campaign.Gold}, "
+                + $"essences: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
+        return 0;
     }
 
     /// <summary>

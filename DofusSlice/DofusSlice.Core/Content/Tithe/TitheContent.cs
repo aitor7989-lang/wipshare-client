@@ -164,6 +164,11 @@ public static class TitheContent
     public static IReadOnlyList<string> CryptComp() =>
         JsonSerializer.Deserialize<EncounterDto>(TitheTables.EncounterBossJson, J)!.Spawns.Select(s => s.Mob).ToList();
 
+    /// <summary>The Crypt's linear room chain (Bible §6.8): escalating packs, the last a boss room.</summary>
+    public sealed record CryptRoom(string Name, string[] Comp, bool Boss);
+    public static IReadOnlyList<CryptRoom> CryptRooms() =>
+        JsonSerializer.Deserialize<CryptRoom[]>(TitheTables.CryptJson, J)!;
+
     public static int ClassMaxHp(string classId) => Classes.TryGetValue(classId, out var c) ? c.MaxHp : 0;
 
     /// <summary>Build a combat fighter from a persistent campaign unit (applies carried HP, Wounded, level).</summary>

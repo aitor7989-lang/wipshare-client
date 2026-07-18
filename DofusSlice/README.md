@@ -78,6 +78,8 @@ Three projects, split so the rules never depend on the renderer:
 - Initiative-ordered turns; AP/MP refresh at the start of each turn.
 - Per-turn 30-second countdown shown as a draining gauge; the turn auto-ends when it
   expires, and you can end early with the END TURN button or Space.
+- Turn-order timeline across the top: every fighter in initiative order, the active one
+  highlighted, dead fighters greyed out.
 - Spells with min/max range, line-of-sight, line-only casting, per-turn cast caps and
   cooldowns; area shapes (single / circle / cross).
 - Elemental damage scaled by the caster's characteristic and reduced by target resistance.

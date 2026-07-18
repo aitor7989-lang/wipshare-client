@@ -317,21 +317,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         DrawTurnTimer();
 
-        // Turn order (top-right).
-        int tx = ScreenW - 20;
-        foreach (var f in _engine.Fighters.Reverse())
-        {
-            var c = new Vector2(tx - 16, 26);
-            _prim.DiscAt(_sb, c, 12, f == _engine.Current ? Palette.CurrentRing : new Color(20, 20, 24));
-            _prim.DiscAt(_sb, c, 10, f.IsAlive
-                ? (f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name))
-                : new Color(50, 50, 54));
-            _font.DrawCentered(_sb, f.IsAlive ? f.Hp.ToString() : "X", (int)c.X, 42, 1, Palette.Text);
-            tx -= 40;
-        }
+        DrawTurnTimeline();
 
         // Combat log (right side of playfield).
-        int ly = 70;
+        int ly = 92;
         foreach (var line in _log)
         {
             _font.Draw(_sb, Trunc(line, 44), 940, ly, 1, Palette.TextDim);
@@ -344,6 +333,50 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (hero != null && hero.IsAlive) DrawPointPips(hero);
         DrawSpellBar(hero);
         DrawEndTurnButton();
+    }
+
+    /// <summary>
+    /// The turn-order timeline: every fighter in initiative order, left to right, with the
+    /// active one highlighted and underlined. Dead fighters grey out. This is the visible
+    /// face of the turn system — you can always read whose turn it is and who is next.
+    /// </summary>
+    private void DrawTurnTimeline()
+    {
+        var order = _engine.Fighters;
+        const int cardW = 96, cardH = 46, gap = 8;
+        int totalW = order.Count * cardW + (order.Count - 1) * gap;
+        int x0 = ScreenW - 20 - totalW;
+        int y0 = 8;
+
+        _font.Draw(_sb, "TURN ORDER", x0, y0, 1, Palette.TextDim);
+        int cy = y0 + 12;
+
+        for (int i = 0; i < order.Count; i++)
+        {
+            var f = order[i];
+            var r = new Rectangle(x0 + i * (cardW + gap), cy, cardW, cardH);
+            bool current = f == _engine.Current;
+
+            _prim.FillRect(_sb, r, current ? Palette.HudPanelLight : Palette.HudPanel);
+            _prim.StrokeRect(_sb, r, current ? 2 : 1,
+                current ? Palette.CurrentRing : new Color(60, 64, 72));
+
+            var token = f.IsAlive
+                ? (f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name))
+                : new Color(58, 60, 66);
+            var mid = new Vector2(r.X + 17, r.Y + cardH / 2f);
+            _prim.DiscAt(_sb, mid, 11, new Color(18, 18, 22));
+            _prim.DiscAt(_sb, mid, 9, token);
+
+            _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 7), r.X + 32, r.Y + 9, 1,
+                f.IsAlive ? Palette.Text : Palette.TextDim);
+            _font.Draw(_sb, f.IsAlive ? $"{f.Hp} HP" : "DEAD", r.X + 32, r.Y + 25, 1,
+                f.IsAlive ? (f.Team == Team.Player ? Palette.HpFill : new Color(210, 150, 90))
+                          : new Color(200, 90, 80));
+
+            if (current)
+                _prim.FillRect(_sb, new Rectangle(r.X, r.Bottom + 2, cardW, 3), Palette.CurrentRing);
+        }
     }
 
     private void DrawTurnTimer()

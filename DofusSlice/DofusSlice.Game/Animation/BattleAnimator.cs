@@ -170,6 +170,11 @@ public sealed class BattleAnimator
     internal void AddOverlay(Overlay o) => _overlays.Add(o);
     internal void SetFlash(string id, float seconds) => _flash[id] = seconds;
 
+    private float _pendingShake;
+    internal void RequestShake(float amp) => _pendingShake = Math.Max(_pendingShake, amp);
+    /// <summary>Returns and clears the shake requested since the last call (synced to hits).</summary>
+    public float ConsumeShake() { var s = _pendingShake; _pendingShake = 0f; return s; }
+
     private Vector2[] ToPoints(IReadOnlyList<CellCoord> path)
     {
         var pts = new Vector2[path.Count];
@@ -353,6 +358,7 @@ internal sealed class HitAnim : IAnim
         {
             _spawned = true;
             _a.SetFlash(_id, 0.3f);
+            if (_amount > 0) _a.RequestShake(Math.Min(9f, 3f + _amount * 0.12f));
             bool heal = _amount < 0;
             string text = (heal ? "+" : "-") + Math.Abs(_amount);
             var color = heal ? new Color(120, 220, 130) : new Color(255, 120, 110);

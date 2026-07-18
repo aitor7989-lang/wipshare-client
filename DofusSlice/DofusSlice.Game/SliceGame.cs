@@ -31,6 +31,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private PixelFont _font = null!;
     private IsoProjector _proj = null!;
     private SpriteBank _sprites = null!;
+    private Camera2D _camera = null!;
 
     private CombatEngine _engine = null!;
     private BattleAnimator _anim = null!;
@@ -85,6 +86,20 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _proj = IsoProjector.Centered(Encounter.Width, Encounter.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
         _anim = new BattleAnimator(_proj);
+
+        // Camera views the play area above the HUD; clamp to the map's world bounds.
+        _camera = new Camera2D(ScreenW, HudTop);
+        var corners = new[]
+        {
+            _proj.CellCenter(0, 0), _proj.CellCenter(Encounter.Width - 1, 0),
+            _proj.CellCenter(0, Encounter.Height - 1),
+            _proj.CellCenter(Encounter.Width - 1, Encounter.Height - 1),
+        };
+        var min = new Vector2(corners.Min(c => c.X) - TileW, corners.Min(c => c.Y) - TileH * 2f);
+        var max = new Vector2(corners.Max(c => c.X) + TileW, corners.Max(c => c.Y) + TileH);
+        _camera.SetBounds(min, max);
+        _camera.Center = (min + max) / 2f;
+
         StartFight();
     }
 
@@ -114,10 +129,17 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
 
-        _hover = _proj.ScreenToCell(new Vector2(_mouse.X, _mouse.Y));
+        _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
         _anim.Update(dt, _engine.Fighters); // animations keep playing even after the fight ends
+
+        // Camera: shake on hits, wheel zoom, follow the active fighter (clamped to the map).
+        _camera.Shake(_anim.ConsumeShake());
+        int scroll = _mouse.ScrollWheelValue - _prevMouse.ScrollWheelValue;
+        if (scroll != 0) _camera.ZoomBy(scroll / 1200f);
+        var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
+        _camera.Update(dt, follow);
 
         if (_engine.Outcome != FightOutcome.Ongoing) { base.Update(gameTime); return; }
 
@@ -224,17 +246,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     protected override void Draw(GameTime gameTime)
     {
         GraphicsDevice.Clear(Palette.Background);
-        _sb.Begin(samplerState: SamplerState.PointClamp);
 
+        // World pass — everything on the map moves/zooms/shakes with the camera.
+        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
         DrawFloor();
         DrawFloorOverlays();
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
         _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
+        _sb.End();
+
+        // HUD pass — screen space, unaffected by the camera.
+        _sb.Begin(samplerState: SamplerState.PointClamp);
         DrawHud();
         // Hold the end screen until the final death/hit animation has played out.
         if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
-
         _sb.End();
+
         base.Draw(gameTime);
     }
 

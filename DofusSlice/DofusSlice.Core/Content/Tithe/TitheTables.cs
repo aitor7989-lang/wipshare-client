@@ -134,4 +134,35 @@ public static class TitheTables
       ]
     }
     """;
+
+    // Economy + services (Bible §5 tables, §8). Placeholders for the M5 tuning pass. Gold from a
+    // mob equals its XP value (one dial for now); vendoring an essence returns essenceSell.
+    public const string PricesJson = """
+    {
+      "hardBread": 15,      "breadHeal": 22,
+      "draught": 130,
+      "hireBasePerLevel": 45,
+      "essenceSell": 45,
+      "titheEveryNDives": 3, "titheBase": 120, "titheGrowth": 70
+    }
+    """;
+
+    // The Graveyard floor: a real-time clock and the skeleton packs that drift on it. reach = the
+    // seconds it costs to travel to a pack (route knowledge is the resource); hunts = a wide-aggro
+    // type that closes on the crew. The Crypt entrance sits deepest. Clock is short for the
+    // prototype loop (Bible's 12-minute floor is the production value).
+    public const string GraveyardJson = """
+    {
+      "clockSeconds": 240,
+      "cryptReach": 150,
+      "packs": [
+        { "id": "husks-near", "comp": ["barrow_husk", "barrow_husk"],                                    "reach": 18, "hunts": false },
+        { "id": "bonewash",   "comp": ["barrow_husk", "marrow_spitter"],                                 "reach": 28, "hunts": false },
+        { "id": "warden-way", "comp": ["crypt_warden", "grave_mite", "grave_mite"],                      "reach": 36, "hunts": false },
+        { "id": "hound-pack", "comp": ["gravehound", "gravehound", "barrow_husk", "marrow_spitter"],     "reach": 46, "hunts": true  },
+        { "id": "deep-court", "comp": ["gravehound", "gravehound", "gravehound", "barrow_husk"],         "reach": 56, "hunts": true  },
+        { "id": "warband",    "comp": ["crypt_warden", "gravehound", "gravehound", "marrow_spitter", "barrow_husk"], "reach": 66, "hunts": true }
+      ]
+    }
+    """;
 }

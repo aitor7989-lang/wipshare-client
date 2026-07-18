@@ -9,6 +9,16 @@ if (args.Length > 0 && args[0] == "effects")
     return EffectsTest.Run();
 }
 
+if (args.Length > 0 && args[0] == "campaign")
+{
+    // The whole M2 loop, headless: city prep -> dive -> eject -> city, repeating.
+    if (args.Contains("survey"))
+        return CampaignSim.Survey(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null)
+            .FirstOrDefault(v => v != null) ?? 40);
+    int cseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7;
+    return CampaignSim.RunLoop(cseed, maxDives: 12, verbose: true);
+}
+
 if (args.Length > 0 && args[0] == "tithe")
 {
     // Watched TITHE fight: the crew and the enemies all act by AI policy.

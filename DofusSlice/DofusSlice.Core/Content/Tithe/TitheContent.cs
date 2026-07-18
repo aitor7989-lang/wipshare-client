@@ -30,11 +30,21 @@ public static class TitheContent
     private sealed record SpawnDto(string Mob, int X, int Y);
     private sealed record EncounterDto(string Name, SpawnDto[] Spawns);
 
+    public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
+                                    int EssenceSell, int TitheEveryNDives, int TitheBase, int TitheGrowth);
+    public sealed record PackDef(string Id, string[] Comp, int Reach, bool Hunts);
+    public sealed record GraveyardDef(int ClockSeconds, int CryptReach, PackDef[] Packs);
+
     // ----- Loaded, id-indexed tables (parsed once) ----------------------------------
 
     private static Dictionary<string, SpellDef>? _skills;
     private static Dictionary<string, ClassDto>? _classes;
     private static Dictionary<string, MobDto>? _mobs;
+    private static PriceTable? _prices;
+    private static GraveyardDef? _graveyard;
+
+    public static PriceTable Prices => _prices ??= JsonSerializer.Deserialize<PriceTable>(TitheTables.PricesJson, J)!;
+    public static GraveyardDef Graveyard => _graveyard ??= JsonSerializer.Deserialize<GraveyardDef>(TitheTables.GraveyardJson, J)!;
 
     private static Dictionary<string, SpellDef> Skills => _skills ??= LoadSkills();
     private static Dictionary<string, ClassDto> Classes => _classes ??=
@@ -147,6 +157,30 @@ public static class TitheContent
     public static (string? essence, int rate) MobDrop(string mobId) =>
         Mobs.TryGetValue(mobId, out var m) ? (m.Essence, m.Drop) : (null, 0);
 
+    /// <summary>Coin a mob drops (Bible §6.11). One dial for the prototype: gold == XP value.</summary>
+    public static int MobGold(string mobId) => MobXp(mobId);
+
+    public static int ClassMaxHp(string classId) => Classes.TryGetValue(classId, out var c) ? c.MaxHp : 0;
+
+    /// <summary>Build a combat fighter from a persistent campaign unit (applies carried HP, Wounded, level).</summary>
+    public static Fighter MakeCrewMember(CampaignUnit u, CellCoord pos)
+    {
+        var c = Classes[u.ClassId];
+        int hp = Math.Clamp(u.CurrentHp ?? c.MaxHp, 1, c.MaxHp);
+        return new Fighter
+        {
+            Id = u.Id, Name = c.Name, Team = Team.Player, Archetype = c.Id,
+            PlayerControlled = true, IsMercenary = !u.IsAvatar,
+            Policy = ParsePolicy(c.Policy), Passive = c.Passive ?? "",
+            PreferredRangeMin = c.PrefRangeMin, PreferredRangeMax = c.PrefRangeMax,
+            MaxHp = c.MaxHp, Hp = hp,
+            BaseAp = c.Ap - (u.Wounded ? 1 : 0), BaseMp = c.Mp - (u.Wounded ? 1 : 0),
+            Strength = c.Strength, Agility = c.Agility, Initiative = c.Initiative,
+            Level = u.Level, Xp = u.Xp,
+            Pos = pos, Spells = SkillsFor(c.Skills),
+        };
+    }
+
     // ----- Encounter assembly -------------------------------------------------------
 
     public static MapData Arena() => MapLoader.Parse(TitheTables.ArenaJson);
@@ -190,6 +224,50 @@ public static class TitheContent
 
         return new CombatEngine(field, fighters, rng,
             (kind, team, cell, id) => MakeMob(kind, id, cell));
+    }
+
+    /// <summary>
+    /// Build a dive fight: the campaign party on the start cells versus a pack of mobs spread on
+    /// the far side of the arena. Used by <see cref="DiveSession"/> so every graveyard encounter
+    /// runs through the same watched-combat engine.
+    /// </summary>
+    public static CombatEngine BuildDiveFight(IReadOnlyList<CampaignUnit> party,
+                                              IReadOnlyList<string> packMobs, IRng rng)
+    {
+        var map = Arena();
+        var field = map.ToBattlefield();
+
+        var startCells = map.PlayerStartCells.OrderBy(c => c.X).ThenBy(c => c.Y).ToList();
+        var fighters = new List<Fighter>();
+        for (int i = 0; i < party.Count; i++)
+            fighters.Add(MakeCrewMember(party[i], i < startCells.Count ? startCells[i] : map.PlayerSpawn));
+
+        // Role-aware pack placement so the fight plays like the tuned encounter: fast flankers
+        // (Gravehounds) start close on the top/bottom flanks to dive the backline, everything else
+        // comes from the far side. Each anchor slides to the nearest free cell if blocked.
+        var flankAnchors = new[]
+        {
+            new CellCoord(7, 2), new CellCoord(7, 10), new CellCoord(6, 4), new CellCoord(6, 8),
+            new CellCoord(8, 2), new CellCoord(8, 10),
+        };
+        var farAnchors = new[]
+        {
+            new CellCoord(11, 4), new CellCoord(11, 8), new CellCoord(13, 6), new CellCoord(9, 3),
+            new CellCoord(9, 9), new CellCoord(13, 3), new CellCoord(13, 9), new CellCoord(12, 6),
+        };
+        int n = 0, fi = 0, ri = 0;
+        foreach (var mob in packMobs)
+        {
+            bool flanker = ParsePolicy(Mobs[mob].Policy) == AiPolicy.Flanker;
+            var anchors = flanker ? flankAnchors : farAnchors;
+            var want = anchors[(flanker ? fi++ : ri++) % anchors.Length];
+            var cell = (map.IsWalkable(want) && fighters.All(f => f.Pos != want))
+                ? want : NearestFreeCell(map, fighters, want);
+            if (cell == CellCoord.Invalid) continue;
+            fighters.Add(MakeMob(mob, $"mob_{n++}_{mob}", cell));
+        }
+
+        return new CombatEngine(field, fighters, rng, (kind, team, cell, id) => MakeMob(kind, id, cell));
     }
 
     /// <summary>Nearest walkable, unoccupied cell to <paramref name="from"/> (ring search), or Invalid.</summary>

@@ -64,9 +64,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
 
-    public SliceGame(bool tithe = false)
+    public SliceGame(bool tithe = false, int startSeed = 1)
     {
         _tithe = tithe;
+        _seed = startSeed;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = ScreenW,
@@ -1054,7 +1055,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 y += 40;
                 foreach (var u in _aftermath.Units)
                 {
-                    string fate = u.Died ? "DEAD (mercenary lost)"
+                    string fate = u.Died ? (u.Mercenary ? "DEAD (mercenary lost)" : "DEAD (avatar fell)")
                         : u.Wounded ? "WOUNDED  (-1 PA / -1 PM)"
                         : "unhurt";
                     var col = u.Died ? new Color(214, 96, 88)

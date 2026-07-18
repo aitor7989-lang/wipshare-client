@@ -10,7 +10,7 @@ namespace DofusSlice.Core.Content.Tithe;
 /// </summary>
 public static class TitheResolution
 {
-    public sealed record UnitResult(string Id, string Name, int XpGained, bool Wounded, bool Died);
+    public sealed record UnitResult(string Id, string Name, bool Mercenary, int XpGained, bool Wounded, bool Died);
     public sealed record Result(FightOutcome Outcome, int XpPool, IReadOnlyList<UnitResult> Units);
 
     public static Result Resolve(CombatEngine engine)
@@ -32,8 +32,11 @@ public static class TitheResolution
         foreach (var f in crew)
         {
             bool down = !f.IsAlive;
-            bool died = down && f.IsMercenary;                 // mercenaries are gone for good
-            bool wounded = down && !f.IsMercenary && won;      // player-managed, side won → Wounded
+            // A downed unit is dragged out Wounded only if it is player-managed AND the side won.
+            // Otherwise a down means gone for good: any mercenary, or anyone in a lost fight
+            // (all crew at 0 → campaign over, nobody is dragged back).
+            bool wounded = down && !f.IsMercenary && won;
+            bool died = down && !wounded;
             int xp = (won && (f.IsAlive || wounded) && totalWeight > 0)
                 ? pool * f.Level / totalWeight : 0;
 
@@ -42,7 +45,7 @@ public static class TitheResolution
                 f.Xp += xp;
                 if (wounded) f.Hp = 1; // dragged out alive; the Wounded status is applied by the caller
             }
-            results.Add(new UnitResult(f.Id, f.Name, xp, wounded, died));
+            results.Add(new UnitResult(f.Id, f.Name, f.IsMercenary, xp, wounded, died));
         }
 
         return new Result(engine.Outcome, pool, results);

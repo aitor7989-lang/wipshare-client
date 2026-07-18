@@ -31,16 +31,21 @@ validates "is it fun to watch?" before any art (see `TITHE_slice_bible` for the 
 **The vertical slice (Bible M1):** place a crew of three — **Cannon** (avatar) + two hired
 **mercenaries** (Bulwark, Archer) — on the Graveyard, press **FIGHT**, and watch. Four legible
 policies drive it: the **Bulwark** holds the front, the **Archer** kites and shoots the softest
-target, the **Cannon** holds a mid sightline and nukes, and the skeleton **Gravehounds** dive your
-squishy backline. Wins are common but rarely free — a downed mercenary **dies permanently**, a
-downed player-managed unit is dragged out **Wounded**. That cost *is* the tension.
+target, the **Cannon** holds a mid sightline and nukes, and the two flanking skeleton
+**Gravehounds** (high initiative) dive your squishy backline before your shooters can react. Wins
+are common but rarely free — a downed mercenary **dies permanently**, a downed player-managed unit
+is dragged out **Wounded**, and if the whole crew falls it is **campaign over**. That cost *is* the
+tension: with the default placement, ~86% of dives are contained (usually costing a mercenary) and
+~14% snowball into a wipe. Tucking the backline away from the Gravehounds' lanes is what turns a
+costly win into a clean one — placement is the skill.
 
 ```bash
 cd DofusSlice
 dotnet run --project DofusSlice.Game            # TITHE watched combat (default)
+dotnet run --project DofusSlice.Game -- 4       # start on a specific RNG seed (seed 4 is a defeat)
 dotnet run --project DofusSlice.Game dofus      # the original piloted Dofus slice
 dotnet run --project DofusSlice.Sim tithe [seed]        # headless: one narratable fight + aftermath
-dotnet run --project DofusSlice.Sim tithe balance 100   # win / clean / costly / defeat spread
+dotnet run --project DofusSlice.Sim tithe balance 200   # win / clean / costly / defeat spread
 ```
 
 **Controls (watched mode):** place the crew (click a member, then a blue start cell); **Space** or

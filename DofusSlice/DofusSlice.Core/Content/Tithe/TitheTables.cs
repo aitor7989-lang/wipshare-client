@@ -34,7 +34,7 @@ public static class TitheTables
         "strength": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
         "skills": ["marrow_spit"], "xp": 15 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
-        "strength": 20, "agility": 16, "initiative": 13, "skills": ["grave_bite"], "xp": 22 }
+        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22 }
     ]
     """;
 
@@ -52,7 +52,7 @@ public static class TitheTables
       { "key": "marrow_spit", "name": "Marrow Spit", "ap": 3, "min": 3, "max": 6, "los": true,
         "effects": [ { "kind": "damage", "min": 10, "max": 15 } ] },
       { "key": "grave_bite", "name": "Grave Bite", "ap": 3, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 15, "max": 22 } ] }
+        "effects": [ { "kind": "damage", "min": 16, "max": 24 } ] }
     ]
     """;
 
@@ -84,8 +84,8 @@ public static class TitheTables
     {
       "name": "Skeleton Pack",
       "spawns": [
-        { "mob": "gravehound",     "x": 8,  "y": 2 },
-        { "mob": "gravehound",     "x": 8,  "y": 10 },
+        { "mob": "gravehound",     "x": 7,  "y": 2 },
+        { "mob": "gravehound",     "x": 7,  "y": 10 },
         { "mob": "barrow_husk",    "x": 10, "y": 4 },
         { "mob": "barrow_husk",    "x": 10, "y": 8 },
         { "mob": "barrow_husk",    "x": 12, "y": 6 },

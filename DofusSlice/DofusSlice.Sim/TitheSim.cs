@@ -40,16 +40,15 @@ public static class TitheSim
 
     public static int Balance(int trials)
     {
-        int wins = 0, unresolved = 0, defeats = 0;
-        var cleanWins = 0;     // won with the whole crew standing
-        var costlyWins = 0;    // won but lost at least one crew member
-        int totalDowned = 0;
+        int wins = 0, unresolved = 0, defeats = 0, cleanWins = 0, costlyWins = 0, totalDowned = 0;
+        var downHist = new int[4]; // crew members downed: 0,1,2,3
         for (int i = 1; i <= trials; i++)
         {
             var engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(i * 101 + 3));
             RunToEnd(engine);
             int downed = engine.Fighters.Count(f => f.Team == Team.Player && !f.IsAlive);
             totalDowned += downed;
+            downHist[Math.Clamp(downed, 0, 3)]++;
             switch (engine.Outcome)
             {
                 case FightOutcome.Victory when downed == 0: wins++; cleanWins++; break;
@@ -60,7 +59,8 @@ public static class TitheSim
         }
         Console.WriteLine($"TITHE balance over {trials} seeds:");
         Console.WriteLine($"  wins {wins} ({100.0 * wins / trials:0}%)  —  clean {cleanWins}, costly {costlyWins}");
-        Console.WriteLine($"  defeats (campaign-over) {defeats},  unresolved {unresolved}");
+        Console.WriteLine($"  DEFEATS (campaign-over) {defeats} ({100.0 * defeats / trials:0}%),  unresolved {unresolved}");
+        Console.WriteLine($"  crew downed histogram  0:{downHist[0]}  1:{downHist[1]}  2:{downHist[2]}  3:{downHist[3]}");
         Console.WriteLine($"  avg crew members downed per fight: {(double)totalDowned / trials:0.00}");
         return unresolved == 0 ? 0 : 1;
     }
@@ -84,6 +84,6 @@ public static class TitheSim
         foreach (var u in res.Units)
             Console.WriteLine($"  {u.Name,-8} +{u.XpGained} XP" +
                               (u.Wounded ? "  (WOUNDED — dragged out, -1 PA/-1 PM)" : "") +
-                              (u.Died ? "  (DEAD — mercenary lost)" : ""));
+                              (u.Died ? (u.Mercenary ? "  (DEAD — mercenary lost)" : "  (DEAD — avatar fell)") : ""));
     }
 }

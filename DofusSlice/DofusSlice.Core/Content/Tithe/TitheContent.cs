@@ -44,6 +44,7 @@ public static class TitheContent
 
     public static IEnumerable<string> ClassIds => Classes.Keys;
     public static string Blurb(string classId) => Classes.TryGetValue(classId, out var c) ? c.Blurb ?? "" : "";
+    public static AiPolicy ClassPolicyOf(string classId) => ParsePolicy(Classes[classId].Policy);
 
     private static Dictionary<string, SpellDef> LoadSkills()
     {
@@ -152,9 +153,12 @@ public static class TitheContent
         var map = Arena();
         var field = map.ToBattlefield();
 
-        var startCells = map.PlayerStartCells
-            .OrderBy(c => c.X).ThenBy(c => c.Y).ToList();
-
+        // Default "marching order" placement (Bible §6.13): fill the start cells in a tight
+        // top-corner cluster. Clustering lets the tank and archer cover one another, and a corner
+        // naturally hides the backline from one of the two flanking Gravehounds. The player can
+        // re-place freely — this is just a sensible starting layout, and the sim's reference. How
+        // well the squishy backline is tucked away is what separates a clean win from a wipe.
+        var startCells = map.PlayerStartCells.OrderBy(c => c.X).ThenBy(c => c.Y).ToList();
         var fighters = new List<Fighter>();
         for (int i = 0; i < crewClasses.Count; i++)
         {

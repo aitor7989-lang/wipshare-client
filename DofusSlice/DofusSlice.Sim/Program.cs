@@ -1,11 +1,21 @@
 using DofusSlice.Core.Combat;
 using DofusSlice.Core.Content;
+using DofusSlice.Core.Content.Tithe;
 using DofusSlice.Sim;
 
 if (args.Length > 0 && args[0] == "effects")
 {
     Console.WriteLine("Combat effects self-test:\n");
     return EffectsTest.Run();
+}
+
+if (args.Length > 0 && args[0] == "tithe")
+{
+    // Watched TITHE fight: the crew and the skeleton pack all act by AI policy.
+    if (args.Length > 1 && args[1] == "balance")
+        return TitheSim.Balance(int.TryParse(args.ElementAtOrDefault(2), out int n) ? n : 40);
+    int tseed = int.TryParse(args.ElementAtOrDefault(1), out int ts) ? ts : 7;
+    return TitheSim.PlayOne(tseed, verbose: true);
 }
 
 int seed = args.Length > 0 && int.TryParse(args[0], out int s) ? s : 12345;

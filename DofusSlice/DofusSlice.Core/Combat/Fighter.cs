@@ -21,6 +21,24 @@ public sealed class Fighter
     /// <summary>A creature summoned into the fight (vanishes cleanly, doesn't count as the hero).</summary>
     public bool IsSummon { get; init; }
 
+    // ----- TITHE watched-combat fields (unused by the Dofus slice) -------------------
+
+    /// <summary>Class / mob id this unit was built from (e.g. "archer", "barrow_husk") — drives rendering and flavour.</summary>
+    public string Archetype { get; init; } = "";
+
+    /// <summary>How the autobattler plays this unit when combat is watched rather than piloted.</summary>
+    public AiPolicy Policy { get; init; } = AiPolicy.Bruiser;
+
+    /// <summary>Range band a ranged policy tries to hold from its nearest enemy (kiting). 0/0 = melee.</summary>
+    public int PreferredRangeMin { get; init; }
+    public int PreferredRangeMax { get; init; }
+
+    /// <summary>Hired mortal: dies permanently at 0 HP. A player-managed unit is dragged out Wounded instead.</summary>
+    public bool IsMercenary { get; init; }
+
+    public int Level { get; set; } = 1;
+    public int Xp { get; set; }
+
     public int MaxHp { get; init; }
     public int Hp { get; set; }
 

@@ -19,6 +19,9 @@ public sealed class CombatEngine
     private int _pointer;
 
     public int Round { get; private set; }
+
+    /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
+    public IRng Rng => _rng;
     public IReadOnlyList<Fighter> Fighters => _order;
     public Fighter Current => _order[_pointer];
 
@@ -351,6 +354,9 @@ public sealed class CombatEngine
                 case EffectKind.StealMp:
                     ApplySteal(caster, victim, effect.Min, ap: false);
                     break;
+                case EffectKind.GrantAp:
+                    if (victim.Team == caster.Team) ApplyGrantAp(caster, victim, effect.Min);
+                    break;
                 case EffectKind.ApplyStatus:
                     ApplyStatusEffect(victim, effect.Status, effect.Min, effect.Max);
                     break;
@@ -395,6 +401,15 @@ public sealed class CombatEngine
         Emit($"  {caster.Name} steals {taken} {(ap ? "AP" : "MP")} from {victim.Name}.");
     }
 
+    private void ApplyGrantAp(Fighter caster, Fighter ally, int amount)
+    {
+        amount = Math.Max(0, amount);
+        if (amount <= 0) return;
+        ally.CurrentAp += amount;
+        Emit($"  {caster.Name} grants {ally.Name} +{amount} AP.");
+        Raise(new StatusApplied(ally, StatusKind.DamageBuff, 1)); // reuse the buff cue for a positive flash
+    }
+
     private void ApplyStatusEffect(Fighter target, StatusKind kind, int magnitude, int turns)
     {
         if (kind == StatusKind.None || turns <= 0) return;
@@ -421,13 +436,27 @@ public sealed class CombatEngine
     private static int ComputeDamage(Fighter caster, Fighter victim, Element element, int rolled, bool crit)
     {
         int percent = 100 + caster.PrimaryStatFor(element) + caster.Power
-                      + caster.DamagePercent + caster.DamageBuffPercent;
-        int scaled = rolled * percent / 100 + caster.FlatDamage;
+                      + caster.DamagePercent + caster.DamageBuffPercent + PassivePercent(caster);
+        int scaled = rolled * percent / 100 + caster.FlatDamage + PassiveFlat(caster, victim);
         if (crit) scaled += (int)MathF.Round(scaled * 0.5f);
         int afterPct = scaled * (100 - victim.ResistanceFor(element)) / 100;
         int dmg = afterPct - victim.FlatResistanceFor(element) - victim.ShieldAmount;
         return Math.Max(0, dmg);
     }
+
+    // Class passives (TITHE) read at damage time, so they visibly change what you watch happen.
+    private static int PassivePercent(Fighter caster) => caster.Passive switch
+    {
+        "rage_below" => caster.Hp * 2 <= caster.MaxHp ? 30 : 0, // +30% while bloodied (Bulwark)
+        _ => 0,
+    };
+
+    private static int PassiveFlat(Fighter caster, Fighter victim) => caster.Passive switch
+    {
+        "long_shot" => caster.Pos.DistanceTo(victim.Pos) >= 6 ? 4 : 0, // reward the kiter (Archer)
+        "overchannel" => caster.CurrentAp * 2,                          // unspent AP banks damage (Cannon)
+        _ => 0,
+    };
 
     private void ApplyDamage(Fighter caster, Fighter victim, SpellEffect effect, bool crit)
     {

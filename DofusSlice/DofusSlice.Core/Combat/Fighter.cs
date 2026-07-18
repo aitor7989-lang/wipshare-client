@@ -29,6 +29,9 @@ public sealed class Fighter
     /// <summary>How the autobattler plays this unit when combat is watched rather than piloted.</summary>
     public AiPolicy Policy { get; init; } = AiPolicy.Bruiser;
 
+    /// <summary>Class passive id (e.g. "long_shot", "rage_below", "overchannel") — hooks the damage pipeline. "" = none.</summary>
+    public string Passive { get; init; } = "";
+
     /// <summary>Range band a ranged policy tries to hold from its nearest enemy (kiting). 0/0 = melee.</summary>
     public int PreferredRangeMin { get; init; }
     public int PreferredRangeMax { get; init; }

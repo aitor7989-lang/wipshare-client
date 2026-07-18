@@ -6,8 +6,9 @@ try
     // TITHE watched-combat prototype by default; pass "dofus" for the original piloted slice.
     // An integer arg sets the starting RNG seed (handy for reproducing a specific fight).
     bool tithe = !args.Any(a => a.Equals("dofus", StringComparison.OrdinalIgnoreCase));
+    bool boss = args.Any(a => a.Equals("boss", StringComparison.OrdinalIgnoreCase));
     int seed = args.Select(a => int.TryParse(a, out int s) ? s : (int?)null).FirstOrDefault(s => s != null) ?? 1;
-    using var game = new DofusSlice.Game.SliceGame(tithe, seed);
+    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss);
     game.Run();
 }
 catch (Exception ex)

@@ -21,6 +21,7 @@ namespace DofusSlice.Game;
 public sealed class SliceGame : Microsoft.Xna.Framework.Game
 {
     private readonly bool _tithe;
+    private bool _boss;                              // TITHE: fight the Sexton's court instead of the pack
     private float _speed = 1f;                       // watched-mode playback: 1x / 2x / 4x
     private Fighter? _selCrew;                        // crew unit being positioned in placement
     private TitheResolution.Result? _aftermath;      // computed once the watched fight ends
@@ -64,10 +65,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
 
-    public SliceGame(bool tithe = false, int startSeed = 1)
+    public SliceGame(bool tithe = false, int startSeed = 1, bool boss = false)
     {
         _tithe = tithe;
         _seed = startSeed;
+        _boss = boss;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = ScreenW,
@@ -148,7 +150,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (_tithe)
         {
-            _engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(_seed));
+            _engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(_seed), _boss);
             _aftermath = null;
             _selCrew = _engine.Fighters.FirstOrDefault(f => f.Team == Team.Player);
         }
@@ -203,12 +205,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
 
-        // Watched-mode playback speed.
+        // Watched-mode playback speed + encounter toggle.
         if (_tithe)
         {
             if (Pressed(Keys.D1)) _speed = 1f;
             if (Pressed(Keys.D2)) _speed = 2f;
             if (Pressed(Keys.D3)) _speed = 4f;
+            if (Pressed(Keys.B)) { _boss = !_boss; StartFight(); return; } // swap pack <-> Sexton's court
         }
 
         _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
@@ -732,24 +735,26 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         bool crew = f.Team == Team.Player;
         var outline = new Color(16, 16, 20);
         float baseY = center.Y;
+        float s = f.Archetype == "sexton" ? 1.7f : 1f;      // the boss looms larger than its court
+        int Sz(float v) => (int)MathF.Round(v * s);
 
-        _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), Sz(12), Palette.Shadow);
         if (_placing && f == _selCrew)                      // highlight the crew member being placed
             _prim.DiscAt(_sb, center + new Vector2(0, 2), 16, new Color(245, 224, 120) * 0.45f);
 
-        _prim.DiscAt(_sb, new Vector2(center.X, baseY), 11, outline);           // base
-        _prim.DiscAt(_sb, new Vector2(center.X, baseY), 9, col * 0.7f);
-        _prim.FillRect(_sb, new Rectangle((int)center.X - 9, (int)baseY - 22, 18, 22), outline); // body
-        _prim.FillRect(_sb, new Rectangle((int)center.X - 7, (int)baseY - 20, 14, 20), col);
-        var head = new Vector2(center.X, baseY - 26);                           // head
-        _prim.DiscAt(_sb, head, 11, outline);
-        _prim.DiscAt(_sb, head, 9, col);
-        _prim.DiscAt(_sb, head + new Vector2(0, -2), 5, col * 1.2f);
+        _prim.DiscAt(_sb, new Vector2(center.X, baseY), Sz(11), outline);        // base
+        _prim.DiscAt(_sb, new Vector2(center.X, baseY), Sz(9), col * 0.7f);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - Sz(9), (int)baseY - Sz(22), Sz(18), Sz(22)), outline); // body
+        _prim.FillRect(_sb, new Rectangle((int)center.X - Sz(7), (int)baseY - Sz(20), Sz(14), Sz(20)), col);
+        var head = new Vector2(center.X, baseY - Sz(26));                        // head
+        _prim.DiscAt(_sb, head, Sz(11), outline);
+        _prim.DiscAt(_sb, head, Sz(9), col);
+        _prim.DiscAt(_sb, head + new Vector2(0, -2), Sz(5), col * 1.2f);
 
-        _font.DrawCentered(_sb, TitheGlyph(f.Archetype), (int)center.X, (int)baseY - 16, 1,
+        _font.DrawCentered(_sb, TitheGlyph(f.Archetype), (int)center.X, (int)(baseY - Sz(16)), s > 1f ? 2 : 1,
             crew ? Color.White : new Color(34, 32, 38));
 
-        float topY = head.Y - 11;
+        float topY = head.Y - Sz(11);
         DrawHpBar(f, center.X, topY - 10);
         DrawStatusPips(f, center.X, topY - 2);
     }
@@ -762,6 +767,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         "barrow_husk" => new Color(206, 200, 180),
         "marrow_spitter" => new Color(150, 192, 142),
         "gravehound" => new Color(176, 110, 92),
+        "crypt_warden" => new Color(150, 152, 168),
+        "grave_mite" => new Color(140, 168, 92),
+        "bone_piper" => new Color(206, 184, 216),
+        "sexton" => new Color(168, 70, 90),
         _ => new Color(170, 170, 176),
     };
 
@@ -769,6 +778,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         "archer" => "A", "bulwark" => "B", "cannon" => "C",
         "barrow_husk" => "H", "marrow_spitter" => "S", "gravehound" => "G",
+        "crypt_warden" => "W", "grave_mite" => "M", "bone_piper" => "P", "sexton" => "X",
         _ => "?",
     };
 
@@ -861,10 +871,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawTitheHud()
     {
-        _font.Draw(_sb, $"ROUND {_engine.Round}", 16, 12, 2, Palette.Text);
+        _font.Draw(_sb, $"ROUND {_engine.Round}   {(_boss ? "THE SEXTON'S COURT" : "THE GRAVEYARD")}", 16, 12, 2, Palette.Text);
         _font.Draw(_sb, $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
             _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
-        _font.Draw(_sb, "1 / 2 / 3  = SPEED   ·   R = NEW FIGHT", 16, HudTop - 22, 1, Palette.TextDim);
+        _font.Draw(_sb, "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON", 16, HudTop - 22, 1, Palette.TextDim);
 
         // Playback speed, top-centre where the piloted mode shows the turn clock.
         _font.DrawCentered(_sb, $"> SPEED {_speed:0}X", ScreenW / 2, 16, 2, Palette.Text);
@@ -1064,8 +1074,14 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                         ScreenW / 2, y, 2, col);
                     y += 30;
                 }
+                string loot = _aftermath.Drops.Count > 0
+                    ? "ESSENCES DROPPED: " + string.Join(", ", _aftermath.Drops).ToUpperInvariant()
+                    : "NO ESSENCES DROPPED";
+                _font.DrawCentered(_sb, loot, ScreenW / 2, y + 8, 1,
+                    _aftermath.Drops.Count > 0 ? new Color(200, 170, 240) : Palette.TextDim);
+                y += 30;
             }
-            _font.DrawCentered(_sb, "PRESS R TO DIVE AGAIN", ScreenW / 2, y + 30, 2, Palette.Text);
+            _font.DrawCentered(_sb, "PRESS R TO DIVE AGAIN   ·   B: FACE THE SEXTON", ScreenW / 2, y + 20, 1, Palette.Text);
             return;
         }
 

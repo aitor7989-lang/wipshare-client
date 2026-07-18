@@ -11,11 +11,13 @@ if (args.Length > 0 && args[0] == "effects")
 
 if (args.Length > 0 && args[0] == "tithe")
 {
-    // Watched TITHE fight: the crew and the skeleton pack all act by AI policy.
-    if (args.Length > 1 && args[1] == "balance")
-        return TitheSim.Balance(int.TryParse(args.ElementAtOrDefault(2), out int n) ? n : 40);
-    int tseed = int.TryParse(args.ElementAtOrDefault(1), out int ts) ? ts : 7;
-    return TitheSim.PlayOne(tseed, verbose: true);
+    // Watched TITHE fight: the crew and the enemies all act by AI policy.
+    bool boss = args.Contains("boss");
+    if (args.Contains("balance"))
+        return TitheSim.Balance(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null)
+            .FirstOrDefault(v => v != null) ?? 40, boss);
+    int tseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7;
+    return TitheSim.PlayOne(tseed, verbose: true, boss);
 }
 
 int seed = args.Length > 0 && int.TryParse(args[0], out int s) ? s : 12345;

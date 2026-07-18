@@ -12,14 +12,14 @@ namespace DofusSlice.Sim;
 /// </summary>
 public static class TitheSim
 {
-    public static int PlayOne(int seed, bool verbose)
+    public static int PlayOne(int seed, bool verbose, bool boss = false)
     {
-        var engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(seed));
+        var engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(seed), boss);
         if (verbose)
         {
             engine.Logged += Console.WriteLine;
-            Console.WriteLine($"TITHE — The Graveyard (watched combat, seed {seed})");
-            Console.WriteLine($"Crew vs {engine.Fighters.Count(f => f.Team == Team.Enemy)} skeletons. All units act by AI policy.\n");
+            Console.WriteLine($"TITHE — {(boss ? "The Sexton's Court" : "The Graveyard")} (watched combat, seed {seed})");
+            Console.WriteLine($"Crew vs {engine.Fighters.Count(f => f.Team == Team.Enemy)} enemies. All units act by AI policy.\n");
             foreach (var f in engine.Fighters.Where(f => f.Team == Team.Player))
                 Console.WriteLine($"  {f.Name,-8} — {TitheContent.Blurb(f.Archetype)}");
             Console.WriteLine();
@@ -38,13 +38,13 @@ public static class TitheSim
         return engine.Outcome == FightOutcome.Ongoing ? 1 : 0;
     }
 
-    public static int Balance(int trials)
+    public static int Balance(int trials, bool boss = false)
     {
         int wins = 0, unresolved = 0, defeats = 0, cleanWins = 0, costlyWins = 0, totalDowned = 0;
         var downHist = new int[4]; // crew members downed: 0,1,2,3
         for (int i = 1; i <= trials; i++)
         {
-            var engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(i * 101 + 3));
+            var engine = TitheContent.BuildFight(TitheContent.DefaultCrew, new SystemRng(i * 101 + 3), boss);
             RunToEnd(engine);
             int downed = engine.Fighters.Count(f => f.Team == Team.Player && !f.IsAlive);
             totalDowned += downed;
@@ -57,7 +57,7 @@ public static class TitheSim
                 default: unresolved++; break;
             }
         }
-        Console.WriteLine($"TITHE balance over {trials} seeds:");
+        Console.WriteLine($"TITHE balance — {(boss ? "The Sexton's Court" : "The Graveyard")} — over {trials} seeds:");
         Console.WriteLine($"  wins {wins} ({100.0 * wins / trials:0}%)  —  clean {cleanWins}, costly {costlyWins}");
         Console.WriteLine($"  DEFEATS (campaign-over) {defeats} ({100.0 * defeats / trials:0}%),  unresolved {unresolved}");
         Console.WriteLine($"  crew downed histogram  0:{downHist[0]}  1:{downHist[1]}  2:{downHist[2]}  3:{downHist[3]}");
@@ -85,5 +85,8 @@ public static class TitheSim
             Console.WriteLine($"  {u.Name,-8} +{u.XpGained} XP" +
                               (u.Wounded ? "  (WOUNDED — dragged out, -1 PA/-1 PM)" : "") +
                               (u.Died ? (u.Mercenary ? "  (DEAD — mercenary lost)" : "  (DEAD — avatar fell)") : ""));
+        Console.WriteLine(res.Drops.Count > 0
+            ? $"Essences dropped: {string.Join(", ", res.Drops)}"
+            : "Essences dropped: none");
     }
 }

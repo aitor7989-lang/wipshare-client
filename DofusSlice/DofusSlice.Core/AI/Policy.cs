@@ -19,6 +19,10 @@ public static class Policy
 {
     public static void TakeTurn(CombatEngine engine, Fighter self)
     {
+        if (self.Policy == AiPolicy.Support) { SupportTurn(engine, self); return; }
+
+        TrySelfBuff(engine, self); // Ironhide etc. before wading in
+
         for (int guard = 0; guard < 24; guard++)
         {
             if (!self.IsAlive || engine.Outcome != FightOutcome.Ongoing) return;
@@ -30,6 +34,46 @@ public static class Policy
             };
             if (!acted) return;
         }
+    }
+
+    /// <summary>Cast a self-shield (Ironhide) once when an enemy is closing and we're unshielded.</summary>
+    private static void TrySelfBuff(CombatEngine engine, Fighter self)
+    {
+        if (self.ShieldAmount > 0) return;
+        if (DistToNearestEnemy(engine, self, self.Pos) > 3) return;
+        var buff = self.Spells.FirstOrDefault(s => s.MaxRange == 0 &&
+            s.Effects.Any(e => e.Kind == EffectKind.ApplyStatus && e.Status == StatusKind.Shield));
+        if (buff != null && engine.CanCast(self, buff, self.Pos, out _))
+            engine.TryCast(self, buff, self.Pos);
+    }
+
+    // ----- Support policy: never lead, feed the frontline AP, keep out of reach ------
+
+    private static void SupportTurn(CombatEngine engine, Fighter self)
+    {
+        var gift = self.Spells.FirstOrDefault(s => s.Effects.Any(e => e.Kind == EffectKind.GrantAp));
+        if (gift != null)
+            for (int guard = 0; guard < 4 && self.CurrentAp >= gift.ApCost; guard++)
+            {
+                // Buff the ally with a real attack that stands closest to the enemy (the frontline).
+                var ally = engine.Fighters
+                    .Where(a => a.IsAlive && a.Team == self.Team && a != self && DamageSpells(a).Any())
+                    .Where(a => engine.CanCast(self, gift, a.Pos, out _))
+                    .OrderBy(a => DistToNearestEnemy(engine, self, a.Pos))
+                    .FirstOrDefault();
+                if (ally == null || !engine.TryCast(self, gift, ally.Pos)) break;
+            }
+
+        // Keep a safe distance: retreat if anything is closing, else hold near the court.
+        if (self.CurrentMp <= 0) return;
+        int band = self.PreferredRangeMin > 0 ? self.PreferredRangeMin : 3;
+        int here = DistToNearestEnemy(engine, self, self.Pos);
+        if (here > band) return;
+        var reachable = engine.MovementRange(self);
+        if (reachable.Count == 0) return;
+        var safest = reachable.Keys
+            .OrderByDescending(c => DistToNearestEnemy(engine, self, c)).ThenBy(c => reachable[c]).First();
+        if (DistToNearestEnemy(engine, self, safest) > here) engine.TryMove(self, safest);
     }
 
     // ----- Melee policies: close the distance and hit ------------------------------
@@ -95,13 +139,31 @@ public static class Policy
     private static IEnumerable<SpellDef> DamageSpells(Fighter self) =>
         self.Spells.Where(s => s.Effects.Any(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal));
 
-    /// <summary>Cast at the softest enemy we can currently hit, with the strongest affordable spell.</summary>
+    /// <summary>
+    /// Shoot the highest-value reachable target (Bible: "highest-value target in range"). Prefer a
+    /// kill we can secure this cast — and among those the <i>toughest</i>, so heavy burst isn't
+    /// wasted overkilling a near-dead soft target while a real threat survives. Failing a kill,
+    /// chip the softest. Each attacker re-evaluates per cast, so focus-fire stays adaptive.
+    /// </summary>
     private static bool TryShootBest(CombatEngine engine, Fighter self)
     {
-        foreach (var enemy in Enemies(engine, self).OrderBy(f => f.Hp))
-            foreach (var spell in DamageSpells(self).OrderByDescending(s => s.ApCost))
-                if (engine.CanCast(self, spell, enemy.Pos, out _))
-                    return engine.TryCast(self, spell, enemy.Pos);
+        var spells = DamageSpells(self).OrderByDescending(s => s.ApCost).ToList();
+        Fighter? killE = null; SpellDef? killS = null; int killHp = -1;
+        Fighter? chipE = null; SpellDef? chipS = null; int chipHp = int.MaxValue;
+
+        foreach (var enemy in Enemies(engine, self))
+            foreach (var spell in spells)
+            {
+                if (!engine.CanCast(self, spell, enemy.Pos, out _)) continue;
+                if (enemy.Hp < chipHp) { chipE = enemy; chipS = spell; chipHp = enemy.Hp; }
+                var est = engine.EstimateDamage(self, spell, enemy.Pos);
+                if (est.HasValue && est.Value.max >= enemy.Hp && enemy.Hp > killHp)
+                    { killE = enemy; killS = spell; killHp = enemy.Hp; }
+                break; // strongest castable spell for this enemy
+            }
+
+        if (killE != null) return engine.TryCast(self, killS!, killE.Pos);
+        if (chipE != null) return engine.TryCast(self, chipS!, chipE.Pos);
         return false;
     }
 

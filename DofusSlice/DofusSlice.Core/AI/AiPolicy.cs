@@ -20,4 +20,7 @@ public enum AiPolicy
     /// <summary>Hold a safe mid-range sightline and nuke the priority (softest) target; retreat if meleed.
     /// Artillery (Cannon).</summary>
     Artillery,
+
+    /// <summary>Hang back near allies and buff the frontline attacker (grant AP); never lead. Buffers (Bone Piper).</summary>
+    Support,
 }

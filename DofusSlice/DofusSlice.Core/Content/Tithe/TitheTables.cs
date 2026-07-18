@@ -2,7 +2,7 @@ namespace DofusSlice.Core.Content.Tithe;
 
 /// <summary>
 /// TITHE data tables — the single source of truth for the prototype's classes, skills, mobs,
-/// arena and encounter. Per the Slice Bible (§8) all rules and numbers live in data, never in
+/// arena and encounters. Per the Slice Bible (§8) all rules and numbers live in data, never in
 /// code; marketplace/engine code only renders and executes these rows. Numbers here are honest
 /// hand-tuned placeholders (Bible "planes, cubes, honest data") flagged for the §9 Dofus-1.29
 /// mining pass. Kept as JSON strings so the headless sim and the game consume identical data
@@ -10,35 +10,52 @@ namespace DofusSlice.Core.Content.Tithe;
 /// </summary>
 public static class TitheTables
 {
-    // Three playable archetypes. policy = how the autobattler flies it (watched, never piloted).
+    // Three playable archetypes. policy = how the autobattler flies it (watched, never piloted);
+    // passive = a rule hook that changes what you watch happen (Bible §5 class table).
     public const string ClassesJson = """
     [
-      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "maxHp": 36, "ap": 6, "mp": 4,
+      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "maxHp": 36, "ap": 6, "mp": 4,
         "strength": 22, "agility": 18, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
-        "skills": ["piercing_shot"], "blurb": "Keeps max distance, shoots the softest target in range." },
-      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser",    "maxHp": 78, "ap": 6, "mp": 3,
+        "skills": ["piercing_shot"], "blurb": "Keeps max distance, shoots the softest target; Long Shot hits harder from afar." },
+      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "maxHp": 78, "ap": 6, "mp": 3,
         "strength": 20, "agility": 12, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
-        "skills": ["slam"], "blurb": "Advances, body-blocks, shoves with Slam." },
-      { "id": "cannon",  "name": "Cannon",  "policy": "artillery",  "maxHp": 42, "ap": 7, "mp": 3,
+        "skills": ["slam"], "blurb": "Advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied." },
+      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "maxHp": 42, "ap": 7, "mp": 3,
         "strength": 30, "agility": 10, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["ruin_bolt"], "blurb": "Holds a safe sightline and nukes the priority target." }
+        "skills": ["ruin_bolt"], "blurb": "Holds a sightline and nukes; Overchannel banks its unspent AP into the hit." }
     ]
     """;
 
-    // Graveyard skins of the locked archetypes (Bible §5 bestiary).
+    // Graveyard skins of the locked archetypes (Bible §5 bestiary). Each drops its essence at a
+    // low rate; the Sexton (boss) is a guaranteed essence roll.
     public const string MobsJson = """
     [
       { "id": "barrow_husk",   "name": "Barrow Husk",   "policy": "melee",   "maxHp": 54, "ap": 6, "mp": 3,
-        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 18 },
+        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 18,
+        "essence": "Seize", "drop": 6 },
       { "id": "marrow_spitter","name": "Marrow Spitter", "policy": "ranged",  "maxHp": 30, "ap": 6, "mp": 3,
         "strength": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["marrow_spit"], "xp": 15 },
+        "skills": ["marrow_spit"], "xp": 15, "essence": "Marrow Spit", "drop": 8 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
-        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22 }
+        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22,
+        "essence": "Pounce", "drop": 5 },
+      { "id": "crypt_warden",  "name": "Crypt Warden",  "policy": "melee",   "maxHp": 72, "ap": 6, "mp": 2,
+        "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 26,
+        "essence": "Ironhide", "drop": 5 },
+      { "id": "grave_mite",    "name": "Grave Mite",    "policy": "flanker", "maxHp": 12, "ap": 6, "mp": 4,
+        "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 6,
+        "essence": "Sap", "drop": 10 },
+      { "id": "bone_piper",    "name": "Bone Piper",    "policy": "support", "maxHp": 26, "ap": 6, "mp": 3,
+        "strength": 10, "agility": 10, "initiative": 10, "prefRangeMin": 3, "prefRangeMax": 6,
+        "skills": ["piper_gift"], "xp": 20, "essence": "Piper's Gift", "drop": 8 },
+      { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
+        "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 120,
+        "essence": "Sexton's Toll", "drop": 100 }
     ]
     """;
 
-    // Few skills, simple skills, tactical limits (Bible §3.1.2). effects use the engine's closed set.
+    // Few skills, simple skills, tactical limits (Bible §3.1.2). effects use the engine's closed
+    // set; cooldown / castsPerTurn exercise the Dofus limit fields.
     public const string SkillsJson = """
     [
       { "key": "piercing_shot", "name": "Piercing Shot", "ap": 3, "min": 4, "max": 8, "los": true,
@@ -52,7 +69,15 @@ public static class TitheTables
       { "key": "marrow_spit", "name": "Marrow Spit", "ap": 3, "min": 3, "max": 6, "los": true,
         "effects": [ { "kind": "damage", "min": 10, "max": 15 } ] },
       { "key": "grave_bite", "name": "Grave Bite", "ap": 3, "min": 1, "max": 1, "los": true,
-        "effects": [ { "kind": "damage", "min": 16, "max": 24 } ] }
+        "effects": [ { "kind": "damage", "min": 16, "max": 24 } ] },
+      { "key": "warden_ironhide", "name": "Ironhide", "ap": 2, "min": 0, "max": 0, "los": false, "cooldown": 2,
+        "effects": [ { "kind": "status", "status": "shield", "mag": 8, "turns": 1 } ] },
+      { "key": "mite_sap", "name": "Sap", "ap": 2, "min": 1, "max": 1, "los": true,
+        "effects": [ { "kind": "damage", "min": 4, "max": 7 }, { "kind": "status", "status": "mpdrain", "mag": 1, "turns": 1 } ] },
+      { "key": "piper_gift", "name": "Piper's Gift", "ap": 3, "min": 1, "max": 4, "los": true, "castsPerTurn": 1,
+        "effects": [ { "kind": "grant_ap", "min": 2 } ] },
+      { "key": "sexton_smash", "name": "Sexton's Toll", "ap": 5, "min": 1, "max": 1, "los": true, "cooldown": 2,
+        "effects": [ { "kind": "damage", "min": 22, "max": 32 }, { "kind": "push", "cells": 2 } ] }
     ]
     """;
 
@@ -90,6 +115,22 @@ public static class TitheTables
         { "mob": "barrow_husk",    "x": 10, "y": 8 },
         { "mob": "barrow_husk",    "x": 12, "y": 6 },
         { "mob": "marrow_spitter", "x": 14, "y": 6 }
+      ]
+    }
+    """;
+
+    // The Sexton's court (Bible §5 boss): one big slow monster whose retinue does the tactical
+    // work — armored Wardens up front, a swarm of Mites, a Bone Piper feeding the boss AP.
+    public const string EncounterBossJson = """
+    {
+      "name": "The Sexton's Court",
+      "spawns": [
+        { "mob": "sexton",       "x": 11, "y": 5 },
+        { "mob": "crypt_warden", "x": 9,  "y": 4 },
+        { "mob": "crypt_warden", "x": 9,  "y": 8 },
+        { "mob": "grave_mite",   "x": 7,  "y": 2 },
+        { "mob": "grave_mite",   "x": 7,  "y": 10 },
+        { "mob": "bone_piper",   "x": 14, "y": 6 }
       ]
     }
     """;

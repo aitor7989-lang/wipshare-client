@@ -41,17 +41,28 @@ costly win into a clean one — placement is the skill.
 
 ![TITHE — a campaign-over defeat](docs/tithe-defeat.png)
 
+**Kit depth.** Each class has a **passive** that changes what you watch: the Archer's *Long Shot*
+hits harder from range 6+, the Bulwark's *Rage Below* hits harder while bloodied, the Cannon's
+*Overchannel* banks its unspent AP into the shot. Defeated mobs roll their **essence** as loot.
+There's a full skeleton bestiary — armored **Crypt Wardens** (self-shield *Ironhide*), a swarm of
+**Grave Mites** (*Sap* drains MP), a **Bone Piper** that feeds its allies AP — and the boss, **The
+Sexton**: a huge slow monster whose court does the tactical work, with a guaranteed essence drop.
+
 ```bash
 cd DofusSlice
 dotnet run --project DofusSlice.Game            # TITHE watched combat (default)
+dotnet run --project DofusSlice.Game -- boss    # fight The Sexton's court instead of the pack
 dotnet run --project DofusSlice.Game -- 4       # start on a specific RNG seed (seed 4 is a defeat)
 dotnet run --project DofusSlice.Game dofus      # the original piloted Dofus slice
-dotnet run --project DofusSlice.Sim tithe [seed]        # headless: one narratable fight + aftermath
-dotnet run --project DofusSlice.Sim tithe balance 200   # win / clean / costly / defeat spread
+dotnet run --project DofusSlice.Sim tithe [seed]         # headless: one narratable fight + aftermath
+dotnet run --project DofusSlice.Sim tithe boss [seed]    # the boss fight, headless
+dotnet run --project DofusSlice.Sim tithe balance 200    # win / clean / costly / defeat spread
+dotnet run --project DofusSlice.Sim tithe balance boss 60
 ```
 
 **Controls (watched mode):** place the crew (click a member, then a blue start cell); **Space** or
-**FIGHT** to begin; **1 / 2 / 3** = 1× / 2× / 4× playback speed; **R** for a new fight.
+**FIGHT** to begin; **1 / 2 / 3** = 1× / 2× / 4× playback speed; **B** to face the Sexton; **R** for
+a new fight.
 
 All rules and numbers live in JSON data tables (`DofusSlice.Core/Content/Tithe/TitheTables.cs`) —
 the single source of truth per the Bible; the current values are honest placeholders flagged for a

@@ -20,13 +20,13 @@ public static class TitheContent
     private sealed record EffectDto(string Kind, string? Element, int Min, int Max, int Cells,
                                     string? Status, int Mag, int Turns);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
-                                   EffectDto[] Effects);
-    private sealed record ClassDto(string Id, string Name, string Policy, int MaxHp, int Ap, int Mp,
+                                   int Cooldown, int CastsPerTurn, EffectDto[] Effects);
+    private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, int MaxHp, int Ap, int Mp,
                                    int Strength, int Agility, int Initiative, int PrefRangeMin,
                                    int PrefRangeMax, string[] Skills, string? Blurb);
     private sealed record MobDto(string Id, string Name, string Policy, int MaxHp, int Ap, int Mp,
                                  int Strength, int Agility, int Initiative, int PrefRangeMin,
-                                 int PrefRangeMax, string[] Skills, int Xp);
+                                 int PrefRangeMax, string[] Skills, int Xp, string? Essence, int Drop);
     private sealed record SpawnDto(string Mob, int X, int Y);
     private sealed record EncounterDto(string Name, SpawnDto[] Spawns);
 
@@ -56,6 +56,8 @@ public static class TitheContent
             {
                 Id = id++, Name = s.Name, ApCost = s.Ap, MinRange = s.Min, MaxRange = s.Max,
                 RequiresLineOfSight = s.Los, NeedsTarget = true,
+                Cooldown = s.Cooldown,
+                MaxCastsPerTurn = s.CastsPerTurn > 0 ? s.CastsPerTurn : int.MaxValue,
                 Effects = s.Effects.Select(ToEffect).ToArray(),
             };
         return map;
@@ -70,6 +72,7 @@ public static class TitheContent
         "teleport" => SpellEffect.Teleport(),
         "steal_ap" => SpellEffect.StealAp(e.Min),
         "steal_mp" => SpellEffect.StealMp(e.Min),
+        "grant_ap" => SpellEffect.GrantAp(e.Min),
         "status" => SpellEffect.ApplyStatus(ParseStatus(e.Status), e.Mag, e.Turns),
         _ => throw new FormatException($"tithe: unknown effect kind '{e.Kind}'"),
     };
@@ -97,6 +100,7 @@ public static class TitheContent
         "skirmisher" or "ranged" => AiPolicy.Skirmisher,
         "artillery" => AiPolicy.Artillery,
         "flanker" => AiPolicy.Flanker,
+        "support" => AiPolicy.Support,
         _ => AiPolicy.Bruiser, // "bruiser" / "melee"
     };
 
@@ -114,7 +118,7 @@ public static class TitheContent
         {
             Id = unitId, Name = c.Name, Team = Team.Player, Archetype = c.Id,
             PlayerControlled = true, IsMercenary = isMercenary,
-            Policy = ParsePolicy(c.Policy),
+            Policy = ParsePolicy(c.Policy), Passive = c.Passive ?? "",
             PreferredRangeMin = c.PrefRangeMin, PreferredRangeMax = c.PrefRangeMax,
             MaxHp = c.MaxHp, Hp = c.MaxHp, BaseAp = c.Ap, BaseMp = c.Mp,
             Strength = c.Strength, Agility = c.Agility, Initiative = c.Initiative,
@@ -139,6 +143,10 @@ public static class TitheContent
 
     public static int MobXp(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Xp : 0;
 
+    /// <summary>The essence a mob can drop and its percent chance (Bible §5), or (null, 0).</summary>
+    public static (string? essence, int rate) MobDrop(string mobId) =>
+        Mobs.TryGetValue(mobId, out var m) ? (m.Essence, m.Drop) : (null, 0);
+
     // ----- Encounter assembly -------------------------------------------------------
 
     public static MapData Arena() => MapLoader.Parse(TitheTables.ArenaJson);
@@ -148,7 +156,7 @@ public static class TitheContent
     /// and the skeleton pack from the encounter table. <paramref name="crewClasses"/> is the
     /// player's chosen line-up (first is the avatar, the rest are mercenaries).
     /// </summary>
-    public static CombatEngine BuildFight(IReadOnlyList<string> crewClasses, IRng rng)
+    public static CombatEngine BuildFight(IReadOnlyList<string> crewClasses, IRng rng, bool boss = false)
     {
         var map = Arena();
         var field = map.ToBattlefield();
@@ -166,17 +174,36 @@ public static class TitheContent
             fighters.Add(MakeCrewMember(crewClasses[i], $"crew_{i}_{crewClasses[i]}", cell, isMercenary: i > 0));
         }
 
-        var enc = JsonSerializer.Deserialize<EncounterDto>(TitheTables.EncounterJson, J)!;
+        var enc = JsonSerializer.Deserialize<EncounterDto>(
+            boss ? TitheTables.EncounterBossJson : TitheTables.EncounterJson, J)!;
         int n = 0;
         foreach (var s in enc.Spawns)
         {
             var cell = new CellCoord(s.X, s.Y);
-            if (!map.IsWalkable(cell) || fighters.Any(f => f.Pos == cell)) continue;
+            // Robust placement: a spawn on a blocked/occupied cell slides to the nearest free one
+            // rather than silently vanishing (a boss on a tombstone should still show up).
+            if (!map.IsWalkable(cell) || fighters.Any(f => f.Pos == cell))
+                cell = NearestFreeCell(map, fighters, cell);
+            if (cell == CellCoord.Invalid) continue;
             fighters.Add(MakeMob(s.Mob, $"mob_{n++}_{s.Mob}", cell));
         }
 
         return new CombatEngine(field, fighters, rng,
             (kind, team, cell, id) => MakeMob(kind, id, cell));
+    }
+
+    /// <summary>Nearest walkable, unoccupied cell to <paramref name="from"/> (ring search), or Invalid.</summary>
+    private static CellCoord NearestFreeCell(MapData map, List<Fighter> taken, CellCoord from)
+    {
+        for (int r = 1; r <= 6; r++)
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (Math.Abs(dx) != r && Math.Abs(dy) != r) continue; // only the ring at radius r
+                    var c = from.Offset(dx, dy);
+                    if (map.IsWalkable(c) && taken.All(f => f.Pos != c)) return c;
+                }
+        return CellCoord.Invalid;
     }
 
     /// <summary>Default crew line-up for the prototype: the three archetypes, avatar first.</summary>

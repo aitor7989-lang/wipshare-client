@@ -120,6 +120,7 @@ public static class TmxLoader
         string s = raw.ToLowerInvariant();
         if (s.Contains("water")) return TileKind.Water;
         if (s.Contains("void") || s.Contains("hole") || s.Contains("pit")) return TileKind.Void;
+        if (s.Contains("tree") || s.Contains("bush") || s.Contains("forest")) return TileKind.Tree;
         if (s.Contains("rock") || s.Contains("wall") || s.Contains("stone")) return TileKind.Rock;
         if (s.Contains("dirt")) return TileKind.Dirt;
         if (s.Contains("path") || s.Contains("road")) return TileKind.Path;

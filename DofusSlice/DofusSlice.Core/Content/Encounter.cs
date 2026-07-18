@@ -11,22 +11,22 @@ public static class Encounter
     /// <summary>Default map — an original clearing layout (not copied from any real Dofus map).</summary>
     public const string DefaultMapJson = """
     {
-      "name": "Incarnam Clearing",
+      "name": "Incarnam Pond",
       "legend": { "1": "boar", "2": "gobball", "3": "piou" },
       "rows": [
-        "...............",
-        "...............",
-        "..........#.3..",
+        "T.....,,......T",
+        "..........#....",
+        "...,..#...T.3..",
         "...,.#...,.....",
-        "....,........1.",
-        "...d...#.......",
+        "....,....#...1.",
+        "...d...T.......",
         "..Pdddd#....2..",
-        "...d...#..,....",
-        "........,....1.",
-        "..,.#....#.....",
-        "..www.oo...#,..",
-        "...w...........",
-        "..............."
+        "...d...T..,....",
+        ".....#...#...1.",
+        "..,......#.....",
+        "..wwww...#.T...",
+        "T..www.........",
+        "......,,......T"
       ]
     }
     """;

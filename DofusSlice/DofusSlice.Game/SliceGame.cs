@@ -529,7 +529,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (IsObstacle(_engine.Field, c))
             {
                 var cell = c;
-                items.Add((_proj.CellCenter(cell).Y, 0, () => DrawRock(cell)));
+                items.Add((_proj.CellCenter(cell).Y, 0, () => DrawObstacle(cell)));
             }
 
         foreach (var f in _engine.Fighters.Where(x => x.IsAlive))
@@ -542,9 +542,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             it.draw();
     }
 
-    private void DrawRock(CellCoord c)
+    private void DrawObstacle(CellCoord c)
     {
         var center = _proj.CellCenter(c);
+        if (_engine.Field.TileAt(c) == TileKind.Tree)
+        {
+            var tree = _sprites.Get("tile_tree");
+            if (tree != null) { DrawSpriteFeet(tree, center, Color.White, TileH + 40); return; }
+            DrawProceduralTree(center);
+            return;
+        }
         var rock = _sprites.Get("tile_rock");
         if (rock != null)
         {
@@ -555,6 +562,17 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.DiscAt(_sb, center + new Vector2(0, -5), 12, Palette.Obstacle);
         _prim.DiscAt(_sb, center + new Vector2(0, -9), 9, Palette.ObstacleTop);
         _prim.DiscAt(_sb, center + new Vector2(-4, -12), 4, new Color(150, 136, 120));
+    }
+
+    // Fallback vector tree when no tile_tree sprite is present: shadow, trunk, three foliage tiers.
+    private void DrawProceduralTree(Vector2 center)
+    {
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 11, Palette.Shadow);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 3, (int)center.Y - 22, 6, 24), new Color(96, 66, 42));
+        _prim.DiscAt(_sb, center + new Vector2(0, -22), 12, new Color(52, 104, 60));
+        _prim.DiscAt(_sb, center + new Vector2(0, -32), 11, new Color(64, 122, 70));
+        _prim.DiscAt(_sb, center + new Vector2(0, -42), 9, new Color(78, 140, 84));
+        _prim.DiscAt(_sb, center + new Vector2(-3, -44), 4, new Color(96, 160, 100));
     }
 
     private const float AnimFps = 10f;

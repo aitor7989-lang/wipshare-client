@@ -119,6 +119,23 @@ def iso_tile(base, edge):
     return img
 
 
+def tree_tile():
+    img = Image.new("RGBA", (64, 72), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    cx = 32
+    # ground shadow
+    d.ellipse([16, 60, 48, 70], fill=(0, 0, 0, 70))
+    # trunk
+    d.rectangle([cx - 4, 44, cx + 4, 64], fill=OUTLINE + (255,))
+    d.rectangle([cx - 3, 44, cx + 3, 63], fill=(96, 66, 42, 255))
+    # layered foliage (three tiers, darker at the base)
+    for (yy, r, col) in [(40, 20, (52, 104, 60)), (28, 18, (64, 122, 70)), (16, 15, (78, 140, 84))]:
+        d.ellipse([cx - r - 1, yy - r - 1, cx + r + 1, yy + r + 1], fill=OUTLINE + (255,))
+        d.ellipse([cx - r, yy - r, cx + r, yy + r], fill=col + (255,))
+        d.ellipse([cx - r + 3, yy - r + 2, cx + r - 6, yy - 2], fill=shade(col, 1.2) + (150,))
+    return img
+
+
 def rock_tile():
     img = Image.new("RGBA", (64, 56), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
@@ -159,4 +176,5 @@ iso_tile((78, 120, 78), (54, 86, 56)).save(os.path.join(OUT, "tile_grass.png"))
 iso_tile((92, 116, 74), (62, 84, 52)).save(os.path.join(OUT, "tile_grass2.png"))
 iso_tile((132, 104, 74), (96, 74, 52)).save(os.path.join(OUT, "tile_dirt.png"))
 rock_tile().save(os.path.join(OUT, "tile_rock.png"))
+tree_tile().save(os.path.join(OUT, "tile_tree.png"))
 print("tiles written; done ->", OUT)

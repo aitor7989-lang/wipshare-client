@@ -28,11 +28,14 @@ JSON, then the embedded default):
   a `kind` property, else the tileset's name (contains "water" → water, "rock"/"wall" → rock, …).
   Spawns are point objects whose Class/Type/Name is `player` or a mob kind (`boar`/`gobball`/`piou`).
 - **JSON ASCII grid** (`maps/incarnam.json`) — a compact `rows` array; chars: `.`grass `,`grass2
-  `d`dirt `#`rock `o`void `w`water `P`player `s`start-cell, digits = mob spawns via a legend.
+  `d`dirt `p`path `#`rock `T`tree `o`void `w`water `P`player `s`start-cell, digits = mob spawns
+  via a legend.
 
-Tile kinds `water` and `void` are non-walkable but you can see (and shoot) across them; water is
-drawn in the game's own isometric style. Third-party tileset art is **not** bundled — point the
-renderer at your own licensed tiles locally via the `assets/` folder.
+Obstacles come in two flavours that both block movement **and** line of sight: `#` rock (a low
+mound) and `T` tree (a taller prop) — use them for tactical cover and chokepoints. Tile kinds
+`water` and `void` are non-walkable but you can see (and shoot) across them; water is drawn in the
+game's own isometric style. Third-party tileset art is **not** bundled — point the renderer at
+your own licensed tiles locally via the `assets/` folder.
 
 ## Using your own art (sprite pipeline)
 

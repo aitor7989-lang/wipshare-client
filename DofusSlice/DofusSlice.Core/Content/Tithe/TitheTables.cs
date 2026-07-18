@@ -91,7 +91,24 @@ public static class TitheTables
       { "key": "piper_gift", "name": "Piper's Gift", "ap": 3, "min": 1, "max": 4, "los": true, "castsPerTurn": 1,
         "effects": [ { "kind": "grant_ap", "min": 2 } ] },
       { "key": "sexton_smash", "name": "Sexton's Toll", "ap": 5, "min": 1, "max": 1, "los": true, "cooldown": 2,
-        "effects": [ { "kind": "damage", "element": "earth", "min": 22, "max": 32 }, { "kind": "push", "cells": 2 } ] }
+        "effects": [ { "kind": "damage", "element": "earth", "min": 22, "max": 32 }, { "kind": "push", "cells": 2 } ] },
+      { "key": "seize", "name": "Seize", "ap": 3, "min": 1, "max": 1, "los": true, "cooldown": 1,
+        "effects": [ { "kind": "damage", "element": "earth", "min": 8, "max": 12 }, { "kind": "status", "status": "seized", "mag": 0, "turns": 1 } ] }
+    ]
+    """;
+
+    // The essence catalog (Bible §6.5): each mob's rare drop is a consumable that teaches its
+    // signature skill to ONE chosen unit, filling one of two campaign-permanent essence slots.
+    // Learning is consumption; essences never check class — a bad fit is allowed and wasted.
+    public const string EssencesJson = """
+    [
+      { "name": "Seize",         "skill": "seize",           "blurb": "The husk's grip: a rooting strike." },
+      { "name": "Marrow Spit",   "skill": "marrow_spit",     "blurb": "The spitter's ranged bile." },
+      { "name": "Pounce",        "skill": "grave_bite",      "blurb": "The hound's lunging bite." },
+      { "name": "Ironhide",      "skill": "warden_ironhide", "blurb": "The warden's self-shield." },
+      { "name": "Sap",           "skill": "mite_sap",        "blurb": "The mite's leeching sting." },
+      { "name": "Piper's Gift",  "skill": "piper_gift",      "blurb": "The piper's gift of action." },
+      { "name": "Sexton's Toll", "skill": "sexton_smash",    "blurb": "The keeper's crushing toll." }
     ]
     """;
 

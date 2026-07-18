@@ -315,6 +315,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 a.Add((w != null ? $"TREAT {w.Name.ToUpperInvariant()}'S WOUNDS  ({P.Draught}g)" : "NO ONE IS WOUNDED",
                        w != null && (_campaign.Draughts > 0 || _campaign.Gold >= P.Draught),
                        () => { if (_campaign.Draughts == 0) _campaign.BuyDraught(); if (w != null) _campaign.TreatWounded(w); }));
+                // Essence consumption (Bible §6.5): teach the first held essence's skill to a unit
+                // with a free slot. Learning is consumption; the slot is campaign-permanent.
+                if (_campaign.Essences.Count > 0)
+                {
+                    string ess = _campaign.Essences[0];
+                    foreach (var u in _campaign.Crew.Where(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(ess)).Take(3))
+                        a.Add(($"TEACH {ess.ToUpperInvariant()} TO {u.Name.ToUpperInvariant()}  ({u.EssenceSlots.Count}/{CampaignUnit.MaxEssenceSlots} slots)",
+                               true, () => _campaign.TeachEssence(u, ess)));
+                }
                 break;
             default: // the Hiring Post
                 int lvl = Math.Max(1, _campaign.Avatar?.Level ?? 1);
@@ -1682,6 +1691,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 int set = TitheContent.SetPiecesEquipped(u, TitheContent.GraveyardSet);
                 if (set > 0) sheet += $"   ADV {set}/7";
             }
+            if (u.EssenceSlots.Count > 0)
+                sheet += "   [" + string.Join(" + ", u.EssenceSlots.Select(e => e.ToUpperInvariant())) + "]";
             _font.Draw(_sb, sheet, x + 22, y + 15, 1, Palette.TextDim);
             y += 34;
         }

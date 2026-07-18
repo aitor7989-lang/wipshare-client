@@ -22,6 +22,13 @@ public sealed class CampaignUnit
     /// The unit's effective stats fold these in via <see cref="TitheContent.StatsOf"/>.</summary>
     public List<string> Equipment { get; init; } = new();
 
+    /// <summary>Consumed essences (Bible §6.5): two campaign-permanent slots. Each adds its skill
+    /// to this unit's combat kit; essences never check class — a bad fit is allowed and wasted.</summary>
+    public List<string> EssenceSlots { get; init; } = new();
+
+    public const int MaxEssenceSlots = 2;
+    public bool HasFreeEssenceSlot => EssenceSlots.Count < MaxEssenceSlots;
+
     /// <summary>
     /// Cumulative XP to reach each level, index = level — the classic Dofus 1.29 table, levels
     /// 1–20 (Bible §6.3: adopt the 1.29 curve verbatim; cross-check against an emulator dump in
@@ -137,6 +144,21 @@ public sealed class Campaign
     {
         if (!Essences.Remove(essence)) return false;
         Gold += TitheContent.Prices.EssenceSell;
+        return true;
+    }
+
+    /// <summary>
+    /// Consume a held essence to teach its skill to a unit (Bible §6.5): learning IS consumption,
+    /// the slot is campaign-permanent, and no class check is made — a wasted fit is the player's
+    /// to commit to. Fails if the unit's two slots are full, it already knows this essence, or the
+    /// essence is unknown/not held.
+    /// </summary>
+    public bool TeachEssence(CampaignUnit u, string essence)
+    {
+        if (!u.HasFreeEssenceSlot || u.EssenceSlots.Contains(essence)) return false;
+        if (TitheContent.EssenceSkill(essence) == null || !Essences.Contains(essence)) return false;
+        Essences.Remove(essence);
+        u.EssenceSlots.Add(essence);
         return true;
     }
 

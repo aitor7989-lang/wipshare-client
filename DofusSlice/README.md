@@ -127,6 +127,17 @@ leveled to 12               12   53   74    0   10   12   0/7  31-41
 + full Adventurer set       12  166  115   22   35   31   7/7  42-56
 ```
 
+…and the 7-piece bonus grants **+1 MP**, the classic Adventurer full-set reward. Levels follow the
+**actual 1.29 cumulative XP table** (110 / 650 / 1,500 / 2,800…), paired with Dofus-band per-mob XP
+(gold is decoupled so the economy is untouched).
+
+**Essences** (Bible §6.5) are the spellbook: each mob rarely drops its essence, and the **Temple
+Sister** consumes one to teach that mob's signature skill to a unit of your choice — **two
+campaign-permanent slots** per unit, no class check, bad fits allowed and wasted. Teach your Fire
+Cannon *Ironhide* and *Pounce* and its watched combat kit becomes `Ruin Bolt, Ironhide, Grave
+Bite`. Selling an essence is always possible — but the stand-in city AI never sells what someone
+could learn.
+
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.
 **Graveyard:** click a cell to move; click a pack (or **1–6**) to walk over and fight it; walk to the
 Crypt to face the Sexton at level 3; the bell ejects you when it tolls.

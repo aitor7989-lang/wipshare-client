@@ -47,10 +47,13 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       (real mined table + per-mob XP must land together, §9), GearWeight values all
       damage stats + Power. (Bible defers elements, but the owner asked to get as
       close to Dofus as possible — elements are core Dofus.)
-- [ ] **2. Essence system (Dofus spellbook, M4 core).** Essences already drop as
-      string tags; make each map to a learnable skill. 2 permanent slots per unit;
-      consuming in the city teaches the skill; a unit's combat spell list = class
-      skill + learned essences. Wrong-class fits allowed and wasted (Bible §6.5).
+- [x] **2. Essence system (Dofus spellbook, M4 core).** DONE. EssencesJson catalog
+      maps each essence to its mob's signature skill (+ new "seize" root skill for
+      the Husk's essence); CampaignUnit.EssenceSlots (2, campaign-permanent);
+      Campaign.TeachEssence (consumption, no class check); combat kit = class
+      skills + taught skills; Temple Sister UI action; sim city AI teaches avatar-
+      first; HUD shows learned essences. Temple exclusives (Blood Pact, Blink) and
+      paid essence removal still open — fold into item 6 (Temple services).
 - [ ] **3. Critical hits + spell ranks.** `SpellDef` already carries crit fields;
       wire `CriticalChanceOneIn`/`CriticalBonus` into `ComputeDamage` (it currently
       hardcodes +50%). Spell points on level-up buy ranks that change shape/economy.
@@ -82,3 +85,11 @@ dotnet run --project DofusSlice.Sim campaign survey 40
   (essence system — consume to learn skills, 2 slots).
 - M5 note: real 1.29 XP table must arrive TOGETHER with rescaled per-mob XP
   values (current mob XP is tiny; the real curve alone would stall leveling).
+- 2026-07-18 (later still): Upgrades landed — real 1.29 XP table + Dofus-band mob
+  XP (gold decoupled via mob "gold" column; pacing verified L3≈3 dives, L5 by 12)
+  and the +1 MP Adventurer full-set bonus (ap/mp plumbed through gear). Then item
+  2 (essences) done and verified: progression demo shows the kit growing (Ruin
+  Bolt + Ironhide + Grave Bite), campaign log shows drops→teaching in the loop.
+  Survey: greedy had its FIRST survivor (39/40 wipes) — gear + learned skills give
+  deep gambles a sliver of hope; keep an eye on it in M5. Next: item 3 (crit
+  wiring per-1.29-data + spell ranks) or item 4 (city equip screen).

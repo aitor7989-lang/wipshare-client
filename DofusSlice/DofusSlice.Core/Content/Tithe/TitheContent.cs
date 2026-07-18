@@ -199,6 +199,21 @@ public static class TitheContent
     /// <summary>The Graveyard's one starter panoply (Bible §5): the set its mobs and the Sexton drop.</summary>
     public const string GraveyardSet = "adventurer";
 
+    // ----- Essences (Bible §6.5): consumables that teach their mob's signature skill -----
+
+    public sealed record EssenceDto(string Name, string Skill, string? Blurb);
+    private static Dictionary<string, EssenceDto>? _essences;
+    private static Dictionary<string, EssenceDto> EssenceRows => _essences ??=
+        JsonSerializer.Deserialize<EssenceDto[]>(TitheTables.EssencesJson, J)!.ToDictionary(e => e.Name);
+
+    /// <summary>The skill an essence teaches when consumed, or null for an unknown essence.</summary>
+    public static string? EssenceSkill(string essence) =>
+        EssenceRows.TryGetValue(essence, out var e) ? e.Skill : null;
+
+    /// <summary>Display name of the skill an essence teaches (for shop rows and toasts).</summary>
+    public static string EssenceSkillName(string essence) =>
+        EssenceSkill(essence) is { } key && Skills.TryGetValue(key, out var s) ? s.Name : essence;
+
     public static ItemDto? Item(string itemId) => Items.TryGetValue(itemId, out var i) ? i : null;
     public static string ItemName(string itemId) => Item(itemId)?.Name ?? itemId;
     public static string ItemSlot(string itemId) => Item(itemId)?.Slot ?? "";
@@ -313,7 +328,10 @@ public static class TitheContent
             Strength = s.Strength, Intelligence = s.Intelligence, Chance = s.Chance,
             Agility = s.Agility, Wisdom = s.Wisdom, Power = s.Power, Initiative = s.Initiative,
             Level = u.Level, Xp = u.Xp,
-            Pos = pos, Spells = SkillsFor(c.Skills),
+            Pos = pos,
+            // Combat kit = class skills + everything taught by consumed essences (Bible §6.5).
+            Spells = SkillsFor(c.Skills.Concat(
+                u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>())),
         };
     }
 

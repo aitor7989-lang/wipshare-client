@@ -81,10 +81,20 @@ public static class CampaignSim
             if (c.TreatWounded(u)) log.Add($"treated {u.Name}'s wounds");
         }
 
-        // 3. Restock Hard Bread — it mends the party between fights on the dive.
+        // 3. Consume essences (Bible §6.5): teach each held essence to the first unit with a free
+        //    slot, avatar first — the stand-in never sells what it can learn.
+        foreach (var ess in c.Essences.ToList())
+        {
+            var learner = c.Crew.OrderByDescending(u => u.IsAvatar)
+                .FirstOrDefault(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(ess));
+            if (learner != null && c.TeachEssence(learner, ess))
+                log.Add($"{learner.Name} consumed {ess} (learned {TitheContent.EssenceSkillName(ess)})");
+        }
+
+        // 4. Restock Hard Bread — it mends the party between fights on the dive.
         while (c.Bread < 5 && c.Gold >= TitheContent.Prices.HardBread + 60) c.BuyBread();
 
-        // 4. Fill the party to three if a hire is affordable, keeping a small reserve.
+        // 5. Fill the party to three if a hire is affordable, keeping a small reserve.
         while (c.Crew.Count < 3)
         {
             int level = Math.Max(1, c.Avatar!.Level);
@@ -202,6 +212,14 @@ public static class CampaignSim
         Console.WriteLine($"\n  Full kit vs fresh L1: +{final.MaxHp - TitheContent.ClassMaxHp("cannon")} HP, "
             + $"{elem} damage stat {dmg0} → {dmgNow} (its spells hit ~{dmgLift}% harder than a naked L1)"
             + (final.MpBonus > 0 ? $", and the full set grants +{final.MpBonus} MP — the screaming find." : "."));
+
+        // Essences (Bible §6.5): consume two — learning is permanent, and the combat kit grows.
+        c.Essences.AddRange(new[] { "Ironhide", "Pounce" });
+        c.TeachEssence(avatar, "Ironhide");
+        c.TeachEssence(avatar, "Pounce");
+        var fighter = TitheContent.MakeCrewMember(avatar, new DofusSlice.Core.Grid.CellCoord(0, 0));
+        Console.WriteLine($"  Essences consumed: {string.Join(" + ", avatar.EssenceSlots)}  →  combat kit: "
+            + string.Join(", ", fighter.Spells.Select(sp => sp.Name)));
         return 0;
     }
 

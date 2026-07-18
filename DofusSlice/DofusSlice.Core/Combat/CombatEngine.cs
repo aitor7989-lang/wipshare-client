@@ -221,6 +221,21 @@ public sealed class CombatEngine
         return cells;
     }
 
+    /// <summary>
+    /// Estimated (non-crit) damage range a spell would deal to whatever stands on the target
+    /// cell, given the caster's stats/buffs and the victim's resistances — for a hover preview.
+    /// Returns null if there's no damage effect or no fighter there.
+    /// </summary>
+    public (int min, int max)? EstimateDamage(Fighter caster, SpellDef spell, CellCoord target)
+    {
+        var victim = FighterAt(target);
+        if (victim == null) return null;
+        var dmg = spell.Effects.FirstOrDefault(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal);
+        if (dmg == null) return null;
+        return (ComputeDamage(caster, victim, dmg.Element, dmg.Min, false),
+                ComputeDamage(caster, victim, dmg.Element, dmg.Max, false));
+    }
+
     public List<CellCoord> AreaCells(SpellDef spell, CellCoord impact, CellCoord fromPos) =>
         spell.Area.CellsAround(impact, StepToward(fromPos, impact)).Where(Field.InBounds).ToList();
 

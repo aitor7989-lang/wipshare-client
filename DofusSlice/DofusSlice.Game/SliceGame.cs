@@ -374,8 +374,14 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         bool playerTurn = _engine.Current.Team == Team.Player && hero != null;
 
         if (playerTurn && _selectedSpell < 0)
+        {
             foreach (var cell in _moveRange.Keys)
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.MoveRange);
+
+            // Hover preview: MP cost to reach the hovered cell.
+            if (_moveRange.TryGetValue(_hover, out int cost))
+                DrawCellLabel($"{cost} MP", _hover, Palette.MpPip);
+        }
 
         if (playerTurn && _selectedSpell >= 0)
         {
@@ -388,12 +394,27 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastRange);
 
             if (castable.Contains(_hover))
+            {
                 foreach (var cell in _engine.AreaCells(spell, _hover, hero!.Pos))
                     _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.Aoe);
+
+                // Hover preview: estimated damage to the target on the hovered cell.
+                if (_engine.EstimateDamage(hero!, spell, _hover) is (int min, int max))
+                    DrawCellLabel(min == max ? $"{min}" : $"{min}-{max}", _hover, new Color(255, 210, 120));
+            }
         }
 
         if (_engine.Field.InBounds(_hover) && _hover.Y >= 0)
             DrawTileOutline(_proj.CellCenter(_hover), Color.White);
+    }
+
+    /// <summary>Draw a small centered label floating just above a cell (world space).</summary>
+    private void DrawCellLabel(string text, CellCoord cell, Color color)
+    {
+        var p = _proj.CellCenter(cell) + new Vector2(0, -26);
+        int w = _font.Measure(text, 2);
+        _prim.FillRect(_sb, new Rectangle((int)p.X - w / 2 - 3, (int)p.Y - 2, w + 6, 15), new Color(0, 0, 0, 170));
+        _font.DrawCentered(_sb, text, (int)p.X, (int)p.Y, 2, color);
     }
 
     /// <summary>

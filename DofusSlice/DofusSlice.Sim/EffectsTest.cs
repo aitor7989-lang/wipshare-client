@@ -24,6 +24,7 @@ public static class EffectsTest
         Regen();
         LineAoe();
         Tackle();
+        DamagePreview();
         MapHardening();
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed.");
@@ -165,6 +166,19 @@ public static class EffectsTest
         eng.TryMove(c, new(2, 6)); // flee out of melee
         Check("Tackle", c.CurrentMp < mpAfterMoveIfUnlocked && c.CurrentAp < c.BaseAp,
             $"lost AP/MP leaving melee (AP {c.CurrentAp}/{c.BaseAp}, MP {c.CurrentMp})");
+    }
+
+    private static void DamagePreview()
+    {
+        var spell = Spell(10, "Poke", 3, 1, 8, SpellEffect.Damage(Element.Neutral, 20, 30));
+        var c = Caster(new(2, 4), spell);
+        var t = Foe("t", new(5, 4));
+        var eng = Engine(c, t);
+        var est = eng.EstimateDamage(c, spell, new(5, 4));
+        bool ok = est is (int min, int max) && min > 0 && min <= max;
+        var empty = eng.EstimateDamage(c, spell, new(8, 8)); // no target there
+        Check("Damage preview", ok && empty is null,
+            $"estimate {est?.min}-{est?.max} on target, null on empty cell");
     }
 
     private static void MapHardening()

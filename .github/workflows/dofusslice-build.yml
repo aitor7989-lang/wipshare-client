@@ -1,0 +1,36 @@
+name: DofusSlice Windows build
+
+# Builds a self-contained Windows package of the Dofus Slice game and uploads it as a
+# downloadable artifact. No .NET install needed to run the result — unzip and double-click
+# DofusSlice.Game.exe. Trigger manually (Actions tab -> Run workflow) or on push to the branch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "claude/dofus-engine-vertical-slice-7ijlfm" ]
+    paths:
+      - "DofusSlice/**"
+      - ".github/workflows/dofusslice-build.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish DofusSlice/DofusSlice.Game/DofusSlice.Game.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=false
+          -o publish
+
+      - name: Upload playable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: DofusSlice-windows
+          path: publish

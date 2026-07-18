@@ -33,17 +33,27 @@ third-party assets ending up in the repo. Cell colours follow the usual tactical
 
 ## Running it
 
-Requires the .NET 8 SDK.
+### Easiest — download the prebuilt Windows game (no .NET needed)
+1. On GitHub, open the **Actions** tab → the **"DofusSlice Windows build"** workflow → the most
+   recent run (or click **Run workflow** to start one).
+2. Download the **`DofusSlice-windows`** artifact and unzip it.
+3. Double-click **`DofusSlice.Game.exe`**.
 
+The build is self-contained (bundles the .NET runtime, MonoGame, SDL, the sprites and maps),
+so it runs on a stock Windows PC with nothing installed.
+
+### From source (needs the .NET 8 SDK — Windows / macOS / Linux)
 ```bash
 cd DofusSlice
+./run.sh                                 # macOS / Linux  (run.bat on Windows)
+# or directly:
 dotnet run --project DofusSlice.Game     # the playable window (MonoGame DesktopGL)
 dotnet run --project DofusSlice.Sim      # headless auto-played fight, prints the turn log
-dotnet run --project DofusSlice.Sim 42   # ...with a specific RNG seed
+dotnet run --project DofusSlice.Sim effects   # combat-mechanics self-test
 ```
 
-MonoGame DesktopGL is cross-platform (Windows / macOS / Linux via OpenGL). No content
-pipeline and no asset files are needed — everything is generated at load time.
+Get the SDK with `winget install Microsoft.DotNet.SDK.8` (Windows) or `brew install dotnet-sdk`
+(macOS). No content pipeline and no external asset files are required.
 
 ## Controls
 

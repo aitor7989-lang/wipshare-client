@@ -29,6 +29,13 @@ public sealed class CampaignUnit
     public const int MaxEssenceSlots = 2;
     public bool HasFreeEssenceSlot => EssenceSlots.Count < MaxEssenceSlots;
 
+    /// <summary>Unspent spell points (Bible §6.3: +1 per level; ranks change shape/economics).</summary>
+    public int SpellPoints { get; set; }
+
+    /// <summary>Bought spell ranks, key → rank (absent = rank 1).</summary>
+    public Dictionary<string, int> SpellRanks { get; init; } = new();
+    public int RankOf(string skill) => SpellRanks.TryGetValue(skill, out int r) ? r : 1;
+
     /// <summary>
     /// Cumulative XP to reach each level, index = level — the classic Dofus 1.29 table, levels
     /// 1–20 (Bible §6.3: adopt the 1.29 curve verbatim; cross-check against an emulator dump in
@@ -53,7 +60,11 @@ public sealed class CampaignUnit
     public void GainXp(int xp)
     {
         Xp += Math.Max(0, xp);
-        while (Xp >= XpForNextLevel(Level)) { Xp -= XpForNextLevel(Level); Level++; }
+        while (Xp >= XpForNextLevel(Level))
+        {
+            Xp -= XpForNextLevel(Level); Level++;
+            SpellPoints++; // 1.29: one spell point per level (Bible §6.3)
+        }
     }
 }
 
@@ -136,7 +147,9 @@ public sealed class Campaign
         int price = HirePrice(level);
         if (Gold < price) return false;
         Gold -= price;
-        Crew.Add(new CampaignUnit { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level });
+        // A hire arrives with its level's banked spell points (auto-spent by its class template).
+        Crew.Add(new CampaignUnit
+        { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level, SpellPoints = level - 1 });
         return true;
     }
 

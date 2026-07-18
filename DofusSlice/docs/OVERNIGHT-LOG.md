@@ -54,9 +54,18 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       skills + taught skills; Temple Sister UI action; sim city AI teaches avatar-
       first; HUD shows learned essences. Temple exclusives (Blood Pact, Blink) and
       paid essence removal still open — fold into item 6 (Temple services).
-- [ ] **3. Critical hits + spell ranks.** `SpellDef` already carries crit fields;
-      wire `CriticalChanceOneIn`/`CriticalBonus` into `ComputeDamage` (it currently
-      hardcodes +50%). Spell points on level-up buy ranks that change shape/economy.
+- [x] **3. Spell ranks.** DONE (ranks half): +1 spell point per level (1.29),
+      `"ranks"` rows in SkillsJson as cumulative shape/economics overrides (Ruin
+      Bolt II range 7, III costs 3 AP; Piercing Shot II min-range 3, III 2 AP;
+      Slam II reach 2, III 3 AP), BuildSkill(key, rank) with stable engine ids,
+      AutoSpendSpellPoints by class template (signature → essences) hooked into
+      ApplyResult + CityPrep; hires arrive with level-1 banked points. Crit half
+      DEFERRED ON PURPOSE: the bible excludes crits from the prototype and no
+      TITHE skill crits — rewiring CriticalBonus now is dead code + risks the
+      Dofus-slice tests. Revisit if crits enter the data.
+      BALANCE NOTE: survey greedy went 100% wipes → 83% (avg 8.8 dives) — gear +
+      essences + ranks give deep gambles a real chance. Cautious still 0% risk;
+      M5 must add risk to cautious play, not nerf greedy hope.
 - [ ] **4. City inventory & equip screen.** View the stash, equip/unequip per unit
       with stat deltas, manual characteristic spend for the avatar (Bible §6.13).
 - [ ] **5. More skills per class + AI use.** Give each class/mob 2–3 skills with AI

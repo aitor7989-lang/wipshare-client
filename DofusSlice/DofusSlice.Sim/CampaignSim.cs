@@ -94,7 +94,10 @@ public static class CampaignSim
         // 4. Restock Hard Bread — it mends the party between fights on the dive.
         while (c.Bread < 5 && c.Gold >= TitheContent.Prices.HardBread + 60) c.BuyBread();
 
-        // 5. Fill the party to three if a hire is affordable, keeping a small reserve.
+        // 5. Spend banked spell points by the class template (also covers essence skills just taught).
+        foreach (var u in c.Crew) log.AddRange(TitheContent.AutoSpendSpellPoints(u));
+
+        // 6. Fill the party to three if a hire is affordable, keeping a small reserve.
         while (c.Crew.Count < 3)
         {
             int level = Math.Max(1, c.Avatar!.Level);
@@ -217,9 +220,15 @@ public static class CampaignSim
         c.Essences.AddRange(new[] { "Ironhide", "Pounce" });
         c.TeachEssence(avatar, "Ironhide");
         c.TeachEssence(avatar, "Pounce");
+
+        // Spell points (Bible §6.3): +1 per level, auto-spent by the class template. Ranks change
+        // shape/economics — Ruin Bolt III reaches further AND costs 3 AP (two casts a turn).
+        var ranked = TitheContent.AutoSpendSpellPoints(avatar);
         var fighter = TitheContent.MakeCrewMember(avatar, new DofusSlice.Core.Grid.CellCoord(0, 0));
-        Console.WriteLine($"  Essences consumed: {string.Join(" + ", avatar.EssenceSlots)}  →  combat kit: "
-            + string.Join(", ", fighter.Spells.Select(sp => sp.Name)));
+        Console.WriteLine($"  Essences consumed: {string.Join(" + ", avatar.EssenceSlots)}; "
+            + $"{ranked.Count} spell rank(s) bought ({avatar.SpellPoints} points banked)");
+        Console.WriteLine("  Combat kit: " + string.Join(", ",
+            fighter.Spells.Select(sp => $"{sp.Name} (AP{sp.ApCost}, {sp.MinRange}-{sp.MaxRange})")));
         return 0;
     }
 

@@ -70,13 +70,20 @@ public static class TitheTables
 
     // Few skills, simple skills, tactical limits (Bible §3.1.2). effects use the engine's closed
     // set; cooldown / castsPerTurn exercise the Dofus limit fields.
+    //
+    // "ranks" are the Dofus spell levels (Bible §6.3: 1 spell point per level buys ranks; a rank
+    // changes ECONOMICS or SHAPE, never just damage). Each row is a cumulative override on the
+    // previous rank — rank 2 is the first row, rank 3 the second.
     public const string SkillsJson = """
     [
       { "key": "piercing_shot", "name": "Piercing Shot", "ap": 3, "min": 4, "max": 8, "los": true,
+        "ranks": [ { "min": 3 }, { "ap": 2 } ],
         "effects": [ { "kind": "damage", "element": "air", "min": 11, "max": 16 } ] },
       { "key": "slam", "name": "Slam", "ap": 4, "min": 1, "max": 1, "los": true,
+        "ranks": [ { "max": 2 }, { "ap": 3 } ],
         "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 }, { "kind": "push", "cells": 1 } ] },
       { "key": "ruin_bolt", "name": "Ruin Bolt", "ap": 4, "min": 3, "max": 6, "los": true,
+        "ranks": [ { "max": 7 }, { "ap": 3 } ],
         "effects": [ { "kind": "damage", "element": "fire", "min": 18, "max": 24 } ] },
       { "key": "husk_strike", "name": "Husk Strike", "ap": 3, "min": 1, "max": 1, "los": true,
         "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 } ] },

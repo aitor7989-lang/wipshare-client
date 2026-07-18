@@ -126,6 +126,7 @@ public sealed class DiveSession
                 var cu = _campaign.Crew.FirstOrDefault(x => x.Id == u.Id);
                 if (cu == null) continue;
                 cu.GainXp(u.XpGained);
+                TitheContent.AutoSpendSpellPoints(cu); // ranks buy themselves until the spend screen ships
                 if (u.Died) { _campaign.Crew.Remove(cu); lost.Add(cu.Name); continue; }
                 cu.CurrentHp = engine.Fighters.First(f => f.Id == u.Id).Hp; // carry damage into the next fight
                 if (u.Wounded) { cu.Wounded = true; wounded.Add(cu.Name); }

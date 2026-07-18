@@ -19,8 +19,9 @@ public static class TitheContent
 
     private sealed record EffectDto(string Kind, string? Element, int Min, int Max, int Cells,
                                     string? Status, int Mag, int Turns);
+    private sealed record RankDto(int? Ap, int? Min, int? Max, int? Cooldown, int? CastsPerTurn);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
-                                   int Cooldown, int CastsPerTurn, EffectDto[] Effects);
+                                   int Cooldown, int CastsPerTurn, RankDto[]? Ranks, EffectDto[] Effects);
     private sealed record GrowthDto(int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom);
     private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, string? Element, int BaseHp, int Ap, int Mp,
                                    int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom, int Initiative,
@@ -81,21 +82,73 @@ public static class TitheContent
     public static string Blurb(string classId) => Classes.TryGetValue(classId, out var c) ? c.Blurb ?? "" : "";
     public static AiPolicy ClassPolicyOf(string classId) => ParsePolicy(Classes[classId].Policy);
 
+    private static Dictionary<string, SkillDto>? _skillRows;
+    private static Dictionary<string, SkillDto> SkillRows => _skillRows ??=
+        JsonSerializer.Deserialize<SkillDto[]>(TitheTables.SkillsJson, J)!.ToDictionary(s => s.Key);
+    private static readonly Dictionary<string, int> SkillIds = new(); // key -> stable engine id
+
     private static Dictionary<string, SpellDef> LoadSkills()
     {
-        var rows = JsonSerializer.Deserialize<SkillDto[]>(TitheTables.SkillsJson, J)!;
         var map = new Dictionary<string, SpellDef>();
-        int id = 100; // ids are engine bookkeeping (cooldowns/cast-caps); keys are how data refers to them
-        foreach (var s in rows)
-            map[s.Key] = new SpellDef
-            {
-                Id = id++, Name = s.Name, ApCost = s.Ap, MinRange = s.Min, MaxRange = s.Max,
-                RequiresLineOfSight = s.Los, NeedsTarget = true,
-                Cooldown = s.Cooldown,
-                MaxCastsPerTurn = s.CastsPerTurn > 0 ? s.CastsPerTurn : int.MaxValue,
-                Effects = s.Effects.Select(ToEffect).ToArray(),
-            };
+        foreach (var key in SkillRows.Keys) map[key] = BuildSkill(key, 1);
         return map;
+    }
+
+    private static int IdFor(string key)
+    {
+        // Ids are engine bookkeeping (cooldowns/cast-caps) and must be stable across ranks of the
+        // same skill so a rank-up doesn't reset its cooldown identity.
+        if (!SkillIds.TryGetValue(key, out int id)) SkillIds[key] = id = 100 + SkillIds.Count;
+        return id;
+    }
+
+    /// <summary>Build a skill at a rank: each rank row is a cumulative override (Dofus spell levels).</summary>
+    private static SpellDef BuildSkill(string key, int rank)
+    {
+        var s = SkillRows[key];
+        int ap = s.Ap, min = s.Min, max = s.Max, cd = s.Cooldown, cpt = s.CastsPerTurn;
+        for (int r = 2; r <= rank && s.Ranks != null && r - 2 < s.Ranks.Length; r++)
+        {
+            var o = s.Ranks[r - 2];
+            ap = o.Ap ?? ap; min = o.Min ?? min; max = o.Max ?? max;
+            cd = o.Cooldown ?? cd; cpt = o.CastsPerTurn ?? cpt;
+        }
+        return new SpellDef
+        {
+            Id = IdFor(key),
+            Name = s.Name + rank switch { 1 => "", 2 => " II", 3 => " III", _ => $" {rank}" },
+            ApCost = ap, MinRange = min, MaxRange = max,
+            RequiresLineOfSight = s.Los, NeedsTarget = true,
+            Cooldown = cd,
+            MaxCastsPerTurn = cpt > 0 ? cpt : int.MaxValue,
+            Effects = s.Effects.Select(ToEffect).ToArray(),
+        };
+    }
+
+    /// <summary>Highest buyable rank of a skill (1 + its authored rank rows).</summary>
+    public static int MaxRank(string key) =>
+        SkillRows.TryGetValue(key, out var s) ? 1 + (s.Ranks?.Length ?? 0) : 1;
+
+    /// <summary>
+    /// Spend a unit's banked spell points by the class template (Bible §6.3: 1 point per level;
+    /// mercs auto-spend, the avatar too until the manual spend screen ships): signature skills
+    /// first, then taught essence skills, each to its max authored rank. Returns "ranked up" lines.
+    /// </summary>
+    public static List<string> AutoSpendSpellPoints(CampaignUnit u)
+    {
+        var log = new List<string>();
+        var order = Classes[u.ClassId].Skills
+            .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>());
+        foreach (var key in order)
+        {
+            while (u.SpellPoints > 0 && u.RankOf(key) < MaxRank(key))
+            {
+                u.SpellPoints--;
+                u.SpellRanks[key] = u.RankOf(key) + 1;
+                log.Add($"{u.Name} ranked {BuildSkill(key, u.RankOf(key)).Name}");
+            }
+        }
+        return log;
     }
 
     private static SpellEffect ToEffect(EffectDto e) => e.Kind switch
@@ -329,9 +382,11 @@ public static class TitheContent
             Agility = s.Agility, Wisdom = s.Wisdom, Power = s.Power, Initiative = s.Initiative,
             Level = u.Level, Xp = u.Xp,
             Pos = pos,
-            // Combat kit = class skills + everything taught by consumed essences (Bible §6.5).
-            Spells = SkillsFor(c.Skills.Concat(
-                u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>())),
+            // Combat kit = class skills + everything taught by consumed essences (Bible §6.5),
+            // each at the unit's bought rank (Bible §6.3 spell points).
+            Spells = c.Skills
+                .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>())
+                .Select(k => BuildSkill(k, u.RankOf(k))).ToArray(),
         };
     }
 

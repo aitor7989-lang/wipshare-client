@@ -138,6 +138,14 @@ Cannon *Ironhide* and *Pounce* and its watched combat kit becomes `Ruin Bolt, Ir
 Bite`. Selling an essence is always possible — but the stand-in city AI never sells what someone
 could learn.
 
+**Spell ranks** (Bible §6.3): every level grants **1 spell point**, and points buy ranks that
+change a spell's *economics or shape, never just damage* — Dofus spell levels in miniature. Ranks
+are data (`"ranks"` rows in the skill table, cumulative overrides): Ruin Bolt II reaches 7 cells,
+Ruin Bolt III drops to **3 AP** — two casts a turn on a 7-AP Cannon. Points auto-spend by the
+class template (signature first, then essence skills) until the manual spend screen ships. The
+consequence shows up in the risk data: with gear + essences + ranks, greedy play went from *always
+wipes* to surviving ~9 dives with 17% full runs — deep gambles now have a fighting chance.
+
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.
 **Graveyard:** click a cell to move; click a pack (or **1–6**) to walk over and fight it; walk to the
 Crypt to face the Sexton at level 3; the bell ejects you when it tolls.

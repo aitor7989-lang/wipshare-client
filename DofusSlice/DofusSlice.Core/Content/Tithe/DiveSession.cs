@@ -20,12 +20,12 @@ public sealed class DiveSession
     }
 
     public sealed record FightReport(string PackId, FightOutcome Outcome, int Gold, int Xp,
-                                     IReadOnlyList<string> Drops, IReadOnlyList<string> Lost,
-                                     IReadOnlyList<string> Wounded);
+                                     IReadOnlyList<string> Drops, IReadOnlyList<string> Gear,
+                                     IReadOnlyList<string> Lost, IReadOnlyList<string> Wounded);
 
     public sealed record DiveReport(int PacksCleared, int Gold, int Xp, IReadOnlyList<string> Essences,
-                                    IReadOnlyList<string> Lost, bool CampaignOver, string EndReason,
-                                    IReadOnlyList<FightReport> Fights);
+                                    IReadOnlyList<string> Gear, IReadOnlyList<string> Lost,
+                                    bool CampaignOver, string EndReason, IReadOnlyList<FightReport> Fights);
 
     // Real-time cost estimates so the headless clock paces like the watched game (Bible's 12-min
     // floor; the prototype uses a short clock). Tunable in M5.
@@ -103,6 +103,7 @@ public sealed class DiveSession
         var res = TitheResolution.Resolve(engine);
         var lost = new List<string>();
         var wounded = new List<string>();
+        var gearGot = new List<string>();
 
         if (res.Outcome == FightOutcome.Victory)
         {
@@ -112,6 +113,13 @@ public sealed class DiveSession
             _campaign.Gold += gold;
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;
+
+            // Fold each gear roll into a concrete unowned set piece; the avatar auto-equips upgrades.
+            foreach (var setId in res.GearDrops)
+            {
+                var piece = TitheContent.RandomUnownedPiece(setId, _campaign.OwnsGear, _rng);
+                if (piece != null && _campaign.AddGear(piece)) gearGot.Add(TitheContent.ItemName(piece));
+            }
 
             foreach (var u in res.Units)
             {
@@ -124,13 +132,14 @@ public sealed class DiveSession
             }
 
             if (Clock <= 0) Eject("the bell — clock expired");
-            return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, lost, wounded);
+            return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded);
         }
 
         // A fight lost outright: the whole party is gone. No player-managed unit remains → over.
         foreach (var u in _campaign.DiveParty.ToList()) { _campaign.Crew.Remove(u); lost.Add(u.Name); }
         Eject("the crew fell — campaign over");
-        return new FightReport(pack.Def.Id, res.Outcome, 0, 0, Array.Empty<string>(), lost, Array.Empty<string>());
+        return new FightReport(pack.Def.Id, res.Outcome, 0, 0,
+            Array.Empty<string>(), Array.Empty<string>(), lost, Array.Empty<string>());
     }
 
     /// <summary>Spend Hard Bread to mend the party's most-hurt units before a fight (Bible §4).</summary>
@@ -139,11 +148,11 @@ public sealed class DiveSession
         while (_campaign.Bread > 0)
         {
             var hurt = _campaign.DiveParty
-                .Where(u => (u.CurrentHp ?? int.MaxValue) < TitheContent.ClassMaxHp(u.ClassId))
+                .Where(u => (u.CurrentHp ?? int.MaxValue) < TitheContent.UnitMaxHp(u))
                 .OrderBy(u => u.CurrentHp).FirstOrDefault();
             if (hurt == null) break;
             _campaign.Bread--;
-            int max = TitheContent.ClassMaxHp(hurt.ClassId);
+            int max = TitheContent.UnitMaxHp(hurt);
             hurt.CurrentHp = Math.Min(max, (hurt.CurrentHp ?? max) + TitheContent.Prices.BreadHeal);
         }
     }
@@ -168,6 +177,7 @@ public sealed class DiveSession
         int gold0 = _campaign.Gold, cleared0 = Packs.Count(p => p.Cleared), ess0 = _campaign.Essences.Count;
         var fights = new List<FightReport>();
         var lostAll = new List<string>();
+        var gearAll = new List<string>();
 
         while (!Ended)
         {
@@ -183,11 +193,11 @@ public sealed class DiveSession
                 break;
             }
             var fr = Engage(pack);
-            if (fr != null) { fights.Add(fr); lostAll.AddRange(fr.Lost); }
+            if (fr != null) { fights.Add(fr); lostAll.AddRange(fr.Lost); gearAll.AddRange(fr.Gear); }
         }
 
         return new DiveReport(
             Packs.Count(p => p.Cleared) - cleared0, _campaign.Gold - gold0, XpBanked,
-            _campaign.Essences.Skip(ess0).ToList(), lostAll, _campaign.Over, EndReason, fights);
+            _campaign.Essences.Skip(ess0).ToList(), gearAll, lostAll, _campaign.Over, EndReason, fights);
     }
 }

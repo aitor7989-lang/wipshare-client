@@ -12,45 +12,58 @@ public static class TitheTables
 {
     // Three playable archetypes. policy = how the autobattler flies it (watched, never piloted);
     // passive = a rule hook that changes what you watch happen (Bible §5 class table).
+    //
+    // Stats are the Dofus 1.29 block (Bible §6.2): baseHp is the level-1 body, and each point of
+    // Vitality is +1 max HP (so class HP = baseHp + vitality). Strength is the single active damage
+    // stat (elements deferred), read straight by the base × (100 + Strength)/100 formula. On each
+    // level the class auto-spends 5 characteristic points by its "growth" ratio (Bible §6.2/§6.3
+    // auto-template spending) — Bulwark banks Vitality to tank, Cannon banks Strength to nuke,
+    // Archer splits Strength/Agility. Wisdom feeds the XP bonus and AP/MP-loss resistance.
     public const string ClassesJson = """
     [
-      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "maxHp": 36, "ap": 6, "mp": 4,
-        "strength": 22, "agility": 18, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
+      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "baseHp": 24, "ap": 6, "mp": 4,
+        "vitality": 12, "strength": 22, "agility": 18, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
+        "growth": { "vitality": 1, "strength": 2, "agility": 2 },
         "skills": ["piercing_shot"], "blurb": "Keeps max distance, shoots the softest target; Long Shot hits harder from afar." },
-      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "maxHp": 78, "ap": 6, "mp": 3,
-        "strength": 20, "agility": 12, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
+      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "baseHp": 38, "ap": 6, "mp": 3,
+        "vitality": 40, "strength": 20, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
+        "growth": { "vitality": 3, "strength": 1, "agility": 1 },
         "skills": ["slam"], "blurb": "Advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied." },
-      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "maxHp": 42, "ap": 7, "mp": 3,
-        "strength": 30, "agility": 10, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
+      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "baseHp": 27, "ap": 7, "mp": 3,
+        "vitality": 15, "strength": 30, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
+        "growth": { "vitality": 1, "strength": 3, "agility": 1 },
         "skills": ["ruin_bolt"], "blurb": "Holds a sightline and nukes; Overchannel banks its unspent AP into the hit." }
     ]
     """;
 
     // Graveyard skins of the locked archetypes (Bible §5 bestiary). Each drops its essence at a
     // low rate; the Sexton (boss) is a guaranteed essence roll.
+    // "gear" is the percent chance this mob drops an Adventurer-set piece (Bible §5: set pieces
+    // drop from mobs and boss at rates worth chasing; the Sexton is a drop-table peak). Rates are
+    // placeholders flagged for the §9 mining / M5 tuning pass.
     public const string MobsJson = """
     [
       { "id": "barrow_husk",   "name": "Barrow Husk",   "policy": "melee",   "maxHp": 54, "ap": 6, "mp": 3,
         "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 18,
-        "essence": "Seize", "drop": 6 },
+        "essence": "Seize", "drop": 6, "gear": 4 },
       { "id": "marrow_spitter","name": "Marrow Spitter", "policy": "ranged",  "maxHp": 30, "ap": 6, "mp": 3,
         "strength": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["marrow_spit"], "xp": 15, "essence": "Marrow Spit", "drop": 8 },
+        "skills": ["marrow_spit"], "xp": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
         "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22,
-        "essence": "Pounce", "drop": 5 },
+        "essence": "Pounce", "drop": 5, "gear": 5 },
       { "id": "crypt_warden",  "name": "Crypt Warden",  "policy": "melee",   "maxHp": 72, "ap": 6, "mp": 2,
         "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 26,
-        "essence": "Ironhide", "drop": 5 },
+        "essence": "Ironhide", "drop": 5, "gear": 7 },
       { "id": "grave_mite",    "name": "Grave Mite",    "policy": "flanker", "maxHp": 12, "ap": 6, "mp": 4,
         "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 6,
-        "essence": "Sap", "drop": 10 },
+        "essence": "Sap", "drop": 10, "gear": 2 },
       { "id": "bone_piper",    "name": "Bone Piper",    "policy": "support", "maxHp": 26, "ap": 6, "mp": 3,
         "strength": 10, "agility": 10, "initiative": 10, "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["piper_gift"], "xp": 20, "essence": "Piper's Gift", "drop": 8 },
+        "skills": ["piper_gift"], "xp": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
         "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 120,
-        "essence": "Sexton's Toll", "drop": 100 }
+        "essence": "Sexton's Toll", "drop": 100, "gear": 65 }
     ]
     """;
 
@@ -164,6 +177,41 @@ public static class TitheTables
       { "name": "The Nave",           "comp": ["crypt_warden", "grave_mite", "grave_mite", "gravehound"] },
       { "name": "The Reliquary",      "comp": ["crypt_warden", "crypt_warden", "marrow_spitter", "gravehound", "gravehound"] },
       { "name": "The Sexton's Court", "comp": ["sexton", "crypt_warden", "crypt_warden", "grave_mite", "grave_mite", "bone_piper"], "boss": true }
+    ]
+    """;
+
+    // Equipment (Bible §5, §6.10). Dofus 1.29 slot list: weapon, hat, cape, amulet, ring (×2),
+    // belt, boots. The Graveyard's one starter panoply — the Adventurer set — following the
+    // Adventurer-set pattern: modest stats per piece, a meaningful full-set bonus (see SetsJson).
+    // Only Strength/Vitality/Agility/Wisdom are live in the prototype (elements deferred). Values
+    // are honest placeholders for the §9 mining / M5 tuning pass.
+    public const string ItemsJson = """
+    [
+      { "id": "adv_blade",  "name": "Adventurer Blade",  "slot": "weapon", "set": "adventurer", "strength": 8 },
+      { "id": "adv_hat",    "name": "Adventurer Hat",    "slot": "hat",    "set": "adventurer", "vitality": 8, "wisdom": 4 },
+      { "id": "adv_cape",   "name": "Adventurer Cape",   "slot": "cape",   "set": "adventurer", "strength": 4, "agility": 4 },
+      { "id": "adv_amulet", "name": "Adventurer Amulet", "slot": "amulet", "set": "adventurer", "vitality": 10, "wisdom": 3 },
+      { "id": "adv_ring",   "name": "Adventurer Ring",   "slot": "ring",   "set": "adventurer", "strength": 5, "vitality": 6 },
+      { "id": "adv_belt",   "name": "Adventurer Belt",   "slot": "belt",   "set": "adventurer", "vitality": 8, "strength": 3 },
+      { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "vitality": 6 }
+    ]
+    """;
+
+    // Set (panoply) bonuses (Bible §6.10): a tier table keyed by number of equipped pieces. Each
+    // tier's numbers are the TOTAL bonus at that piece count (Dofus applies the highest tier ≤ the
+    // equipped count, not the sum of tiers). The full-set jump is deliberately a "screaming find":
+    // assembling the Adventurer set roughly doubles a light unit's HP and lifts every spell's
+    // damage by the Strength it grants — loot that changes what you watch happen (Pillar 3).
+    public const string SetsJson = """
+    [
+      { "id": "adventurer", "name": "Adventurer Set", "tiers": [
+        { "pieces": 2, "vitality": 10 },
+        { "pieces": 3, "vitality": 18, "strength": 3 },
+        { "pieces": 4, "vitality": 28, "strength": 6,  "agility": 3 },
+        { "pieces": 5, "vitality": 40, "strength": 10, "agility": 6,  "wisdom": 4 },
+        { "pieces": 6, "vitality": 55, "strength": 15, "agility": 10, "wisdom": 8 },
+        { "pieces": 7, "vitality": 75, "strength": 22, "agility": 15, "wisdom": 12 }
+      ] }
     ]
     """;
 

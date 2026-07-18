@@ -18,8 +18,29 @@ public sealed class CampaignUnit
     /// <summary>Carried HP within a dive (null = full). Rests to full in the city; Hard Bread mends it mid-dive.</summary>
     public int? CurrentHp { get; set; }
 
-    /// <summary>Placeholder curve (Bible §9 will mine the real 1.29 table): 80·level XP per level.</summary>
-    public static int XpForNextLevel(int level) => 80 * level;
+    /// <summary>Equipped item ids (Bible §6.10 slots). Only the avatar re-gears; mercs keep their hire kit.
+    /// The unit's effective stats fold these in via <see cref="TitheContent.StatsOf"/>.</summary>
+    public List<string> Equipment { get; init; } = new();
+
+    /// <summary>
+    /// Cumulative XP to reach each level — the Dofus 1.29 / Incarnam curve (Bible §6.3, §9), index =
+    /// level. Early bands are cheap so the first levels come fast then stretch, exactly the 1.29
+    /// feel. The slice band is ~15; beyond the table we extrapolate on the curve's last step.
+    /// </summary>
+    private static readonly int[] XpCurve =
+    {
+        0, 0, 10, 35, 100, 220, 410, 690, 1080, 1600, 2270,
+        3110, 4140, 5380, 6850, 8570, 10560, 12840, 15430, 18350, 21620,
+    };
+
+    /// <summary>XP needed to advance from <paramref name="level"/> to the next (the 1.29 per-level cost).</summary>
+    public static int XpForNextLevel(int level)
+    {
+        if (level < 1) level = 1;
+        if (level + 1 < XpCurve.Length) return XpCurve[level + 1] - XpCurve[level];
+        // Past the mined band: keep climbing on the curve's final measured step.
+        return XpCurve[^1] - XpCurve[^2];
+    }
 
     public void GainXp(int xp)
     {
@@ -43,6 +64,9 @@ public sealed class Campaign
     public int TithesPaid { get; set; }
     public int TitheDebt { get; set; }
     public List<string> Essences { get; init; } = new();
+
+    /// <summary>Unequipped gear held between dives (Bible §6.10 shared stash).</summary>
+    public List<string> Stash { get; init; } = new();
 
     public CampaignUnit? Avatar => Crew.FirstOrDefault(u => u.IsAvatar);
     public IEnumerable<CampaignUnit> Mercenaries => Crew.Where(u => !u.IsAvatar);
@@ -113,6 +137,63 @@ public sealed class Campaign
         if (!Essences.Remove(essence)) return false;
         Gold += TitheContent.Prices.EssenceSell;
         return true;
+    }
+
+    // ----- Equipment (Bible §6.10) --------------------------------------------------
+
+    /// <summary>Does the campaign already hold this exact piece (equipped or stashed)?</summary>
+    public bool OwnsGear(string itemId) =>
+        Stash.Contains(itemId) || Crew.Any(u => u.Equipment.Contains(itemId));
+
+    /// <summary>
+    /// Take a dropped gear piece into the stash, then let the avatar auto-equip any upgrade (mercs
+    /// never re-gear, Bible §6.6.9). Duplicates are ignored in the slice — each Adventurer piece is
+    /// unique. Returns false if the piece is already owned or unknown.
+    /// </summary>
+    public bool AddGear(string itemId)
+    {
+        if (TitheContent.Item(itemId) == null || OwnsGear(itemId)) return false;
+        Stash.Add(itemId);
+        AutoEquipAvatar();
+        return true;
+    }
+
+    /// <summary>A rough "how good is this piece" score — the avatar is the carry, so Strength leads.</summary>
+    private static int GearWeight(string itemId)
+    {
+        var it = TitheContent.Item(itemId);
+        return it == null ? 0 : it.Vitality + it.Strength * 3 + it.Agility + it.Wisdom;
+    }
+
+    /// <summary>Equip a stashed piece on a unit, filling a free slot or displacing a weaker one back
+    /// to the stash. Returns true if it was equipped.</summary>
+    private bool EquipFromStash(CampaignUnit u, string itemId)
+    {
+        string slot = TitheContent.ItemSlot(itemId);
+        int cap = TitheContent.SlotCapacity(slot);
+        var inSlot = u.Equipment.Where(id => TitheContent.ItemSlot(id) == slot).ToList();
+
+        if (inSlot.Count < cap)
+        {
+            Stash.Remove(itemId); u.Equipment.Add(itemId); return true;
+        }
+        // Slot full: swap out the weakest piece if this one beats it.
+        string weakest = inSlot.OrderBy(GearWeight).First();
+        if (GearWeight(itemId) <= GearWeight(weakest)) return false;
+        u.Equipment.Remove(weakest); Stash.Add(weakest);
+        Stash.Remove(itemId); u.Equipment.Add(itemId);
+        return true;
+    }
+
+    /// <summary>Let the avatar pull every upgrade out of the stash (watched-game convenience; the
+    /// City equip screen is where a player would do this by hand).</summary>
+    public void AutoEquipAvatar()
+    {
+        var a = Avatar;
+        if (a == null) return;
+        // Best-first so a slot lands its strongest available piece in one pass.
+        foreach (var id in Stash.OrderByDescending(GearWeight).ToList())
+            EquipFromStash(a, id);
     }
 
     // ----- The tithe (Bible §3.1.3, §5) ---------------------------------------------

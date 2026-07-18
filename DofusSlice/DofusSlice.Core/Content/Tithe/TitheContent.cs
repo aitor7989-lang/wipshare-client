@@ -21,14 +21,25 @@ public static class TitheContent
                                     string? Status, int Mag, int Turns);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
                                    int Cooldown, int CastsPerTurn, EffectDto[] Effects);
-    private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, int MaxHp, int Ap, int Mp,
-                                   int Strength, int Agility, int Initiative, int PrefRangeMin,
-                                   int PrefRangeMax, string[] Skills, string? Blurb);
+    private sealed record GrowthDto(int Vitality, int Strength, int Agility, int Wisdom);
+    private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, int BaseHp, int Ap, int Mp,
+                                   int Vitality, int Strength, int Agility, int Wisdom, int Initiative,
+                                   int PrefRangeMin, int PrefRangeMax, GrowthDto? Growth, string[] Skills, string? Blurb);
     private sealed record MobDto(string Id, string Name, string Policy, int MaxHp, int Ap, int Mp,
                                  int Strength, int Agility, int Initiative, int PrefRangeMin,
-                                 int PrefRangeMax, string[] Skills, int Xp, string? Essence, int Drop);
+                                 int PrefRangeMax, string[] Skills, int Xp, string? Essence, int Drop, int Gear);
     private sealed record SpawnDto(string Mob, int X, int Y);
     private sealed record EncounterDto(string Name, SpawnDto[] Spawns);
+
+    // Equipment + panoply rows (Bible §6.10). ItemDto carries the live prototype stats; SetDto is a
+    // tier table keyed by equipped-piece count.
+    public sealed record ItemDto(string Id, string Name, string Slot, string? Set,
+                                 int Vitality, int Strength, int Agility, int Wisdom);
+    private sealed record SetTierDto(int Pieces, int Vitality, int Strength, int Agility, int Wisdom);
+    private sealed record SetDto(string Id, string Name, SetTierDto[] Tiers);
+
+    /// <summary>Effective Dofus stat block for a unit (class base + level growth + gear + set bonus).</summary>
+    public readonly record struct UnitStats(int Vitality, int Strength, int Agility, int Wisdom, int Initiative, int MaxHp);
 
     public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
                                     int EssenceSell, int TitheEveryNDives, int TitheBase, int TitheGrowth);
@@ -40,6 +51,8 @@ public static class TitheContent
     private static Dictionary<string, SpellDef>? _skills;
     private static Dictionary<string, ClassDto>? _classes;
     private static Dictionary<string, MobDto>? _mobs;
+    private static Dictionary<string, ItemDto>? _items;
+    private static Dictionary<string, SetDto>? _sets;
     private static PriceTable? _prices;
     private static GraveyardDef? _graveyard;
 
@@ -51,6 +64,10 @@ public static class TitheContent
         JsonSerializer.Deserialize<ClassDto[]>(TitheTables.ClassesJson, J)!.ToDictionary(c => c.Id);
     private static Dictionary<string, MobDto> Mobs => _mobs ??=
         JsonSerializer.Deserialize<MobDto[]>(TitheTables.MobsJson, J)!.ToDictionary(m => m.Id);
+    private static Dictionary<string, ItemDto> Items => _items ??=
+        JsonSerializer.Deserialize<ItemDto[]>(TitheTables.ItemsJson, J)!.ToDictionary(i => i.Id);
+    private static Dictionary<string, SetDto> Sets => _sets ??=
+        JsonSerializer.Deserialize<SetDto[]>(TitheTables.SetsJson, J)!.ToDictionary(s => s.Id);
 
     public static IEnumerable<string> ClassIds => Classes.Keys;
     public static string Blurb(string classId) => Classes.TryGetValue(classId, out var c) ? c.Blurb ?? "" : "";
@@ -124,14 +141,15 @@ public static class TitheContent
     public static Fighter MakeCrewMember(string classId, string unitId, CellCoord pos, bool isMercenary)
     {
         var c = Classes[classId];
+        int maxHp = c.BaseHp + c.Vitality;
         return new Fighter
         {
             Id = unitId, Name = c.Name, Team = Team.Player, Archetype = c.Id,
             PlayerControlled = true, IsMercenary = isMercenary,
             Policy = ParsePolicy(c.Policy), Passive = c.Passive ?? "",
             PreferredRangeMin = c.PrefRangeMin, PreferredRangeMax = c.PrefRangeMax,
-            MaxHp = c.MaxHp, Hp = c.MaxHp, BaseAp = c.Ap, BaseMp = c.Mp,
-            Strength = c.Strength, Agility = c.Agility, Initiative = c.Initiative,
+            MaxHp = maxHp, Hp = maxHp, BaseAp = c.Ap, BaseMp = c.Mp,
+            Strength = c.Strength, Agility = c.Agility, Wisdom = c.Wisdom, Initiative = c.Initiative,
             Pos = pos, Spells = SkillsFor(c.Skills),
         };
     }
@@ -157,6 +175,73 @@ public static class TitheContent
     public static (string? essence, int rate) MobDrop(string mobId) =>
         Mobs.TryGetValue(mobId, out var m) ? (m.Essence, m.Drop) : (null, 0);
 
+    /// <summary>Percent chance this mob drops an Adventurer-set piece (Bible §5 drop-table peaks).</summary>
+    public static int MobGear(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Gear : 0;
+
+    // ----- Equipment + panoply (Bible §6.10) ----------------------------------------
+
+    /// <summary>The Graveyard's one starter panoply (Bible §5): the set its mobs and the Sexton drop.</summary>
+    public const string GraveyardSet = "adventurer";
+
+    public static ItemDto? Item(string itemId) => Items.TryGetValue(itemId, out var i) ? i : null;
+    public static string ItemName(string itemId) => Item(itemId)?.Name ?? itemId;
+    public static string ItemSlot(string itemId) => Item(itemId)?.Slot ?? "";
+
+    /// <summary>Pick a random set piece not in <paramref name="owned"/>, or null if the set is complete.</summary>
+    public static string? RandomUnownedPiece(string setId, Func<string, bool> owned, IRng rng)
+    {
+        var pool = SetPieceIds(setId).Where(id => !owned(id)).ToList();
+        return pool.Count == 0 ? null : pool[rng.Roll(1, pool.Count) - 1];
+    }
+
+    /// <summary>All item ids belonging to a set (the drop pool for that panoply).</summary>
+    public static IReadOnlyList<string> SetPieceIds(string setId) =>
+        Items.Values.Where(i => i.Set == setId).Select(i => i.Id).ToList();
+
+    /// <summary>Slots that may hold more than one item (Dofus allows two rings).</summary>
+    public static int SlotCapacity(string slot) => slot == "ring" ? 2 : 1;
+
+    /// <summary>
+    /// Effective stat block for a persistent unit (Bible §6.2): class base, plus the auto-spent
+    /// characteristic points from every level gained, plus the sum of equipped-item stats and the
+    /// set-bonus tier reached. MaxHp is baseHp + total Vitality (1 HP per point, the 1.29 rule).
+    /// </summary>
+    public static UnitStats StatsOf(CampaignUnit u)
+    {
+        var c = Classes[u.ClassId];
+        var g = c.Growth ?? new GrowthDto(0, 0, 0, 0);
+        int lv = Math.Max(0, u.Level - 1);
+
+        int vit = c.Vitality + g.Vitality * lv;
+        int str = c.Strength + g.Strength * lv;
+        int agi = c.Agility + g.Agility * lv;
+        int wis = c.Wisdom + g.Wisdom * lv;
+
+        // Gear: sum the equipped pieces, then the highest set tier whose piece-count is satisfied.
+        var counts = new Dictionary<string, int>();
+        foreach (var id in u.Equipment)
+        {
+            if (Item(id) is not { } it) continue;
+            vit += it.Vitality; str += it.Strength; agi += it.Agility; wis += it.Wisdom;
+            if (it.Set != null) counts[it.Set] = counts.GetValueOrDefault(it.Set) + 1;
+        }
+        foreach (var (setId, n) in counts)
+        {
+            if (!Sets.TryGetValue(setId, out var set)) continue;
+            var tier = set.Tiers.Where(t => t.Pieces <= n).OrderByDescending(t => t.Pieces).FirstOrDefault();
+            if (tier != null) { vit += tier.Vitality; str += tier.Strength; agi += tier.Agility; wis += tier.Wisdom; }
+        }
+
+        return new UnitStats(vit, str, agi, wis, c.Initiative, c.BaseHp + vit);
+    }
+
+    /// <summary>Effective max HP for a persistent unit (baseHp + total Vitality).</summary>
+    public static int UnitMaxHp(CampaignUnit u) => StatsOf(u).MaxHp;
+
+    /// <summary>Number of pieces of a given set the unit has equipped (for readouts).</summary>
+    public static int SetPiecesEquipped(CampaignUnit u, string setId) =>
+        u.Equipment.Count(id => Item(id)?.Set == setId);
+
     /// <summary>Coin a mob drops (Bible §6.11). One dial for the prototype: gold == XP value.</summary>
     public static int MobGold(string mobId) => MobXp(mobId);
 
@@ -169,22 +254,26 @@ public static class TitheContent
     public static IReadOnlyList<CryptRoom> CryptRooms() =>
         JsonSerializer.Deserialize<CryptRoom[]>(TitheTables.CryptJson, J)!;
 
-    public static int ClassMaxHp(string classId) => Classes.TryGetValue(classId, out var c) ? c.MaxHp : 0;
+    /// <summary>Level-1 max HP of a class (baseHp + starting Vitality), for UI and defaults.</summary>
+    public static int ClassMaxHp(string classId) =>
+        Classes.TryGetValue(classId, out var c) ? c.BaseHp + c.Vitality : 0;
 
-    /// <summary>Build a combat fighter from a persistent campaign unit (applies carried HP, Wounded, level).</summary>
+    /// <summary>Build a combat fighter from a persistent campaign unit: applies its effective Dofus
+    /// stat block (level growth + gear + set bonus), carried HP, and the Wounded −1 AP/−1 MP.</summary>
     public static Fighter MakeCrewMember(CampaignUnit u, CellCoord pos)
     {
         var c = Classes[u.ClassId];
-        int hp = Math.Clamp(u.CurrentHp ?? c.MaxHp, 1, c.MaxHp);
+        var s = StatsOf(u);
+        int hp = Math.Clamp(u.CurrentHp ?? s.MaxHp, 1, s.MaxHp);
         return new Fighter
         {
             Id = u.Id, Name = c.Name, Team = Team.Player, Archetype = c.Id,
             PlayerControlled = true, IsMercenary = !u.IsAvatar,
             Policy = ParsePolicy(c.Policy), Passive = c.Passive ?? "",
             PreferredRangeMin = c.PrefRangeMin, PreferredRangeMax = c.PrefRangeMax,
-            MaxHp = c.MaxHp, Hp = hp,
+            MaxHp = s.MaxHp, Hp = hp,
             BaseAp = c.Ap - (u.Wounded ? 1 : 0), BaseMp = c.Mp - (u.Wounded ? 1 : 0),
-            Strength = c.Strength, Agility = c.Agility, Initiative = c.Initiative,
+            Strength = s.Strength, Agility = s.Agility, Wisdom = s.Wisdom, Initiative = s.Initiative,
             Level = u.Level, Xp = u.Xp,
             Pos = pos, Spells = SkillsFor(c.Skills),
         };

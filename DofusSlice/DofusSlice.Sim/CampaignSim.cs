@@ -47,6 +47,13 @@ public static class CampaignSim
             Console.WriteLine($"Gold {campaign.Gold}, tithes paid {campaign.TithesPaid}, debt {campaign.TitheDebt}.");
             Console.WriteLine($"Crew: {string.Join(", ", campaign.Crew.Select(u => $"{u.Name}({u.ClassId} L{u.Level}{(u.Wounded ? " wounded" : "")}))"))}");
             Console.WriteLine($"Essences held: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
+            if (campaign.Avatar is { } av)
+            {
+                var s = TitheContent.StatsOf(av);
+                int set = TitheContent.SetPiecesEquipped(av, TitheContent.GraveyardSet);
+                Console.WriteLine($"Avatar kit: {set}/7 Adventurer pieces  →  {s.MaxHp} HP, STR {s.Strength}, AGI {s.Agility}, WIS {s.Wisdom}"
+                    + (av.Equipment.Count > 0 ? $"  [{string.Join(", ", av.Equipment.Select(TitheContent.ItemName))}]" : ""));
+            }
         }
         // Non-zero only if the loop never actually dived (a smoke-test signal).
         return dive > 0 ? 0 : 1;
@@ -99,6 +106,7 @@ public static class CampaignSim
         Console.WriteLine($"Dive {dive}: {r.EndReason}.  cleared {r.PacksCleared} packs, "
             + $"+{r.Gold}g, +{r.Xp}xp"
             + (r.Essences.Count > 0 ? $", essences: {string.Join("/", r.Essences)}" : "")
+            + (r.Gear.Count > 0 ? $"  GEAR: {string.Join("/", r.Gear)}" : "")
             + (r.Lost.Count > 0 ? $"  LOST: {string.Join(", ", r.Lost)}" : ""));
     }
 
@@ -128,6 +136,7 @@ public static class CampaignSim
             Console.WriteLine($"  Room {i + 1}/{rooms.Count} {room.Name,-20} {r.Outcome}"
                 + $"  +{r.Gold}g +{r.Xp}xp"
                 + (r.Drops.Count > 0 ? $"  essences: {string.Join("/", r.Drops)}" : "")
+                + (r.Gear.Count > 0 ? $"  GEAR: {string.Join("/", r.Gear)}" : "")
                 + (r.Wounded.Count > 0 ? $"  wounded: {string.Join(",", r.Wounded)}" : "")
                 + (r.Lost.Count > 0 ? $"  LOST: {string.Join(",", r.Lost)}" : ""));
             if (r.Outcome != FightOutcome.Victory) { Console.WriteLine("\n  The crew fell in the Crypt — campaign over."); break; }
@@ -136,6 +145,54 @@ public static class CampaignSim
         if (!campaign.Over)
             Console.WriteLine($"\n  The altar tears the crew out. Gold {campaign.Gold}, "
                 + $"essences: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Show the Dofus stat block, leveling, and gear empowering spells (Bible §6.2/§6.3/§6.6/§6.10)
+    /// on paper: an avatar's characteristics grow with level (auto-spent by the class ratio) and with
+    /// the Adventurer set, and every point of Strength lifts its spell damage by 1% — watch Ruin
+    /// Bolt's range climb. This is the Door Test for the progression systems before any equip UI.
+    /// </summary>
+    public static int Progression(int seed)
+    {
+        var c = Campaign.NewGame("cannon");
+        var avatar = c.Avatar!;
+
+        Console.WriteLine("TITHE — stats, leveling & gear (the Cannon avatar)\n");
+        Console.WriteLine($"{"STATE",-26} {"LVL",3} {"HP",4} {"STR",4} {"AGI",4} {"WIS",4}  {"SET",3}  RUIN BOLT");
+        void Row(string label)
+        {
+            var s = TitheContent.StatsOf(avatar);
+            int set = TitheContent.SetPiecesEquipped(avatar, TitheContent.GraveyardSet);
+            // Ruin Bolt is a Neutral spell (18-24), so Strength is its damage stat: base × (100+STR)/100.
+            int lo = 18 * (100 + s.Strength) / 100, hi = 24 * (100 + s.Strength) / 100;
+            Console.WriteLine($"{label,-26} {avatar.Level,3} {s.MaxHp,4} {s.Strength,4} {s.Agility,4} {s.Wisdom,4}  {set,2}/7  {lo}-{hi}");
+        }
+
+        Row("fresh (level 1, naked)");
+
+        // Level up by granting the 1.29 per-level XP; the class auto-spends 5 points into Str/Vit/Agi.
+        foreach (int target in new[] { 2, 3, 5, 8, 12 })
+        {
+            while (avatar.Level < target)
+                avatar.GainXp(CampaignUnit.XpForNextLevel(avatar.Level) - avatar.Xp);
+            Row($"leveled to {avatar.Level}");
+        }
+
+        Console.WriteLine();
+        // Now assemble the Adventurer set piece by piece (as drops would) — the full-set spike.
+        foreach (var piece in TitheContent.SetPieceIds(TitheContent.GraveyardSet))
+        {
+            c.AddGear(piece);
+            Row($"+ {TitheContent.ItemName(piece)}");
+        }
+
+        var final = TitheContent.StatsOf(avatar);
+        // Damage lift = (100+STR_now)/(100+STR_base) − 1, the actual multiplier on every spell.
+        int dmgLift = 100 * (100 + final.Strength) / (100 + 30) - 100;
+        Console.WriteLine($"\n  Full kit vs fresh L1: +{final.MaxHp - TitheContent.ClassMaxHp("cannon")} HP, "
+            + $"Strength 30 → {final.Strength} (every spell hits ~{dmgLift}% harder than a naked L1).");
         return 0;
     }
 

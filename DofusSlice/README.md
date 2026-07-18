@@ -93,11 +93,34 @@ good**, a downed avatar comes out **Wounded**, a fight lost outright is **campai
 third return the **tithe** escalates. HP carries between fights (Hard Bread mends it; the city rests).
 
 ```bash
-dotnet run --project DofusSlice.Game                     # play the campaign loop (default)
-dotnet run --project DofusSlice.Game pack                # drop into a one-off watched fight
-dotnet run --project DofusSlice.Sim campaign [seed]      # the loop headless (city prep → dives → eject)
-dotnet run --project DofusSlice.Sim campaign survey 40   # cautious vs greedy risk profiles
-dotnet run --project DofusSlice.Sim campaign crypt [seed] # a level-3 crew through the Crypt to the Sexton
+dotnet run --project DofusSlice.Game                        # play the campaign loop (default)
+dotnet run --project DofusSlice.Game pack                   # drop into a one-off watched fight
+dotnet run --project DofusSlice.Sim campaign [seed]         # the loop headless (city prep → dives → eject)
+dotnet run --project DofusSlice.Sim campaign survey 40      # cautious vs greedy risk profiles
+dotnet run --project DofusSlice.Sim campaign crypt [seed]   # a level-3 crew through the Crypt to the Sexton
+dotnet run --project DofusSlice.Sim campaign progression    # stats, leveling & the Adventurer set on paper
+```
+
+### Stats, leveling & gear (Dofus 1.29 block)
+
+Every unit carries the **1.29 characteristic block** (Bible §6.2): Vitality → HP, **Strength → the
+single active damage stat** (elements deferred), Agility → the lock/escape contest, Wisdom → XP
+bonus and AP/MP-loss resistance, plus Initiative for turn order. Spells are empowered by the
+Dofus formula the engine already runs — `base × (100 + Strength) / 100 − flat resist` — so raising
+Strength lifts *every* spell's damage. **Levels** follow the real 1.29 XP curve (cheap early, then
+stretching); on each level a unit auto-spends 5 characteristic points by its **class ratio**
+(Bulwark banks Vitality, Cannon banks Strength, Archer splits Strength/Agility — mercs level the
+same way but keep their hire kit, Bible §6.6.9). **Loot** now includes the **Adventurer set** (the
+Dofus slot list — weapon, hat, cape, amulet, ring, belt, boots): pieces drop from graveyard mobs at
+low rates and from the Sexton at a peak rate, land in a shared stash, and the avatar auto-equips
+upgrades. Each piece is modest; assembling the full panoply is a **screaming find** — the set-bonus
+tiers roughly double a light unit's HP and add ~55% to its spell damage. Watch it on paper:
+
+```
+STATE                      LVL   HP  STR  AGI  WIS  SET  RUIN BOLT
+fresh (level 1, naked)       1   42   30   10   12   0/7  23-31
+leveled to 12               12   53   63   21   12   0/7  29-39
++ full Adventurer set       12  166  105   46   31   7/7  36-49
 ```
 
 **City controls:** click a building to open its services; **Enter** (or click the Lychgate) to dive.

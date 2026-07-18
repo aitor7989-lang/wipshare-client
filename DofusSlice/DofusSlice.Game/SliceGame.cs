@@ -1671,7 +1671,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             string tag = u.IsAvatar ? "AVATAR" : "MERC";
             _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
                 x + 22, y + 3, 1, u.Wounded ? new Color(230, 200, 70) : Palette.Text);
-            y += 20;
+            // Effective Dofus stats (grown by level + gear) — the avatar also shows its set progress.
+            var s = TitheContent.StatsOf(u);
+            string sheet = $"{s.MaxHp} HP  STR {s.Strength}  AGI {s.Agility}  WIS {s.Wisdom}";
+            if (u.IsAvatar)
+            {
+                int set = TitheContent.SetPiecesEquipped(u, TitheContent.GraveyardSet);
+                if (set > 0) sheet += $"   ADV {set}/7";
+            }
+            _font.Draw(_sb, sheet, x + 22, y + 15, 1, Palette.TextDim);
+            y += 34;
         }
     }
 
@@ -1708,6 +1717,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (win)
         {
             _font.DrawCentered(_sb, $"+{r.Gold} GOLD    +{r.Xp} XP", ScreenW / 2, y, 2, Palette.Text); y += 36;
+            if (r.Gear.Count > 0)
+            { _font.DrawCentered(_sb, "★ FOUND: " + string.Join(", ", r.Gear).ToUpperInvariant() + " ★", ScreenW / 2, y, 1, new Color(240, 208, 120)); y += 24; }
             if (r.Drops.Count > 0)
             { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(200, 170, 240)); y += 24; }
             if (r.Wounded.Count > 0)

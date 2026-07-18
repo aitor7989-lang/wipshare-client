@@ -11,8 +11,8 @@ namespace DofusSlice.Core.Content.Tithe;
 public static class TitheResolution
 {
     public sealed record UnitResult(string Id, string Name, bool Mercenary, int XpGained, bool Wounded, bool Died);
-    public sealed record Result(FightOutcome Outcome, int XpPool,
-                                IReadOnlyList<UnitResult> Units, IReadOnlyList<string> Drops);
+    public sealed record Result(FightOutcome Outcome, int XpPool, IReadOnlyList<UnitResult> Units,
+                                IReadOnlyList<string> Drops, IReadOnlyList<string> GearDrops);
 
     public static Result Resolve(CombatEngine engine)
     {
@@ -24,14 +24,21 @@ public static class TitheResolution
         // XP pool = sum of the defeated mobs' table XP.
         int pool = defeatedMobs.Sum(f => TitheContent.MobXp(f.Archetype));
 
-        // Essence drops: roll each defeated mob's essence (only a won fight collects loot).
+        // Loot rolls (only a won fight collects): each defeated mob rolls its essence and, separately,
+        // a chance at an Adventurer-set piece (Bible §5 drop-table peaks). A gear roll yields a set
+        // token here; the concrete unowned piece is chosen when it's folded into the campaign.
         var drops = new List<string>();
+        var gear = new List<string>();
         if (won)
             foreach (var f in defeatedMobs)
             {
                 var (essence, rate) = TitheContent.MobDrop(f.Archetype);
                 if (essence != null && rate > 0 && engine.Rng.Roll(1, 100) <= rate)
                     drops.Add(essence);
+
+                int gearRate = TitheContent.MobGear(f.Archetype);
+                if (gearRate > 0 && engine.Rng.Roll(1, 100) <= gearRate)
+                    gear.Add(TitheContent.GraveyardSet);
             }
 
         // Only crew that survived or were merely downed (not permanently dead mercs) share XP.
@@ -59,6 +66,6 @@ public static class TitheResolution
             results.Add(new UnitResult(f.Id, f.Name, f.IsMercenary, xp, wounded, died));
         }
 
-        return new Result(engine.Outcome, pool, results, drops);
+        return new Result(engine.Outcome, pool, results, drops, gear);
     }
 }

@@ -15,6 +15,12 @@ public sealed class Fighter
     public required string Name { get; init; }
     public required Team Team { get; init; }
 
+    /// <summary>The human drives this fighter (the hero). Allied summons are AI-run.</summary>
+    public bool PlayerControlled { get; init; }
+
+    /// <summary>A creature summoned into the fight (vanishes cleanly, doesn't count as the hero).</summary>
+    public bool IsSummon { get; init; }
+
     public int MaxHp { get; init; }
     public int Hp { get; set; }
 

@@ -30,10 +30,17 @@ public sealed class CombatEngine
     public event Action<CombatEvent>? Emitted;
     private void Raise(CombatEvent e) => Emitted?.Invoke(e);
 
-    public CombatEngine(Battlefield field, IEnumerable<Fighter> fighters, IRng rng)
+    // Builds a summoned creature: (kind, team, cell, id) -> Fighter. Injected so the engine
+    // stays decoupled from the content/bestiary layer.
+    private readonly Func<string, Team, CellCoord, string, Fighter>? _summonFactory;
+    private int _summonCounter;
+
+    public CombatEngine(Battlefield field, IEnumerable<Fighter> fighters, IRng rng,
+        Func<string, Team, CellCoord, string, Fighter>? summonFactory = null)
     {
         Field = field;
         _rng = rng;
+        _summonFactory = summonFactory;
         _order.AddRange(fighters);
     }
 
@@ -45,6 +52,14 @@ public sealed class CombatEngine
 
     public Fighter? FighterAt(CellCoord cell) => _order.FirstOrDefault(f => f.IsAlive && f.Pos == cell);
     public bool IsOccupied(CellCoord cell) => FighterAt(cell) != null;
+
+    /// <summary>Add a summoned fighter to the fight; it acts when the turn order reaches it.</summary>
+    public void Summon(Fighter fighter)
+    {
+        _order.Add(fighter); // appended -> takes its turn later this round; safe w.r.t. the pointer
+        Emit($"{fighter.Name} is summoned.");
+        Raise(new FighterSummoned(fighter));
+    }
 
     public void Start()
     {
@@ -298,6 +313,16 @@ public sealed class CombatEngine
             return;
         }
 
+        if (effect.Kind == EffectKind.Summon)
+        {
+            if (_summonFactory != null && Field.IsWalkable(impact) && !IsOccupied(impact))
+            {
+                var ally = _summonFactory(effect.SummonKind, caster.Team, impact, $"summon_{_summonCounter++}");
+                if (ally != null) Summon(ally);
+            }
+            return;
+        }
+
         foreach (var cell in AreaCells(spell, impact, caster.Pos))
         {
             var victim = FighterAt(cell);
@@ -536,8 +561,9 @@ public sealed class CombatEngine
         get
         {
             bool anyEnemy = _order.Any(f => f.Team == Team.Enemy && f.IsAlive);
-            bool anyPlayer = _order.Any(f => f.Team == Team.Player && f.IsAlive);
-            if (!anyPlayer) return FightOutcome.Defeat;
+            // You lose when your hero falls — allied summons don't keep the fight alive.
+            bool heroAlive = _order.Any(f => f.PlayerControlled && f.IsAlive);
+            if (!heroAlive) return FightOutcome.Defeat;
             if (!anyEnemy) return FightOutcome.Victory;
             return FightOutcome.Ongoing;
         }

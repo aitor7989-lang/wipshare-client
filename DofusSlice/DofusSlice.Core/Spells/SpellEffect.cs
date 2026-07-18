@@ -14,6 +14,7 @@ public enum EffectKind
     StealAp,     // remove AP from the target and give it to the caster
     StealMp,     // remove MP from the target and give it to the caster
     ApplyStatus, // add a timed status to the affected fighter(s)
+    Summon,      // summon a creature (SummonKind) onto the targeted free cell
 }
 
 /// <summary>
@@ -23,8 +24,10 @@ public enum EffectKind
 /// </summary>
 public sealed record SpellEffect(
     EffectKind Kind, Element Element = Element.Neutral, int Min = 0, int Max = 0,
-    StatusKind Status = StatusKind.None)
+    StatusKind Status = StatusKind.None, string SummonKind = "")
 {
+    public static SpellEffect Summon(string kind) => new(EffectKind.Summon, SummonKind: kind);
+
     public static SpellEffect Damage(Element element, int min, int max) => new(EffectKind.Damage, element, min, max);
     public static SpellEffect Heal(int min, int max) => new(EffectKind.Heal, Element.Water, min, max);
     public static SpellEffect Push(int cells) => new(EffectKind.Push, Element.Neutral, cells, cells);

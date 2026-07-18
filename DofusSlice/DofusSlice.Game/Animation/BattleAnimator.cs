@@ -72,6 +72,12 @@ public sealed class BattleAnimator
                 _corpses.Add(new Corpse(_proj.CellCenter(dd.At), ColorOf(dd.Fighter),
                     SpriteName(dd.Fighter), LastFacing(dd.Fighter.Id)));
                 break;
+            case FighterSummoned s:
+                _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
+                _facing[s.Fighter.Id] = Facing4.Se;
+                _overlays.Add(new ImpactFlash(_proj.CellCenter(s.Fighter.Pos) + new Vector2(0, -16),
+                    new Color(150, 220, 180)));
+                break;
             case TurnStarted:
                 break;
         }
@@ -186,11 +192,11 @@ public sealed class BattleAnimator
     }
 
     private static Color ColorOf(Fighter f) =>
-        f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name);
+        f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name);
 
     /// <summary>Sprite base name for a fighter (matches the renderer's lookup).</summary>
     internal static string SpriteName(Fighter f) =>
-        f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant();
+        f.PlayerControlled ? "iop" : f.Name.ToLowerInvariant();
 
     internal static Color SpellColor(SpellDef spell)
     {

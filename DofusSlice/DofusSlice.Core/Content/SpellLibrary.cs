@@ -96,8 +96,24 @@ public static class SpellLibrary
         Description = "A sweeping earth blade that strikes everything in a line.",
     };
 
+    public static readonly SpellDef Companion = new()
+    {
+        Id = 107,
+        Name = "Companion",
+        ApCost = 3,
+        MinRange = 1,
+        MaxRange = 3,
+        RequiresLineOfSight = true,
+        NeedsTarget = false,
+        NeedsFreeCell = true,
+        Cooldown = 6,
+        MaxCastsPerTurn = 1,
+        Effects = new[] { SpellEffect.Summon("boar") },
+        Description = "Summon a loyal boar that fights at your side.",
+    };
+
     public static IReadOnlyList<SpellDef> IopSpells =>
-        new[] { Pressure, IopsWrath, Jump, Intimidation, Power, SwordOfJudgment };
+        new[] { Pressure, IopsWrath, Jump, Intimidation, Power, SwordOfJudgment, Companion };
 
     // ----- Mobs ----------------------------------------------------------------------
 

@@ -69,14 +69,20 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     }
 
     private IReadOnlyList<SpellDef> HeroSpells => SpellLibrary.IopSpells;
-    private Fighter? Hero => _engine.Fighters.FirstOrDefault(f => f.Team == Team.Player);
+    private Fighter? Hero => _engine.Fighters.FirstOrDefault(f => f.PlayerControlled);
 
     protected override void Initialize()
     {
-        _spellButtons = new Rectangle[HeroSpells.Count];
-        for (int i = 0; i < _spellButtons.Length; i++)
-            _spellButtons[i] = new Rectangle(16 + i * 168, 636, 156, 104);
         _endTurnButton = new Rectangle(1080, 636, 184, 104);
+
+        // Fit the spell buttons in the space left of the END TURN button (adapts to spell count).
+        int n = HeroSpells.Count;
+        const int gap = 8, left = 16;
+        int avail = _endTurnButton.X - 16 - left;
+        int w = Math.Min(156, (avail - (n - 1) * gap) / Math.Max(1, n));
+        _spellButtons = new Rectangle[n];
+        for (int i = 0; i < n; i++)
+            _spellButtons[i] = new Rectangle(left + i * (w + gap), 636, w, 104);
         base.Initialize();
     }
 
@@ -189,10 +195,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _enemyActed = false;
         }
 
-        if (_engine.Current.Team == Team.Player)
+        if (_engine.Current.PlayerControlled)
             UpdatePlayerTurn(dt);
         else
-            UpdateEnemyTurn(dt);
+            UpdateEnemyTurn(dt); // enemies AND allied summons are AI-driven
 
         base.Update(gameTime);
     }
@@ -233,6 +239,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.D3)) ToggleSpell(2);
         if (Pressed(Keys.D4)) ToggleSpell(3);
         if (Pressed(Keys.D5)) ToggleSpell(4);
+        if (Pressed(Keys.D6)) ToggleSpell(5);
+        if (Pressed(Keys.D7)) ToggleSpell(6);
         if (Pressed(Keys.Escape)) _selectedSpell = -1;
         if (Pressed(Keys.Space)) { EndPlayerTurn(); return; }
 
@@ -371,7 +379,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_anim.IsBusy) return; // hide range hints mid-action
 
         var hero = Hero;
-        bool playerTurn = _engine.Current.Team == Team.Player && hero != null;
+        bool playerTurn = _engine.Current.PlayerControlled && hero != null;
 
         if (playerTurn && _selectedSpell < 0)
         {
@@ -469,7 +477,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         // Ground shadow.
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
 
-        string name = f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant();
+        string name = f.PlayerControlled ? "iop" : f.Name.ToLowerInvariant();
         var pose = _anim.PoseFor(f);
         string state = pose.State switch
         {
@@ -491,7 +499,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         else
         {
             var head = center + new Vector2(0, -16);
-            var body = f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name);
+            var body = f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name);
             if (flash > 0f) body = Color.Lerp(body, new Color(255, 80, 80), flash);
             _prim.DiscAt(_sb, head, 15, new Color(20, 20, 24));
             _prim.DiscAt(_sb, head, 13, body);
@@ -615,7 +623,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 current ? Palette.CurrentRing : new Color(60, 64, 72));
 
             var token = f.IsAlive
-                ? (f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name))
+                ? (f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name))
                 : new Color(58, 60, 66);
             var mid = new Vector2(r.X + 17, r.Y + cardH / 2f);
             _prim.DiscAt(_sb, mid, 11, new Color(18, 18, 22));
@@ -634,7 +642,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawTurnTimer()
     {
-        bool playerTurn = _engine.Current.Team == Team.Player;
+        bool playerTurn = _engine.Current.PlayerControlled;
         const int barW = 240, barH = 16;
         int bx = ScreenW / 2 - barW / 2, by = 14;
 
@@ -698,7 +706,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         var r = _endTurnButton;
         bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
-        bool playerTurn = _engine.Current.Team == Team.Player;
+        bool playerTurn = _engine.Current.PlayerControlled;
         _prim.FillRect(_sb, r, hover && playerTurn ? Palette.HudPanelLight : Palette.HudPanel);
         _prim.StrokeRect(_sb, r, 2, playerTurn ? Palette.HpFill : new Color(46, 48, 54));
         _font.DrawCentered(_sb, "END", r.Center.X, r.Y + 28, 3, playerTurn ? Palette.Text : Palette.TextDim);

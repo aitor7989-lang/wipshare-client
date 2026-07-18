@@ -43,7 +43,9 @@ public static class Encounter
         foreach (var (kind, cell) in map.Enemies)
             fighters.Add(Bestiary.Create(kind, $"mob_{kind}_{i++}", cell));
 
-        return new CombatEngine(field, fighters, rng);
+        // Summon factory keeps the engine decoupled from the bestiary.
+        return new CombatEngine(field, fighters, rng,
+            (kind, team, cell, id) => Bestiary.Create(kind, id, cell, team, isSummon: true));
     }
 
     public static CombatEngine CreateIncarnamSandbox(IRng rng) => FromMap(DefaultMap(), rng);

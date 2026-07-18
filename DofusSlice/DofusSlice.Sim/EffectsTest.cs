@@ -24,6 +24,7 @@ public static class EffectsTest
         Regen();
         LineAoe();
         Tackle();
+        Summon();
         DamagePreview();
         MapHardening();
 
@@ -39,7 +40,7 @@ public static class EffectsTest
 
     private static Fighter Caster(CellCoord pos, params SpellDef[] spells) => new()
     {
-        Id = "c", Name = "Caster", Team = Team.Player, MaxHp = 100, Hp = 100,
+        Id = "c", Name = "Caster", Team = Team.Player, PlayerControlled = true, MaxHp = 100, Hp = 100,
         BaseAp = 12, BaseMp = 6, Initiative = 100, Pos = pos, Spells = spells,
     };
 
@@ -166,6 +167,22 @@ public static class EffectsTest
         eng.TryMove(c, new(2, 6)); // flee out of melee
         Check("Tackle", c.CurrentMp < mpAfterMoveIfUnlocked && c.CurrentAp < c.BaseAp,
             $"lost AP/MP leaving melee (AP {c.CurrentAp}/{c.BaseAp}, MP {c.CurrentMp})");
+    }
+
+    private static void Summon()
+    {
+        var spell = Spell(11, "Summon", 3, 1, 3, SpellEffect.Summon("boar"));
+        var c = Caster(new(2, 4), spell);
+        var t = Foe("t", new(8, 4));
+        var eng = new CombatEngine(new Battlefield(11, 9), new[] { c, t }, new SystemRng(1),
+            (kind, team, cell, id) => Bestiary.Create(kind, id, cell, team, isSummon: true));
+        eng.Start();
+        int before = eng.Fighters.Count;
+        eng.TryCast(c, spell, new(3, 4)); // summon onto the free cell next to the caster
+        var ally = eng.Fighters.FirstOrDefault(f => f.IsSummon);
+        Check("Summon", eng.Fighters.Count == before + 1 && ally is { PlayerControlled: false }
+                        && ally.Team == c.Team && ally.Pos == new CellCoord(3, 4),
+            $"ally joined on team {ally?.Team} at {ally?.Pos}, roster {before}->{eng.Fighters.Count}");
     }
 
     private static void DamagePreview()

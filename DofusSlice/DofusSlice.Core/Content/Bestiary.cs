@@ -6,19 +6,21 @@ namespace DofusSlice.Core.Content;
 /// <summary>Factory for the hero and the Incarnam mobs used in the slice.</summary>
 public static class Bestiary
 {
-    /// <summary>Create a mob by its map-legend kind ("boar", "gobball", "piou"); unknown/empty -> boar.</summary>
-    public static Fighter Create(string? kind, string id, CellCoord pos) => (kind ?? "").ToLowerInvariant() switch
-    {
-        "gobball" => MakeGobball(id, pos),
-        "piou" => MakePiou(id, pos),
-        _ => MakeBoar(id, pos),
-    };
+    /// <summary>Create a creature by kind ("boar", "gobball", "piou"); unknown/empty -> boar.</summary>
+    public static Fighter Create(string? kind, string id, CellCoord pos, Team team = Team.Enemy, bool isSummon = false)
+        => (kind ?? "").ToLowerInvariant() switch
+        {
+            "gobball" => MakeGobball(id, pos, team, isSummon),
+            "piou" => MakePiou(id, pos, team, isSummon),
+            _ => MakeBoar(id, pos, team, isSummon),
+        };
 
     public static Fighter MakeIop(string name, CellCoord pos) => new()
     {
         Id = "hero",
         Name = name,
         Team = Team.Player,
+        PlayerControlled = true,
         MaxHp = 57,
         Hp = 57,
         BaseAp = 6,
@@ -35,11 +37,12 @@ public static class Bestiary
         Spells = SpellLibrary.IopSpells,
     };
 
-    public static Fighter MakeGobball(string id, CellCoord pos) => new()
+    public static Fighter MakeGobball(string id, CellCoord pos, Team team = Team.Enemy, bool isSummon = false) => new()
     {
         Id = id,
         Name = "Gobball",
-        Team = Team.Enemy,
+        Team = team,
+        IsSummon = isSummon,
         MaxHp = 45,
         Hp = 45,
         BaseAp = 4,
@@ -50,11 +53,12 @@ public static class Bestiary
         Spells = new[] { SpellLibrary.GobballHeadbutt },
     };
 
-    public static Fighter MakeBoar(string id, CellCoord pos) => new()
+    public static Fighter MakeBoar(string id, CellCoord pos, Team team = Team.Enemy, bool isSummon = false) => new()
     {
         Id = id,
         Name = "Boar",
-        Team = Team.Enemy,
+        Team = team,
+        IsSummon = isSummon,
         MaxHp = 32,
         Hp = 32,
         BaseAp = 4,
@@ -65,11 +69,12 @@ public static class Bestiary
         Spells = new[] { SpellLibrary.BoarCharge },
     };
 
-    public static Fighter MakePiou(string id, CellCoord pos) => new()
+    public static Fighter MakePiou(string id, CellCoord pos, Team team = Team.Enemy, bool isSummon = false) => new()
     {
         Id = id,
         Name = "Piou",
-        Team = Team.Enemy,
+        Team = team,
+        IsSummon = isSummon,
         MaxHp = 20,
         Hp = 20,
         BaseAp = 4,

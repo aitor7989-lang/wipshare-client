@@ -26,6 +26,10 @@ public sealed class CombatEngine
     public List<string> Log { get; } = new();
     public event Action<string>? Logged;
 
+    /// <summary>Structured play-by-play for the animation layer (see <see cref="CombatEvent"/>).</summary>
+    public event Action<CombatEvent>? Emitted;
+    private void Raise(CombatEvent e) => Emitted?.Invoke(e);
+
     public CombatEngine(Battlefield field, IEnumerable<Fighter> fighters, IRng rng)
     {
         Field = field;
@@ -50,6 +54,7 @@ public sealed class CombatEngine
         Current.BeginTurn();
         Emit($"=== Round 1 ===");
         Emit($"{Current.Name}'s turn (INI {Current.Initiative}).");
+        Raise(new TurnStarted(Current, Round));
     }
 
     // ---- Movement -------------------------------------------------------------------
@@ -64,9 +69,12 @@ public sealed class CombatEngine
         var range = MovementRange(f);
         if (!range.TryGetValue(dest, out int cost) || cost > f.CurrentMp) return false;
 
+        var path = Pathfinding.FindPath(Field, f.Pos, dest, c => c != f.Pos && IsOccupied(c))
+                   ?? new List<CellCoord> { f.Pos, dest };
         f.Pos = dest;
         f.CurrentMp -= cost;
         Emit($"{f.Name} moves to {dest} (-{cost} MP, {f.CurrentMp} left).");
+        Raise(new FighterMoved(f, path, cost));
         return true;
     }
 
@@ -145,6 +153,7 @@ public sealed class CombatEngine
         caster.CurrentAp -= spell.ApCost;
         caster.RecordCast(spell, Round);
         Emit($"{caster.Name} casts {spell.Name} at {target} (-{spell.ApCost} AP).");
+        Raise(new SpellCast(caster, spell, target));
 
         foreach (var effect in spell.Effects)
             ApplyEffect(caster, spell, effect, target);
@@ -159,8 +168,10 @@ public sealed class CombatEngine
         {
             if (Field.IsWalkable(impact) && !IsOccupied(impact))
             {
+                var from = caster.Pos;
                 caster.Pos = impact;
                 Emit($"  {caster.Name} leaps to {impact}.");
+                Raise(new FighterTeleported(caster, from, impact));
             }
             return;
         }
@@ -191,9 +202,15 @@ public sealed class CombatEngine
         int boosted = rolled * (100 + caster.PrimaryStatFor(effect.Element)) / 100;
         int afterResist = boosted * (100 - victim.ResistanceFor(effect.Element)) / 100;
         int dmg = Math.Max(0, afterResist);
+        var at = victim.Pos;
         victim.Hp = Math.Max(0, victim.Hp - dmg);
         Emit($"  {victim.Name} takes {dmg} {effect.Element} damage ({victim.Hp}/{victim.MaxHp} HP).");
-        if (!victim.IsAlive) Emit($"  {victim.Name} is defeated!");
+        Raise(new DamageDealt(victim, dmg, effect.Element, at, victim.Hp));
+        if (!victim.IsAlive)
+        {
+            Emit($"  {victim.Name} is defeated!");
+            Raise(new FighterDied(victim, at));
+        }
     }
 
     private void ApplyHeal(Fighter caster, Fighter victim, SpellEffect effect)
@@ -203,6 +220,7 @@ public sealed class CombatEngine
         int before = victim.Hp;
         victim.Hp = Math.Min(victim.MaxHp, victim.Hp + amount);
         Emit($"  {victim.Name} recovers {victim.Hp - before} HP ({victim.Hp}/{victim.MaxHp}).");
+        Raise(new HealApplied(victim, victim.Hp - before, victim.Pos, victim.Hp));
     }
 
     private void ApplyPush(Fighter caster, Fighter victim, int cells)
@@ -218,6 +236,7 @@ public sealed class CombatEngine
             else dx = 0;
         }
 
+        var path = new List<CellCoord> { victim.Pos };
         int moved = 0;
         for (int i = 0; i < cells; i++)
         {
@@ -225,15 +244,27 @@ public sealed class CombatEngine
             if (!Field.IsWalkable(next) || IsOccupied(next))
             {
                 int collision = (cells - moved) * 5;
+                var at = victim.Pos;
                 victim.Hp = Math.Max(0, victim.Hp - collision);
                 Emit($"  {victim.Name} slams into an obstacle for {collision} damage ({victim.Hp}/{victim.MaxHp} HP).");
-                if (!victim.IsAlive) Emit($"  {victim.Name} is defeated!");
+                Raise(new FighterPushed(victim, path, collision));
+                Raise(new DamageDealt(victim, collision, Element.Neutral, at, victim.Hp));
+                if (!victim.IsAlive)
+                {
+                    Emit($"  {victim.Name} is defeated!");
+                    Raise(new FighterDied(victim, at));
+                }
                 return;
             }
             victim.Pos = next;
+            path.Add(next);
             moved++;
         }
-        if (moved > 0) Emit($"  {victim.Name} is pushed {moved} cell(s) to {victim.Pos}.");
+        if (moved > 0)
+        {
+            Emit($"  {victim.Name} is pushed {moved} cell(s) to {victim.Pos}.");
+            Raise(new FighterPushed(victim, path, 0));
+        }
     }
 
     private void RemoveTheDead()
@@ -263,6 +294,7 @@ public sealed class CombatEngine
 
         Current.BeginTurn();
         Emit($"{Current.Name}'s turn.");
+        Raise(new TurnStarted(Current, Round));
     }
 
     public FightOutcome Outcome

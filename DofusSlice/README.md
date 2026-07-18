@@ -59,14 +59,16 @@ Three projects, split so the rules never depend on the renderer:
 - **`DofusSlice.Core`** — pure C#, zero MonoGame dependency. All the rules live here:
   - `Grid/` — the iso lattice (`CellCoord`, `Battlefield`), A* pathfinding + a geodesic
     distance field, Bresenham line-of-sight.
-  - `Combat/` — `Fighter` (stats, AP/MP, cooldowns), and `CombatEngine`, the single
-    authoritative turn-based state machine that validates and applies every move and cast.
+  - `Combat/` — `Fighter` (stats, AP/MP, cooldowns), `CombatEngine`, the single
+    authoritative turn-based state machine that validates and applies every move and cast,
+    and `CombatEvent`s — a structured play-by-play the engine raises for the renderer.
   - `Spells/` — data-driven spell defs (`SpellDef`, `SpellEffect`, `AreaShape`).
   - `AI/` — `MobBrain`, a greedy "close the distance and hit the nearest hero" mob AI.
   - `Content/` — hand-authored Iop spells, the bestiary, and the Incarnam encounter.
 - **`DofusSlice.Game`** — MonoGame presentation + input only. Iso projection, procedural
-  textures, an embedded ASCII-art bitmap font, and the HUD. Drives the engine through its
-  public API; contains no rules.
+  textures, an embedded ASCII-art bitmap font, the HUD, and `Animation/BattleAnimator`,
+  which replays the engine's event stream as timed animations. Drives the engine through
+  its public API; contains no rules.
 - **`DofusSlice.Sim`** — a headless harness that auto-plays a whole fight and prints the
   combat log. Because `Core` has no rendering dependency, the entire ruleset is testable
   without a display — handy for CI and for tuning balance.
@@ -84,13 +86,15 @@ Three projects, split so the rules never depend on the renderer:
   cooldowns; area shapes (single / circle / cross).
 - Elemental damage scaled by the caster's characteristic and reduced by target resistance.
 - Push / knockback with collision damage; self-teleport (Jump).
+- Animated combat: tokens slide along their path, casters lunge with an elemental impact
+  flash, floating damage/heal numbers, hit flashes and death fades — driven by a structured
+  event stream from the engine, so the rules layer stays instant and deterministic.
 
 ## Roadmap ideas
 
 - Swap procedural tokens for real sprites (your own art, or datamined `.d2o`/`.swl` decoded
   into the existing `SpellDef` / `Bestiary` shapes).
 - More classes (Cra, Ecaflip…), more spells, spell leveling.
-- Step-by-step movement/attack animations instead of instant state changes.
 - Overworld exploration on a real Incarnam map with encounter triggers, then hand off to
   this combat slice.
 - Summons, buffs/debuffs over time, and a proper end-of-turn effect queue (the engine

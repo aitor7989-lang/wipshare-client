@@ -3,6 +3,7 @@ using DofusSlice.Core.Combat;
 using DofusSlice.Core.Content;
 using DofusSlice.Core.Grid;
 using DofusSlice.Core.Spells;
+using DofusSlice.Game.Animation;
 using DofusSlice.Game.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -31,8 +32,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private IsoProjector _proj = null!;
 
     private CombatEngine _engine = null!;
+    private BattleAnimator _anim = null!;
     private int _seed = 1;
     private readonly List<string> _log = new();
+    private bool _enemyActed;
 
     private MouseState _mouse, _prevMouse;
     private KeyboardState _keys, _prevKeys;
@@ -79,21 +82,25 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _font = new PixelFont(_prim.Pixel);
         _proj = IsoProjector.Centered(Encounter.Width, Encounter.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
+        _anim = new BattleAnimator(_proj);
         StartFight();
     }
 
     private void StartFight()
     {
         _engine = Encounter.CreateIncarnamSandbox(new SystemRng(_seed));
+        _anim.Reset(_engine.Fighters);
         _log.Clear();
         _engine.Logged += line =>
         {
             _log.Add(line);
             if (_log.Count > 8) _log.RemoveAt(0);
         };
+        _engine.Emitted += _anim.OnEvent;
         _engine.Start();
         _selectedSpell = -1;
         _enemyTimer = 0f;
+        _enemyActed = false;
     }
 
     // ----- Update -------------------------------------------------------------------
@@ -107,9 +114,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         _hover = _proj.ScreenToCell(new Vector2(_mouse.X, _mouse.Y));
 
-        if (_engine.Outcome != FightOutcome.Ongoing) { base.Update(gameTime); return; }
-
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _anim.Update(dt, _engine.Fighters); // animations keep playing even after the fight ends
+
+        if (_engine.Outcome != FightOutcome.Ongoing) { base.Update(gameTime); return; }
 
         // A change of active fighter starts a fresh turn clock.
         if (_engine.Current.Id != _turnOwner)
@@ -117,6 +125,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _turnOwner = _engine.Current.Id;
             _turnClock = TurnSeconds;
             _enemyTimer = 0f;
+            _enemyActed = false;
         }
 
         if (_engine.Current.Team == Team.Player)
@@ -129,11 +138,19 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void UpdateEnemyTurn(float dt)
     {
-        _enemyTimer += dt;
-        if (_enemyTimer < EnemyStepDelay) return;
-        _enemyTimer = 0f;
-        MobBrain.TakeTurn(_engine, _engine.Current);
-        _engine.EndTurn();
+        // Run the mob's whole turn once (queuing its animations), then wait for them to
+        // finish playing before advancing to the next fighter.
+        if (!_enemyActed)
+        {
+            _enemyTimer += dt;
+            if (_enemyTimer < EnemyStepDelay) return;
+            MobBrain.TakeTurn(_engine, _engine.Current);
+            _enemyActed = true;
+        }
+        else if (!_anim.IsBusy)
+        {
+            _engine.EndTurn();
+        }
     }
 
     private void UpdatePlayerTurn(float dt)
@@ -141,6 +158,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var hero = Hero;
         if (hero == null) return;
         _moveRange = _engine.MovementRange(hero);
+
+        // Hold input and the turn clock while an action is animating.
+        if (_anim.IsBusy) return;
 
         // Turn timer: auto-end when it runs out.
         _turnClock -= dt;
@@ -187,6 +207,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void EndPlayerTurn()
     {
+        if (_anim.IsBusy) return;
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
@@ -206,8 +227,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         DrawTiles();
         DrawOverlays();
         DrawFighters();
+        _anim.DrawEffects(_sb, _prim, _font); // corpses, impact flashes, floating numbers
         DrawHud();
-        if (_engine.Outcome != FightOutcome.Ongoing) DrawEndOverlay();
+        // Hold the end screen until the final death/hit animation has played out.
+        if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
 
         _sb.End();
         base.Draw(gameTime);
@@ -248,6 +271,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawOverlays()
     {
         if (_engine.Outcome != FightOutcome.Ongoing) return;
+        if (_anim.IsBusy) return; // hide range hints mid-action
         var hero = Hero;
         bool playerTurn = _engine.Current.Team == Team.Player && hero != null;
 
@@ -278,9 +302,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawFighters()
     {
-        foreach (var f in _engine.Fighters.Where(f => f.IsAlive).OrderBy(f => f.Pos.X + f.Pos.Y))
+        // Depth-sort by the animated position so a sliding token overlaps correctly.
+        foreach (var f in _engine.Fighters.Where(f => f.IsAlive)
+                     .OrderBy(f => _anim.CenterFor(f).Y))
         {
-            var center = _proj.CellCenter(f.Pos);
+            var center = _anim.CenterFor(f);
             var head = center + new Vector2(0, -16);
 
             _prim.DiscAt(_sb, center + new Vector2(0, 2), 13, Palette.Shadow);
@@ -289,17 +315,20 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiscAt(_sb, head, 17, Palette.CurrentRing);
 
             var body = f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name);
+            float flash = _anim.FlashAmount(f.Id);
+            if (flash > 0f) body = Color.Lerp(body, new Color(255, 80, 80), flash);
             _prim.DiscAt(_sb, head, 15, new Color(20, 20, 24));
             _prim.DiscAt(_sb, head, 13, body);
 
-            // HP bar.
+            // HP bar (eased for a smooth drain).
+            float dhp = _anim.DisplayHp(f);
             int barW = 30;
             var barPos = new Point((int)center.X - barW / 2, (int)(center.Y - 44));
             _prim.FillRect(_sb, new Rectangle(barPos.X, barPos.Y, barW, 5), Palette.HpBack);
-            int fill = (int)MathF.Round(barW * f.Hp / (float)f.MaxHp);
+            int fill = (int)MathF.Round(barW * Math.Clamp(dhp / f.MaxHp, 0f, 1f));
             _prim.FillRect(_sb, new Rectangle(barPos.X, barPos.Y, fill, 5),
                 f.Team == Team.Player ? Palette.HpFill : new Color(210, 96, 88));
-            _font.DrawCentered(_sb, f.Hp.ToString(), (int)center.X, barPos.Y - 9, 1, Palette.Text);
+            _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)center.X, barPos.Y - 9, 1, Palette.Text);
         }
     }
 

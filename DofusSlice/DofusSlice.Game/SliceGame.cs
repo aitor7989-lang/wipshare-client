@@ -30,6 +30,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Primitives _prim = null!;
     private PixelFont _font = null!;
     private IsoProjector _proj = null!;
+    private SpriteBank _sprites = null!;
 
     private CombatEngine _engine = null!;
     private BattleAnimator _anim = null!;
@@ -80,6 +81,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _sb = new SpriteBatch(GraphicsDevice);
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
+        _sprites = new SpriteBank(GraphicsDevice);
         _proj = IsoProjector.Centered(Encounter.Width, Encounter.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
         _anim = new BattleAnimator(_proj);
@@ -224,10 +226,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         GraphicsDevice.Clear(Palette.Background);
         _sb.Begin(samplerState: SamplerState.PointClamp);
 
-        DrawTiles();
-        DrawOverlays();
-        DrawFighters();
-        _anim.DrawEffects(_sb, _prim, _font); // corpses, impact flashes, floating numbers
+        DrawFloor();
+        DrawFloorOverlays();
+        DrawEntities();                        // rocks + fighters, one depth-sorted pass
+        _anim.DrawEffects(_sb, _prim, _font);  // corpses, impact flashes, floating numbers
         DrawHud();
         // Hold the end screen until the final death/hit animation has played out.
         if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
@@ -239,19 +241,25 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private IEnumerable<CellCoord> CellsByDepth() =>
         _engine.Field.AllCells().OrderBy(c => c.X + c.Y);
 
-    private void DrawTiles()
+    private static bool IsObstacle(Battlefield f, CellCoord c) =>
+        !f.IsWalkable(c) && f.BlocksLineOfSight(c);
+
+    /// <summary>The flat ground: every cell's grass tile (sprite or procedural checker).</summary>
+    private void DrawFloor()
     {
+        var grass = _sprites.Get("tile_grass");
         foreach (var c in CellsByDepth())
         {
             var center = _proj.CellCenter(c);
-            bool obstacle = !_engine.Field.IsWalkable(c) && _engine.Field.BlocksLineOfSight(c);
-            Color baseColor = ((c.X + c.Y) % 2 == 0) ? Palette.TileA : Palette.TileB;
-            _prim.DiamondAt(_sb, center, obstacle ? Palette.Obstacle : baseColor);
-            DrawTileOutline(center, Palette.TileEdge);
-            if (obstacle)
+            if (grass != null)
             {
-                _prim.DiscAt(_sb, center + new Vector2(0, -6), 11, Palette.ObstacleTop);
-                _prim.DiscAt(_sb, center + new Vector2(-4, -9), 5, new Color(140, 126, 110));
+                _sb.Draw(grass, new Vector2(center.X - TileW / 2f, center.Y - TileH / 2f), Color.White);
+            }
+            else
+            {
+                Color baseColor = ((c.X + c.Y) % 2 == 0) ? Palette.TileA : Palette.TileB;
+                _prim.DiamondAt(_sb, center, baseColor);
+                DrawTileOutline(center, Palette.TileEdge);
             }
         }
     }
@@ -268,10 +276,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.Line(_sb, left, top, 1f, color);
     }
 
-    private void DrawOverlays()
+    private void DrawFloorOverlays()
     {
         if (_engine.Outcome != FightOutcome.Ongoing) return;
+
+        // Always mark the active fighter's cell so the turn reads on the board.
+        if (_engine.Current.IsAlive)
+            _prim.DiamondAt(_sb, _anim.CenterFor(_engine.Current), Palette.CurrentRing * 0.28f);
+
         if (_anim.IsBusy) return; // hide range hints mid-action
+
         var hero = Hero;
         bool playerTurn = _engine.Current.Team == Team.Player && hero != null;
 
@@ -282,8 +296,6 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (playerTurn && _selectedSpell >= 0)
         {
             var spell = HeroSpells[_selectedSpell];
-
-            // Dim wash over the spell's whole reach, brighter on cells that are legal targets.
             foreach (var cell in _engine.SpellReachCells(hero!, spell))
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastReach);
 
@@ -300,36 +312,98 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             DrawTileOutline(_proj.CellCenter(_hover), Color.White);
     }
 
-    private void DrawFighters()
+    /// <summary>
+    /// Rocks and fighters in a single pass sorted by feet (base) screen-Y, so a taller
+    /// sprite standing on a nearer cell correctly occludes whatever is behind it. This is the
+    /// fix for the height-sorting issue: props and characters share one depth order instead
+    /// of drawing all tiles then all fighters.
+    /// </summary>
+    private void DrawEntities()
     {
-        // Depth-sort by the animated position so a sliding token overlaps correctly.
-        foreach (var f in _engine.Fighters.Where(f => f.IsAlive)
-                     .OrderBy(f => _anim.CenterFor(f).Y))
+        var items = new List<(float depth, int tie, Action draw)>();
+
+        foreach (var c in _engine.Field.AllCells())
+            if (IsObstacle(_engine.Field, c))
+            {
+                var cell = c;
+                items.Add((_proj.CellCenter(cell).Y, 0, () => DrawRock(cell)));
+            }
+
+        foreach (var f in _engine.Fighters.Where(x => x.IsAlive))
         {
-            var center = _anim.CenterFor(f);
+            var fighter = f;
+            items.Add((_anim.CenterFor(fighter).Y, 1, () => DrawFighter(fighter)));
+        }
+
+        foreach (var it in items.OrderBy(i => i.depth).ThenBy(i => i.tie))
+            it.draw();
+    }
+
+    private void DrawRock(CellCoord c)
+    {
+        var center = _proj.CellCenter(c);
+        var rock = _sprites.Get("tile_rock");
+        if (rock != null)
+        {
+            DrawSpriteFeet(rock, center, Color.White, TileH + 24);
+            return;
+        }
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
+        _prim.DiscAt(_sb, center + new Vector2(0, -5), 12, Palette.Obstacle);
+        _prim.DiscAt(_sb, center + new Vector2(0, -9), 9, Palette.ObstacleTop);
+        _prim.DiscAt(_sb, center + new Vector2(-4, -12), 4, new Color(150, 136, 120));
+    }
+
+    private void DrawFighter(Fighter f)
+    {
+        var center = _anim.CenterFor(f);
+        float flash = _anim.FlashAmount(f.Id);
+
+        // Ground shadow.
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
+
+        var sprite = _sprites.Get(f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant());
+        float topY;
+        if (sprite != null)
+        {
+            var tint = flash > 0f ? Color.Lerp(Color.White, new Color(255, 90, 90), flash) : Color.White;
+            float h = TileH * 2.2f;
+            DrawSpriteFeet(sprite, center + new Vector2(0, 4), tint, h);
+            topY = center.Y + 4 - h;
+        }
+        else
+        {
             var head = center + new Vector2(0, -16);
-
-            _prim.DiscAt(_sb, center + new Vector2(0, 2), 13, Palette.Shadow);
-
-            if (f == _engine.Current)
-                _prim.DiscAt(_sb, head, 17, Palette.CurrentRing);
-
             var body = f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name);
-            float flash = _anim.FlashAmount(f.Id);
             if (flash > 0f) body = Color.Lerp(body, new Color(255, 80, 80), flash);
             _prim.DiscAt(_sb, head, 15, new Color(20, 20, 24));
             _prim.DiscAt(_sb, head, 13, body);
-
-            // HP bar (eased for a smooth drain).
-            float dhp = _anim.DisplayHp(f);
-            int barW = 30;
-            var barPos = new Point((int)center.X - barW / 2, (int)(center.Y - 44));
-            _prim.FillRect(_sb, new Rectangle(barPos.X, barPos.Y, barW, 5), Palette.HpBack);
-            int fill = (int)MathF.Round(barW * Math.Clamp(dhp / f.MaxHp, 0f, 1f));
-            _prim.FillRect(_sb, new Rectangle(barPos.X, barPos.Y, fill, 5),
-                f.Team == Team.Player ? Palette.HpFill : new Color(210, 96, 88));
-            _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)center.X, barPos.Y - 9, 1, Palette.Text);
+            _prim.DiscAt(_sb, head + new Vector2(0, -3), 8, body * 1.15f); // subtle head highlight
+            topY = head.Y - 15;
         }
+
+        DrawHpBar(f, center.X, topY - 10);
+    }
+
+    /// <summary>Draw a sprite anchored at its feet (bottom-centre) on the cell centre.</summary>
+    private void DrawSpriteFeet(Texture2D tex, Vector2 feet, Color tint, float targetHeight)
+    {
+        float scale = targetHeight / tex.Height;
+        _sb.Draw(tex, feet, null, tint, 0f, new Vector2(tex.Width / 2f, tex.Height),
+            scale, SpriteEffects.None, 0f);
+    }
+
+    private void DrawHpBar(Fighter f, float centerX, float y)
+    {
+        float dhp = _anim.DisplayHp(f);
+        const int barW = 32;
+        int x = (int)centerX - barW / 2;
+        _prim.FillRect(_sb, new Rectangle(x - 1, (int)y - 1, barW + 2, 7), new Color(0, 0, 0, 140));
+        _prim.FillRect(_sb, new Rectangle(x, (int)y, barW, 5), Palette.HpBack);
+        int fill = (int)MathF.Round(barW * Math.Clamp(dhp / f.MaxHp, 0f, 1f));
+        _prim.FillRect(_sb, new Rectangle(x, (int)y, fill, 5),
+            f.Team == Team.Player ? Palette.HpFill : new Color(214, 96, 88));
+        _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)centerX, (int)y - 10, 1, Palette.Text);
     }
 
     // ----- HUD ----------------------------------------------------------------------

@@ -1,0 +1,4 @@
+# Never commit art dropped here — it may be third-party/copyrighted and must stay local.
+*
+!.gitignore
+!README.md

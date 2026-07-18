@@ -15,10 +15,12 @@ public static class Palette
     public static readonly Color Obstacle = new(96, 84, 72); // rock
     public static readonly Color ObstacleTop = new(120, 106, 92);
 
-    public static readonly Color MoveRange = new(74, 140, 220, 150);
-    public static readonly Color CastReach = new(224, 150, 60, 70);   // spell's full geometric reach
-    public static readonly Color CastRange = new(240, 170, 70, 170);  // cells that are valid targets right now
-    public static readonly Color Aoe = new(220, 70, 60, 170);
+    // Functional cell colours, matching the usual tactical convention (as in Dofus):
+    // green = movement (PM), red = spell/attack range (PA), orange = area of effect.
+    public static readonly Color MoveRange = new(90, 205, 100, 150);
+    public static readonly Color CastReach = new(214, 74, 62, 78);    // spell's full geometric reach (dim)
+    public static readonly Color CastRange = new(236, 92, 74, 168);   // cells that are valid targets right now
+    public static readonly Color Aoe = new(240, 160, 60, 180);
     public static readonly Color Hover = new(255, 255, 255, 90);
     public static readonly Color CurrentRing = new(255, 220, 120);
 

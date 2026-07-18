@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Copy the (gitignored) local sprite folder next to the exe so SpriteBank can find it. -->
+    <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DofusSlice.Core\DofusSlice.Core.csproj" />
   </ItemGroup>
 

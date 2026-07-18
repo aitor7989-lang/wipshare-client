@@ -18,6 +18,19 @@ and win/lose.
 > monster row so you can plug your own art or datamined data in later, but shipping Ankama's
 > copyrighted art/sound publicly would be a copyright issue — keep any such assets local.
 
+## Using your own art (sprite pipeline)
+
+The renderer looks for optional PNG sprites in an `assets/` folder next to the executable
+and uses them automatically, falling back to procedural placeholders for anything missing.
+See `DofusSlice.Game/assets/README.md` for the recognised filenames (`iop`, `boar`,
+`gobball`, `piou`, `tile_grass`, `tile_rock`). Fighter sprites are drawn anchored at the
+feet so tall art stands out of its tile and depth-sorts correctly.
+
+That folder is **gitignored** — art you drop in stays strictly local and is never committed
+or distributed, so you can point it at your own (or locally-kept datamined) art without any
+third-party assets ending up in the repo. Cell colours follow the usual tactical convention:
+**green = movement (PM)**, **red = spell/attack range (PA)**, **orange = area of effect**.
+
 ## Running it
 
 Requires the .NET 8 SDK.

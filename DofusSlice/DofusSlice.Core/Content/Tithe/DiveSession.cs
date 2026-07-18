@@ -76,13 +76,38 @@ public sealed class DiveSession
     /// campaign: gold + XP + essences on a win (downed mercs die, a downed avatar is Wounded),
     /// or campaign-over on a wipe. The clock pays for the travel and the fight.
     /// </summary>
-    public FightReport? Engage(PackState pack)
+    public FightReport? Engage(PackState pack, bool jumped = false)
     {
         if (Ended || pack.Cleared) return null;
-        var engine = BeginFight(pack);
+        var engine = BeginFight(pack, chargeTravel: !jumped, jumped: jumped);
         RunCombat(engine);
         Clock -= FightCost(pack.Def);   // headless fight-time estimate (the game ticks real time)
         return ApplyResult(pack, engine);
+    }
+
+    /// <summary>
+    /// Headless abstraction of the real-time hunt (Bible §6.6 aggro-catch; the visual game moves
+    /// hunting packs by actual proximity): after a fight, a still-roaming hunter may catch the
+    /// crew JUMPED — scattered in the open, no placement — but only if the fight happened NEAR its
+    /// territory (its reach within <see cref="HuntTerritory"/> of the fought pack's). Skimming the
+    /// shallows only ever wakes the nearest hunter; going deep wakes the deep ones.
+    /// </summary>
+    private const int CatchChancePct = 4;
+    private const int HuntTerritory = 10;
+
+    /// <summary>Roll the ONE hunter nearest the fight just fought (a single fight wakes a single
+    /// hunter, however deep you are); returns a forced jumped fight, if any.</summary>
+    public FightReport? RollHunters(TitheContent.PackDef justFought)
+    {
+        if (Ended) return null;
+        var hunter = Packs
+            .Where(p => !p.Cleared && p.Def.Hunts && p.Def != justFought
+                        && p.Def.Reach - justFought.Reach <= HuntTerritory)
+            .OrderBy(p => Math.Abs(p.Def.Reach - justFought.Reach))
+            .FirstOrDefault();
+        if (hunter != null && _rng.Roll(1, 100) <= CatchChancePct)
+            return Engage(hunter, jumped: true);
+        return null;
     }
 
     /// <summary>
@@ -90,11 +115,11 @@ public sealed class DiveSession
     /// for the party versus the pack. The game plays this out visually then calls
     /// <see cref="ApplyResult"/>; the headless <see cref="Engage"/> runs it immediately.
     /// </summary>
-    public CombatEngine BeginFight(PackState pack, bool chargeTravel = true)
+    public CombatEngine BeginFight(PackState pack, bool chargeTravel = true, bool jumped = false)
     {
         MendWithBread();
         if (chargeTravel) Clock -= pack.Def.Reach; // headless charges travel; the visual walks it in real time
-        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade);
+        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade, jumped);
     }
 
     /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>
@@ -195,6 +220,10 @@ public sealed class DiveSession
             }
             var fr = Engage(pack);
             if (fr != null) { fights.Add(fr); lostAll.AddRange(fr.Lost); gearAll.AddRange(fr.Gear); }
+
+            // The hunting packs answer the noise: a hunter near that fight may catch the crew JUMPED.
+            var caught = fr != null ? RollHunters(pack.Def) : null;
+            if (caught != null) { fights.Add(caught); lostAll.AddRange(caught.Lost); gearAll.AddRange(caught.Gear); }
         }
 
         return new DiveReport(

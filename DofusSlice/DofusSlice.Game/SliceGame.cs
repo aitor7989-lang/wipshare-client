@@ -47,6 +47,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Vector2 _partyWorld;
     private readonly Queue<CellCoord> _partyPath = new();
     private DiveSession.PackState? _engageOnArrive;
+    private bool _jumpedFight;                        // this fight began as an aggro-catch
+    private float _huntTimer;                         // cadence of the hunting packs' steps
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
     private int _cryptRoom;
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
@@ -418,7 +420,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyWorld = _proj.CellCenter(PartyStart);
         _partyPath.Clear();
         _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
-        _cryptRoom = 0; _cryptMsg = ""; _cryptMsgTimer = 0f;
+        _cryptRoom = 0; _cryptMsg = ""; _cryptMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
     }
 
     private static readonly CellCoord[] PackCells =
@@ -442,6 +444,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_cryptMsgTimer > 0f) _cryptMsgTimer -= dt;
 
         MovePartyAlongPath(dt);
+        if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
         // Number keys walk the party to packs in reach order (a quick shortcut).
         var ordered = _dive.Packs.Where(p => !p.Cleared).OrderBy(p => p.Def.Reach).ToList();
@@ -459,6 +462,44 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     }
 
     // ----- Graveyard roaming --------------------------------------------------------
+
+    private const int HuntAggroRadius = 6;    // cells; inside this a hunting pack starts closing
+    private const float HuntStepSeconds = 2f; // real-time cadence of a hunter's step
+
+    /// <summary>
+    /// The hunting packs actually hunt (Bible §6.6 aggro): every couple of seconds, any uncleared
+    /// "hunts" pack with the crew inside its aggro radius takes one step toward them; reaching
+    /// adjacency is a CATCH — a Jumped fight, no placement, the pack already around the crew.
+    /// Returns true if a fight started (the caller must stop processing the yard).
+    /// </summary>
+    private bool UpdateHunters(float dt)
+    {
+        _huntTimer += dt;
+        bool step = _huntTimer >= HuntStepSeconds;
+        if (step) _huntTimer = 0f;
+
+        foreach (var p in _dive!.Packs.Where(p => !p.Cleared && p.Def.Hunts))
+        {
+            if (!_packCells.TryGetValue(p.Def.Id, out var cell)) continue;
+
+            if (step && cell.DistanceTo(_partyCell) <= HuntAggroRadius && cell.DistanceTo(_partyCell) > 1)
+            {
+                var path = Pathfinding.FindPath(_graveField, cell, _partyCell,
+                    c => _packCells.Values.Any(pc => pc == c), allowOccupiedGoal: true);
+                if (path is { Count: > 1 } && path[1] != _partyCell)
+                    _packCells[p.Def.Id] = cell = path[1];
+            }
+
+            if (cell.DistanceTo(_partyCell) <= 1) // caught — the yard was never safe
+            {
+                _partyPath.Clear(); _engageOnArrive = null; _cryptOnArrive = false;
+                _cryptRun = false;
+                BeginCombat(p, jumped: true);
+                return true;
+            }
+        }
+        return false;
+    }
 
     private void WalkTo(CellCoord goal, DiveSession.PackState? engage, bool crypt)
     {
@@ -519,20 +560,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void EngagePack(DiveSession.PackState pack) { _cryptRun = false; BeginCombat(pack); }
 
-    private void BeginCombat(DiveSession.PackState pack)
+    private void BeginCombat(DiveSession.PackState pack, bool jumped = false)
     {
-        _engine = _dive!.BeginFight(pack, chargeTravel: false); // the walk was the travel cost
+        _engine = _dive!.BeginFight(pack, chargeTravel: false, jumped: jumped); // the walk was the travel cost
         _map = _graveMap;
         _pendingPack = pack;
         _combatResolved = false;
         _fightReport = null;
+        _jumpedFight = jumped;
         SetupView(_graveMap);
         _anim.Reset(_engine.Fighters);
         WireEngine();
         _scene = Scene.Combat;
-        _placing = true;
         _selCrew = _engine.Fighters.FirstOrDefault(f => f.Team == Team.Player);
         _selectedSpell = -1; _enemyTimer = 0f; _enemyActed = false; _turnClock = TurnSeconds; _turnOwner = "";
+        // Jumped tier (Bible §6.6): caught in the open — no placement phase, the fight is already on.
+        if (jumped) { _placing = false; _engine.Start(); }
+        else _placing = true;
     }
 
     private void UpdateCampaignCombat(float dt)
@@ -1709,6 +1753,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
         _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - 30, 1,
             afford ? Palette.Text : Palette.TextDim);
+        // A hunting pack with the crew in its aggro radius is actively closing — flag it.
+        if (p.Def.Hunts && c.DistanceTo(_partyCell) <= HuntAggroRadius)
+            _font.DrawCentered(_sb, "!", (int)center.X + 20, (int)center.Y - 44, 3, new Color(224, 80, 64));
     }
 
     private void DrawDiveClock(int cx, int y, int w, int h)
@@ -1782,6 +1829,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_cryptRun && !_placing)  // which sealing-door room you're in
             _font.DrawCentered(_sb, $"THE CRYPT  —  {_cryptRooms[_cryptRoom].Name.ToUpperInvariant()}  ({_cryptRoom + 1}/{_cryptRooms.Count})",
                 ScreenW / 2, 552, 1, new Color(204, 172, 224));
+        if (_jumpedFight && !_combatResolved) // caught in the open — the fight found YOU
+            _font.DrawCentered(_sb, "JUMPED — THE PACK FINDS YOU IN THE OPEN", ScreenW / 2, 528, 1, new Color(224, 96, 88));
         if (_combatResolved && _fightReport != null && !_anim.IsBusy) DrawFightReport();
         _sb.End();
     }

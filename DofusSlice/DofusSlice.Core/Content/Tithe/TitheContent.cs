@@ -465,15 +465,27 @@ public static class TitheContent
     /// runs through the same watched-combat engine.
     /// </summary>
     public static CombatEngine BuildDiveFight(IReadOnlyList<CampaignUnit> party,
-                                              IReadOnlyList<string> packMobs, IRng rng, int grade = 1)
+                                              IReadOnlyList<string> packMobs, IRng rng, int grade = 1,
+                                              bool jumped = false)
     {
         var map = Arena();
         var field = map.ToBattlefield();
 
-        var startCells = map.PlayerStartCells.OrderBy(c => c.X).ThenBy(c => c.Y).ToList();
+        // Prepared tier: the tidy start-zone cluster (the player may re-place). Jumped tier
+        // (Bible §6.6: "Jumped, with enemy-defined scattered cells, arrives with aggro-catch"):
+        // a hunting pack caught the crew mid-yard — they start scattered in the open middle,
+        // no placement phase, the pack already around them.
+        var startCells = jumped
+            ? new List<CellCoord> { new(6, 5), new(7, 7), new(5, 7), new(8, 4) }
+            : map.PlayerStartCells.OrderBy(c => c.X).ThenBy(c => c.Y).ToList();
         var fighters = new List<Fighter>();
         for (int i = 0; i < party.Count; i++)
-            fighters.Add(MakeCrewMember(party[i], i < startCells.Count ? startCells[i] : map.PlayerSpawn));
+        {
+            var want = i < startCells.Count ? startCells[i] : map.PlayerSpawn;
+            if (!map.IsWalkable(want) || fighters.Any(f => f.Pos == want))
+                want = NearestFreeCell(map, fighters, want);
+            fighters.Add(MakeCrewMember(party[i], want));
+        }
 
         // Role-aware pack placement so the fight plays like the tuned encounter: fast flankers
         // (Gravehounds) start close on the top/bottom flanks to dive the backline, everything else

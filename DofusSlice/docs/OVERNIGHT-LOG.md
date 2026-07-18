@@ -91,8 +91,16 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       is the intended fix), and the real Dofus 5-grade tables come with §9.
 - [ ] **6. Temple, survivors & temperament (M4 social).** Vetting, essence removal,
       Grasping survivors that leave with loot when the haul is heavy and clock low.
-- [ ] **7. Placement depth (Jumped tier) + aggro-catch.** Enemy-defined scattered
-      spawn, aggro radii, "caught" starts.
+- [x] **7. Hunting packs hunt + the Jumped tier.** DONE. Visual: "hunts" packs step
+      toward the crew every 2s inside a 6-cell aggro radius (red "!" on the token
+      when closing); adjacency = CATCH → a Jumped fight (scattered mid-map crew,
+      no placement phase, "JUMPED" banner). Headless: after each fight, the ONE
+      hunter nearest that fight's territory (reach within 10) rolls 4% to catch
+      the crew jumped. Balance measured: CAUTIOUS 25% wipes / avg 1879g (finally
+      has real risk — the hound near warden-way), GREEDY 85% / 1214g. Greedy
+      looking dominated is a dumb-greedy stand-in artifact (it dives the g4
+      warband at L1); M5 owns that dial — consider a "weaver" stand-in profile
+      that scales depth with level before touching the data.
 - [ ] **8. Balance pass (M5).** Give cautious play real risk; make the Crypt a fair
       big bet; tune income-per-dive. Fix the bimodal survive-forever / wipe-fast.
 - [ ] **9. Content & uniques.** Second set, the canonical +1 MP boots screaming

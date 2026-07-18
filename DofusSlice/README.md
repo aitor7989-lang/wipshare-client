@@ -18,6 +18,39 @@ and win/lose.
 > monster row so you can plug your own art or datamined data in later, but shipping Ankama's
 > copyrighted art/sound publicly would be a copyright issue — keep any such assets local.
 
+## TITHE — watched-combat prototype (the current focus)
+
+The engine is now the foundation for **TITHE**, a dark single-player dungeon-crawl whose combat
+uses the exact Dofus grammar above but is **watched, not piloted**: every unit — your whole crew
+*and* the enemy pack — fights by an AI *policy*. Your skill lives *around* the fight (who to bring,
+where to place them, what to engage), Loop-Hero/Moonlighter style. This is the prototype that
+validates "is it fun to watch?" before any art (see `TITHE_slice_bible` for the full design).
+
+![TITHE — the Graveyard, watched combat](docs/tithe-combat.png)
+
+**The vertical slice (Bible M1):** place a crew of three — **Cannon** (avatar) + two hired
+**mercenaries** (Bulwark, Archer) — on the Graveyard, press **FIGHT**, and watch. Four legible
+policies drive it: the **Bulwark** holds the front, the **Archer** kites and shoots the softest
+target, the **Cannon** holds a mid sightline and nukes, and the skeleton **Gravehounds** dive your
+squishy backline. Wins are common but rarely free — a downed mercenary **dies permanently**, a
+downed player-managed unit is dragged out **Wounded**. That cost *is* the tension.
+
+```bash
+cd DofusSlice
+dotnet run --project DofusSlice.Game            # TITHE watched combat (default)
+dotnet run --project DofusSlice.Game dofus      # the original piloted Dofus slice
+dotnet run --project DofusSlice.Sim tithe [seed]        # headless: one narratable fight + aftermath
+dotnet run --project DofusSlice.Sim tithe balance 100   # win / clean / costly / defeat spread
+```
+
+**Controls (watched mode):** place the crew (click a member, then a blue start cell); **Space** or
+**FIGHT** to begin; **1 / 2 / 3** = 1× / 2× / 4× playback speed; **R** for a new fight.
+
+All rules and numbers live in JSON data tables (`DofusSlice.Core/Content/Tithe/TitheTables.cs`) —
+the single source of truth per the Bible; the current values are honest placeholders flagged for a
+later Dofus-1.29 mining pass. Everything below describes the original piloted Dofus slice, whose
+engine TITHE reuses unchanged.
+
 ## Maps
 
 Maps are content. Two formats load from the `maps/` folder next to the exe (Tiled first, then

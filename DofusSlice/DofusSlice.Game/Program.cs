@@ -3,7 +3,9 @@ using System.IO;
 
 try
 {
-    using var game = new DofusSlice.Game.SliceGame();
+    // TITHE watched-combat prototype by default; pass "dofus" for the original piloted slice.
+    bool tithe = !(args.Length > 0 && args[0].Equals("dofus", StringComparison.OrdinalIgnoreCase));
+    using var game = new DofusSlice.Game.SliceGame(tithe);
     game.Run();
 }
 catch (Exception ex)

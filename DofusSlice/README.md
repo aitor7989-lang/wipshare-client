@@ -102,6 +102,14 @@ Three projects, split so the rules never depend on the renderer:
 - Animated combat: tokens slide along their path, casters lunge with an elemental impact
   flash, floating damage/heal numbers, hit flashes and death fades — driven by a structured
   event stream from the engine, so the rules layer stays instant and deterministic.
+- Directional spritesheet animation (idle/walk/cast/hurt/die), with an original committed
+  sprite set and a drop-in override folder for your own art.
+- A world camera: follows the active fighter, mouse-wheel zoom, clamps to the map, and
+  screen-shakes on hits.
+- Data-driven maps: cells carry a tile kind (grass/dirt/rock/void) that derives movement and
+  line-of-sight; maps are editable JSON grids (`maps/incarnam.json`).
+- Timed status effects (buffs, shields, poison, drains) that tick at each turn's start, shown
+  as per-fighter pips — e.g. Iop's "Power" self-buff and the Gobball's poison headbutt.
 
 ## Roadmap ideas
 

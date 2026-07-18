@@ -49,16 +49,18 @@ What still breaks and needs work:
   `SpellCast` → cast, hit → hurt, death → die). 32-bit RGBA is premultiplied on load; missing
   facings mirror from SE/NE; everything falls back to the procedural placeholders.
 - **Directional facing.** ✅ **Done.** 4-way iso facing derived from movement/cast direction.
-- **Camera.** The map is pinned to the screen. We need a camera: follow the active fighter,
-  pan/zoom, clamp to map bounds, and **screen-shake** on impact for feel.
-- **Data-driven maps + richer cell model.** We hardcode one rectangular encounter. A real
-  Dofus cell carries more than walkable/LoS: a **line-of-sight flag, a movement flag, ground
-  level/elevation, and object-layer references**. We want (a) a cell model with those fields
-  and (b) a map **loader** (Tiled TMX/JSON, or a decoded cell-data array) so maps are content,
-  not code. This is also the seam to import your own Incarnam-style maps.
-- **Status-effect / buff system.** Effects are instant only. Dofus combat is built on timed
-  states: buffs/debuffs, shields, damage-over-time, AP/MP steal/reduction, with **turn-start
-  and turn-end ticks**. The engine already notes a hook for an end-of-turn queue — this is it.
+- **Camera.** ✅ **Done.** `Camera2D` follows the active fighter, wheel-zooms (0.6x-2.2x),
+  clamps to the map's world bounds, and screen-shakes on hits (synced via the animator).
+  Rendering is split into a camera-transformed world pass and a screen-space HUD pass.
+- **Data-driven maps + richer cell model.** ✅ **Done.** Cells now carry a `TileKind`
+  (grass/grass2/dirt/path/rock/void) that derives walkability + line-of-sight; maps are
+  JSON ASCII-grids with a spawn legend (`MapData` + `MapLoader`), the game loads
+  `maps/incarnam.json`, and the renderer draws per tile-kind (grass/dirt sprites, void pits).
+  Still open: ground elevation and object/overhead layers.
+- **Status-effect / buff system.** ✅ **Done.** Timed statuses (DamageBuff / Shield / Poison /
+  MpDrain) tick at each fighter's turn start (poison damage, MP drain, then age/expire),
+  modify outgoing/incoming damage, and render as per-fighter pips. Iop's "Power" self-buff and
+  the Gobball's poison headbutt exercise it. Still open: summons and a turn-*end* queue.
 
 ## [P2] Combat fidelity & game feel
 
@@ -87,10 +89,13 @@ What still breaks and needs work:
 ## Suggested order
 
 1. ~~Spritesheet animation + directional facing~~ ✅ done.
-2. **Camera** (follow + clamp + shake).
-3. **Data-driven maps** + richer cell model + a loader.
-4. **Status-effect system** (turn-tick durations).
-5. Hover path/MP + damage preview; crits; sound.
+2. ~~Camera (follow + clamp + shake)~~ ✅ done.
+3. ~~Data-driven maps + richer cell model + a loader~~ ✅ done.
+4. ~~Status-effect system (turn-tick durations)~~ ✅ done.
+5. **Next:** hover path/MP + damage preview; crits; sound; overhead map layers; summons.
+
+All of P1 is now implemented. The remaining work is the P2 (fidelity/feel) and P3
+(engineering) items above.
 
 ## Sources
 

@@ -14,6 +14,19 @@ public sealed class MapData
 
     public TileKind Tile(int x, int y) => Tiles[y * Width + x];
 
+    /// <summary>First walkable cell not already claimed by a spawn (used as a hero-spawn fallback).</summary>
+    public CellCoord? FirstWalkableCell(ISet<CellCoord> taken)
+    {
+        for (int y = 0; y < Height; y++)
+            for (int x = 0; x < Width; x++)
+            {
+                var cell = new CellCoord(x, y);
+                if (TileKindInfo.IsWalkable(Tile(x, y)) && !taken.Contains(cell))
+                    return cell;
+            }
+        return null;
+    }
+
     /// <summary>Build the battlefield geometry from the tiles (walkability/LoS follow the kind).</summary>
     public Battlefield ToBattlefield()
     {

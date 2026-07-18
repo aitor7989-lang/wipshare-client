@@ -122,8 +122,32 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void StartFight()
     {
-        _engine = Encounter.FromMap(_map, new SystemRng(_seed));
-        _anim.Reset(_engine.Fighters);
+        // A map that parses but produces an unbuildable encounter degrades to the default.
+        try
+        {
+            _engine = Encounter.FromMap(_map, new SystemRng(_seed));
+            _anim.Reset(_engine.Fighters);
+            WireEngine();
+            _engine.Start();
+        }
+        catch
+        {
+            _map = Encounter.DefaultMap();
+            _engine = Encounter.FromMap(_map, new SystemRng(_seed));
+            _anim.Reset(_engine.Fighters);
+            WireEngine();
+            _engine.Start();
+        }
+
+        _selectedSpell = -1;
+        _enemyTimer = 0f;
+        _enemyActed = false;
+        _turnClock = TurnSeconds;   // fresh clock so an R-restart never inherits a timed-out turn
+        _turnOwner = "";
+    }
+
+    private void WireEngine()
+    {
         _log.Clear();
         _engine.Logged += line =>
         {
@@ -131,10 +155,6 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (_log.Count > 8) _log.RemoveAt(0);
         };
         _engine.Emitted += _anim.OnEvent;
-        _engine.Start();
-        _selectedSpell = -1;
-        _enemyTimer = 0f;
-        _enemyActed = false;
     }
 
     // ----- Update -------------------------------------------------------------------

@@ -96,7 +96,8 @@ public sealed class SpriteBank
             if (!_index.TryGetValue(baseName, out var entry)) continue;
             var tex = Load(entry.path);
             if (tex == null) continue;
-            int count = Math.Max(1, entry.frames);
+            // Never let a mislabelled frame count produce a zero-width frame.
+            int count = Math.Clamp(entry.frames, 1, Math.Max(1, tex.Width));
             result = new SpriteSheet
             {
                 Texture = tex,

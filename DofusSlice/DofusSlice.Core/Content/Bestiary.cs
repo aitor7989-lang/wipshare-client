@@ -6,8 +6,8 @@ namespace DofusSlice.Core.Content;
 /// <summary>Factory for the hero and the Incarnam mobs used in the slice.</summary>
 public static class Bestiary
 {
-    /// <summary>Create a mob by its map-legend kind ("boar", "gobball", "piou").</summary>
-    public static Fighter Create(string kind, string id, CellCoord pos) => kind.ToLowerInvariant() switch
+    /// <summary>Create a mob by its map-legend kind ("boar", "gobball", "piou"); unknown/empty -> boar.</summary>
+    public static Fighter Create(string? kind, string id, CellCoord pos) => (kind ?? "").ToLowerInvariant() switch
     {
         "gobball" => MakeGobball(id, pos),
         "piou" => MakePiou(id, pos),

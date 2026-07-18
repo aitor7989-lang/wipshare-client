@@ -39,6 +39,9 @@ public sealed class BattleAnimator
         _corpses.Clear();
         _displayHp.Clear();
         _flash.Clear();
+        _poses.Clear();
+        _facing.Clear();
+        _pendingShake = 0f;
         foreach (var f in fighters) _displayHp[f.Id] = f.Hp;
     }
 

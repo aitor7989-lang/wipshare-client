@@ -1,4 +1,5 @@
 using DofusSlice.Core.Combat;
+using DofusSlice.Core.Content;
 using DofusSlice.Core.Grid;
 using DofusSlice.Core.Spells;
 
@@ -23,6 +24,7 @@ public static class EffectsTest
         Regen();
         LineAoe();
         Tackle();
+        MapHardening();
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed.");
         return _fail == 0 ? 0 : 1;
@@ -163,6 +165,33 @@ public static class EffectsTest
         eng.TryMove(c, new(2, 6)); // flee out of melee
         Check("Tackle", c.CurrentMp < mpAfterMoveIfUnlocked && c.CurrentAp < c.BaseAp,
             $"lost AP/MP leaving melee (AP {c.CurrentAp}/{c.BaseAp}, MP {c.CurrentMp})");
+    }
+
+    private static void MapHardening()
+    {
+        // No 'P': the loader must place the hero on a walkable, unclaimed cell (not (0,0) rock, not a mob cell).
+        var noP = MapLoader.Parse("""{"legend":{"1":"boar"},"rows":["#1.","..."]}""");
+        bool spawnOk = TileKindInfo.IsWalkable(noP.Tile(noP.PlayerSpawn.X, noP.PlayerSpawn.Y))
+                       && noP.Enemies.All(e => e.cell != noP.PlayerSpawn);
+        Check("Map no-P fallback", spawnOk, $"hero spawned at {noP.PlayerSpawn} on walkable, mob-free cell");
+
+        // Null legend value: must not crash building the encounter.
+        bool nullLegendOk;
+        try
+        {
+            var m = MapLoader.Parse("""{"legend":{"1":null},"rows":["1P.."]}""");
+            Encounter.FromMap(m, new SystemRng(1)).Start();
+            nullLegendOk = true;
+        }
+        catch { nullLegendOk = false; }
+        Check("Map null-legend", nullLegendOk, "null legend entry skipped, encounter built");
+
+        // Oversized map is rejected (so the game falls back to the default instead of freezing).
+        string bigRow = new string('.', 65);
+        bool rejected;
+        try { MapLoader.Parse($$"""{"rows":["{{bigRow}}"]}"""); rejected = false; }
+        catch (FormatException) { rejected = true; }
+        Check("Map size cap", rejected, "65-wide map rejected with FormatException");
     }
 
     private static SpellDef Spell(int id, string name, int ap, int min, int max, params SpellEffect[] effects) => new()

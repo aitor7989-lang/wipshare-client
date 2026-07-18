@@ -48,6 +48,7 @@ public sealed class CombatEngine
 
     public void Start()
     {
+        if (_order.Count == 0) throw new InvalidOperationException("CombatEngine has no fighters");
         _order.Sort((a, b) => b.Initiative.CompareTo(a.Initiative));
         Round = 1;
         _pointer = 0;
@@ -343,6 +344,7 @@ public sealed class CombatEngine
 
     private void ApplySteal(Fighter caster, Fighter victim, int amount, bool ap)
     {
+        amount = Math.Max(0, amount);
         // Wisdom lets the victim dodge part of the theft.
         int resisted = victim.Wisdom > 0 ? _rng.Roll(0, Math.Max(0, victim.Wisdom / 20)) : 0;
         int want = Math.Max(0, amount - resisted);
@@ -356,6 +358,7 @@ public sealed class CombatEngine
     private void ApplyStatusEffect(Fighter target, StatusKind kind, int magnitude, int turns)
     {
         if (kind == StatusKind.None || turns <= 0) return;
+        magnitude = Math.Max(0, magnitude); // never let a status grant resources / heal via damage
         var existing = target.Statuses.FirstOrDefault(s => s.Kind == kind);
         if (existing != null)
         {

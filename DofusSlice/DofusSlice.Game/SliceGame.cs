@@ -42,6 +42,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Dictionary<CellCoord, int> _moveRange = new();
     private float _enemyTimer;
 
+    // Per-turn countdown (Dofus-style): a turn auto-ends when the clock hits zero.
+    private const float TurnSeconds = 30f;
+    private float _turnClock = TurnSeconds;
+    private string _turnOwner = "";
+
     private readonly Rectangle[] _spellButtons = new Rectangle[4];
     private Rectangle _endTurnButton;
 
@@ -98,17 +103,26 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         _prevKeys = _keys; _keys = Keyboard.GetState();
 
-        if (Pressed(Keys.Escape) && _selectedSpell < 0 && _engine.Outcome != FightOutcome.Ongoing) { /* let R handle */ }
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
 
         _hover = _proj.ScreenToCell(new Vector2(_mouse.X, _mouse.Y));
 
         if (_engine.Outcome != FightOutcome.Ongoing) { base.Update(gameTime); return; }
 
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+        // A change of active fighter starts a fresh turn clock.
+        if (_engine.Current.Id != _turnOwner)
+        {
+            _turnOwner = _engine.Current.Id;
+            _turnClock = TurnSeconds;
+            _enemyTimer = 0f;
+        }
+
         if (_engine.Current.Team == Team.Player)
-            UpdatePlayerTurn();
+            UpdatePlayerTurn(dt);
         else
-            UpdateEnemyTurn((float)gameTime.ElapsedGameTime.TotalSeconds);
+            UpdateEnemyTurn(dt);
 
         base.Update(gameTime);
     }
@@ -122,12 +136,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _engine.EndTurn();
     }
 
-    private void UpdatePlayerTurn()
+    private void UpdatePlayerTurn(float dt)
     {
         var hero = Hero;
         if (hero == null) return;
         _moveRange = _engine.MovementRange(hero);
-        _enemyTimer = 0f;
+
+        // Turn timer: auto-end when it runs out.
+        _turnClock -= dt;
+        if (_turnClock <= 0f) { EndPlayerTurn(); return; }
 
         // Spell hotkeys.
         if (Pressed(Keys.D1)) ToggleSpell(0);
@@ -298,6 +315,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
         _font.Draw(_sb, "CLICK MOVE   1-4 SPELL   SPACE END   R RESTART", 16, HudTop - 22, 1, Palette.TextDim);
 
+        DrawTurnTimer();
+
         // Turn order (top-right).
         int tx = ScreenW - 20;
         foreach (var f in _engine.Fighters.Reverse())
@@ -325,6 +344,25 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (hero != null && hero.IsAlive) DrawPointPips(hero);
         DrawSpellBar(hero);
         DrawEndTurnButton();
+    }
+
+    private void DrawTurnTimer()
+    {
+        bool playerTurn = _engine.Current.Team == Team.Player;
+        const int barW = 240, barH = 16;
+        int bx = ScreenW / 2 - barW / 2, by = 14;
+
+        _prim.FillRect(_sb, new Rectangle(bx, by, barW, barH), Palette.HpBack);
+        float f = playerTurn ? Math.Clamp(_turnClock / TurnSeconds, 0f, 1f) : 1f;
+        Color fill = !playerTurn ? new Color(70, 74, 84)
+            : f > 0.5f ? Palette.HpFill
+            : f > 0.25f ? new Color(230, 200, 70)
+            : new Color(224, 80, 64);
+        _prim.FillRect(_sb, new Rectangle(bx, by, (int)(barW * f), barH), fill);
+        _prim.StrokeRect(_sb, new Rectangle(bx, by, barW, barH), 1, new Color(80, 86, 98));
+
+        string label = playerTurn ? $"YOUR TURN - {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S" : "ENEMY TURN";
+        _font.DrawCentered(_sb, label, ScreenW / 2, by + barH + 6, 1, Palette.Text);
     }
 
     private void DrawPointPips(Fighter hero)

@@ -27,6 +27,7 @@ public static class EffectsTest
         Summon();
         DamagePreview();
         MapHardening();
+        TmxImport();
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed.");
         return _fail == 0 ? 0 : 1;
@@ -196,6 +197,35 @@ public static class EffectsTest
         var empty = eng.EstimateDamage(c, spell, new(8, 8)); // no target there
         Check("Damage preview", ok && empty is null,
             $"estimate {est?.min}-{est?.max} on target, null on empty cell");
+    }
+
+    private static void TmxImport()
+    {
+        // A minimal synthetic Tiled map (our own fixture): a water strip + player and boar spawns.
+        const string tmx = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <map version="1.10" orientation="orthogonal" width="4" height="3" tilewidth="32" tileheight="32">
+         <tileset firstgid="1" name="watertiles-auto" tilewidth="32" tileheight="32" tilecount="4" columns="2"/>
+         <layer id="1" name="ground" width="4" height="3">
+          <data encoding="csv">
+        0,1,1,0,
+        0,1,1,0,
+        0,0,0,0
+        </data>
+         </layer>
+         <objectgroup name="spawns">
+          <object id="1" type="player" x="0" y="0"/>
+          <object id="2" type="boar" x="96" y="64"/>
+         </objectgroup>
+        </map>
+        """;
+        var map = TmxLoader.Parse(tmx);
+        bool ok = map.Width == 4 && map.Height == 3
+                  && map.Tile(1, 0) == TileKind.Water && map.Tile(0, 0) == TileKind.Grass
+                  && map.PlayerSpawn == new CellCoord(0, 0)
+                  && map.Enemies.Any(e => e.kind == "boar" && e.cell == new CellCoord(3, 2));
+        Check("Tiled TMX import", ok,
+            $"{map.Width}x{map.Height}, water@(1,0)={map.Tile(1, 0)}, player@{map.PlayerSpawn}, {map.Enemies.Count} mob(s)");
     }
 
     private static void MapHardening()

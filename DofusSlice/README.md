@@ -18,6 +18,22 @@ and win/lose.
 > monster row so you can plug your own art or datamined data in later, but shipping Ankama's
 > copyrighted art/sound publicly would be a copyright issue — keep any such assets local.
 
+## Maps
+
+Maps are content. Two formats load from the `maps/` folder next to the exe (Tiled first, then
+JSON, then the embedded default):
+
+- **Tiled `.tmx`** (`maps/incarnam.tmx`) — design orthogonal maps in the [Tiled](https://www.mapeditor.org/)
+  editor. The first CSV tile layer is read; each tile maps to a `TileKind` via its Class/Type or
+  a `kind` property, else the tileset's name (contains "water" → water, "rock"/"wall" → rock, …).
+  Spawns are point objects whose Class/Type/Name is `player` or a mob kind (`boar`/`gobball`/`piou`).
+- **JSON ASCII grid** (`maps/incarnam.json`) — a compact `rows` array; chars: `.`grass `,`grass2
+  `d`dirt `#`rock `o`void `w`water `P`player `s`start-cell, digits = mob spawns via a legend.
+
+Tile kinds `water` and `void` are non-walkable but you can see (and shoot) across them; water is
+drawn in the game's own isometric style. Third-party tileset art is **not** bundled — point the
+renderer at your own licensed tiles locally via the `assets/` folder.
+
 ## Using your own art (sprite pipeline)
 
 The renderer looks for optional PNG sprites in an `assets/` folder next to the executable

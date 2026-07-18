@@ -58,6 +58,7 @@ public static class MapLoader
                     case 'p': kind = TileKind.Path; break;
                     case '#': kind = TileKind.Rock; break;
                     case 'o': kind = TileKind.Void; break;
+                    case 'w': kind = TileKind.Water; break;
                     case 's': // a placement cell (stands on grass)
                         map.PlayerStartCells.Add(cell);
                         break;

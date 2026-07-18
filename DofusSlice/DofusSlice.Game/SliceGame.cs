@@ -40,6 +40,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private readonly List<string> _log = new();
     private bool _enemyActed;
     private bool _placing;
+    private float _time; // seconds, for tile/water animation
 
     private MouseState _mouse, _prevMouse;
     private KeyboardState _keys, _prevKeys;
@@ -115,13 +116,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         StartFight();
     }
 
-    /// <summary>Load the external map if present, else the embedded default.</summary>
+    /// <summary>Load an external Tiled (.tmx) or JSON map if present, else the embedded default.</summary>
     private static MapData LoadMap()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "maps", "incarnam.json");
+        var dir = Path.Combine(AppContext.BaseDirectory, "maps");
         try
         {
-            if (File.Exists(path)) return MapLoader.Parse(File.ReadAllText(path));
+            var tmx = Path.Combine(dir, "incarnam.tmx");
+            if (File.Exists(tmx))
+                return TmxLoader.Parse(File.ReadAllText(tmx), rel => File.ReadAllText(Path.Combine(dir, rel)));
+
+            var json = Path.Combine(dir, "incarnam.json");
+            if (File.Exists(json)) return MapLoader.Parse(File.ReadAllText(json));
         }
         catch { /* fall back to the embedded default on any parse/IO error */ }
         return Encounter.DefaultMap();
@@ -180,6 +186,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _time += dt;
         _anim.Update(dt, _engine.Fighters); // animations keep playing even after the fight ends
 
         // Camera: shake on hits, wheel zoom, follow the active fighter (clamped to the map).
@@ -359,6 +366,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiamondAt(_sb, center, new Color(16, 18, 24)); // a pit
                 continue;
             }
+            if (kind == TileKind.Water)
+            {
+                DrawWater(c, center);
+                continue;
+            }
 
             string spriteName = kind switch
             {
@@ -376,6 +388,25 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiamondAt(_sb, center, FloorColor(kind, c));
                 DrawTileOutline(center, Palette.TileEdge);
             }
+        }
+    }
+
+    /// <summary>An iso water tile drawn in our own style: a blue diamond with drifting ripples.</summary>
+    private void DrawWater(CellCoord c, Vector2 center)
+    {
+        _prim.DiamondAt(_sb, center, new Color(46, 96, 156));
+        _prim.DiamondAt(_sb, center + new Vector2(0, 2), new Color(38, 82, 138, 160));
+
+        // A couple of highlight strokes that drift over time, offset per cell so it's not uniform.
+        float phase = _time * 1.6f + (c.X * 0.9f + c.Y * 1.3f);
+        for (int i = 0; i < 2; i++)
+        {
+            float t = phase + i * 1.7f;
+            float ox = MathF.Sin(t) * (TileW * 0.16f);
+            float oy = -3f + i * 5f + MathF.Cos(t * 0.7f) * 1.5f;
+            var a = center + new Vector2(ox - 7, oy);
+            var b = center + new Vector2(ox + 7, oy);
+            _prim.Line(_sb, a, b, 1.5f, new Color(150, 200, 240, 150));
         }
     }
 

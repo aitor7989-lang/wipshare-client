@@ -20,6 +20,37 @@ public sealed class MapData
 
     public TileKind Tile(int x, int y) => Tiles[y * Width + x];
 
+    /// <summary>
+    /// Ensure a valid hero spawn and a placement zone: pick a free cell if the map defined no
+    /// player spawn, and fill in a start zone around the spawn if none was marked.
+    /// </summary>
+    public void FinalizeSpawns(bool hasPlayerSpawn)
+    {
+        var taken = new HashSet<CellCoord>(Enemies.Select(e => e.cell));
+        if (hasPlayerSpawn) taken.Add(PlayerSpawn);
+
+        if (!hasPlayerSpawn)
+        {
+            if (FirstWalkableCell(taken) is not CellCoord ok)
+                throw new FormatException("map: no free cell for the player");
+            PlayerSpawn = ok;
+            PlayerStartCells.Add(ok);
+        }
+        if (!PlayerStartCells.Contains(PlayerSpawn)) PlayerStartCells.Add(PlayerSpawn);
+
+        if (PlayerStartCells.Count <= 1)
+        {
+            for (int dy = -2; dy <= 2; dy++)
+                for (int dx = -2; dx <= 2; dx++)
+                {
+                    var cell = PlayerSpawn.Offset(dx, dy);
+                    if (PlayerSpawn.DistanceTo(cell) <= 2 && IsWalkable(cell)
+                        && !taken.Contains(cell) && !PlayerStartCells.Contains(cell))
+                        PlayerStartCells.Add(cell);
+                }
+        }
+    }
+
     /// <summary>First walkable cell not already claimed by a spawn (used as a hero-spawn fallback).</summary>
     public CellCoord? FirstWalkableCell(ISet<CellCoord> taken)
     {

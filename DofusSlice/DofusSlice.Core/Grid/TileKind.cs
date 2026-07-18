@@ -12,10 +12,11 @@ public enum TileKind
     Path,    // walkable
     Rock,    // obstacle: blocks movement and line of sight
     Void,    // hole: not walkable, but you can see across it
+    Water,   // not walkable, but you can see (and shoot) across it
 }
 
 public static class TileKindInfo
 {
-    public static bool IsWalkable(TileKind k) => k is not (TileKind.Rock or TileKind.Void);
+    public static bool IsWalkable(TileKind k) => k is not (TileKind.Rock or TileKind.Void or TileKind.Water);
     public static bool BlocksLineOfSight(TileKind k) => k is TileKind.Rock;
 }

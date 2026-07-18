@@ -41,15 +41,14 @@ What still breaks and needs work:
 - **[P3] Tie-breaking.** Equal feet-Y currently orders rocks-before-fighters arbitrarily;
   formalize as an explicit per-cell sub-layer (floor < floor-deco < entities < overhead).
 
-## [P1] The core 2D-game pieces we don't have yet
+## [P1] The core 2D-game pieces
 
-- **Frame animation / spritesheets.** Biggest gap. Sprites are static; movement and attacks
-  are only position tweens. We need a sprite-atlas animation system: idle / walk / cast /
-  hurt / death cycles with frame timing, driven by an **animation state machine** that reacts
-  to the combat events we already emit (`FighterMoved` → walk, `SpellCast` → cast, etc.).
-- **Directional facing.** Characters should face their move/attack direction (the 4 iso
-  diagonals, or 8-way). We don't track facing at all — needed before directional spritesheets
-  mean anything.
+- **Frame animation / spritesheets.** ✅ **Done.** Directional strips
+  (`{name}_{state}_{dir}_{frames}.png`) with idle / walk / cast / hurt / die cycles, driven by
+  an animation state machine that reads the combat-event stream (`FighterMoved` → walk,
+  `SpellCast` → cast, hit → hurt, death → die). 32-bit RGBA is premultiplied on load; missing
+  facings mirror from SE/NE; everything falls back to the procedural placeholders.
+- **Directional facing.** ✅ **Done.** 4-way iso facing derived from movement/cast direction.
 - **Camera.** The map is pinned to the screen. We need a camera: follow the active fighter,
   pan/zoom, clamp to map bounds, and **screen-shake** on impact for feel.
 - **Data-driven maps + richer cell model.** We hardcode one rectangular encounter. A real
@@ -87,7 +86,7 @@ What still breaks and needs work:
 
 ## Suggested order
 
-1. **Spritesheet animation + directional facing** (state machine off the existing event stream).
+1. ~~Spritesheet animation + directional facing~~ ✅ done.
 2. **Camera** (follow + clamp + shake).
 3. **Data-driven maps** + richer cell model + a loader.
 4. **Status-effect system** (turn-tick durations).

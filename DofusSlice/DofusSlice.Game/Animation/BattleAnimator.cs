@@ -22,6 +22,8 @@ public sealed class BattleAnimator
     private readonly List<Corpse> _corpses = new();
     private readonly Dictionary<string, float> _displayHp = new();
     private readonly Dictionary<string, float> _flash = new();
+    private readonly Dictionary<string, Pose> _poses = new();
+    private readonly Dictionary<string, Facing4> _facing = new();
 
     private const float FlashDuration = 0.3f;
 
@@ -64,7 +66,8 @@ public sealed class BattleAnimator
                 _queue.Enqueue(new HitAnim(h.Target.Id, _proj.CellCenter(h.At), -h.Amount, this));
                 break;
             case FighterDied dd:
-                _corpses.Add(new Corpse(_proj.CellCenter(dd.At), ColorOf(dd.Fighter)));
+                _corpses.Add(new Corpse(_proj.CellCenter(dd.At), ColorOf(dd.Fighter),
+                    SpriteName(dd.Fighter), LastFacing(dd.Fighter.Id)));
                 break;
             case TurnStarted:
                 break;
@@ -100,7 +103,47 @@ public sealed class BattleAnimator
             float cur = _displayHp.TryGetValue(f.Id, out var v) ? v : f.Hp;
             _displayHp[f.Id] = cur + (f.Hp - cur) * Math.Min(1f, dt * 9f);
         }
+
+        UpdatePoses(dt, fighters);
     }
+
+    /// <summary>
+    /// Derive each live fighter's animation pose (state + facing) from what is currently
+    /// playing, and advance a per-state clock the renderer turns into a frame index.
+    /// </summary>
+    private void UpdatePoses(float dt, IReadOnlyList<Fighter> fighters)
+    {
+        IAnim? head = _queue.Count > 0 ? _queue.Peek() : null;
+        foreach (var f in fighters)
+        {
+            AnimState state;
+            Facing4 dir = _facing.TryGetValue(f.Id, out var lf) ? lf : Facing4.Se;
+
+            if (head?.ActorId == f.Id)
+            {
+                state = head.ActorState;
+                dir = head.ActorFacing;
+                _facing[f.Id] = dir;
+            }
+            else if (FlashAmount(f.Id) > 0.15f)
+            {
+                state = AnimState.Hurt;
+            }
+            else
+            {
+                state = AnimState.Idle;
+            }
+
+            var prev = _poses.TryGetValue(f.Id, out var p) ? p : new Pose(AnimState.Idle, dir, 0f);
+            float clock = prev.State == state ? prev.Clock + dt : 0f;
+            _poses[f.Id] = new Pose(state, dir, clock);
+        }
+    }
+
+    public Pose PoseFor(Fighter f) =>
+        _poses.TryGetValue(f.Id, out var p) ? p : new Pose(AnimState.Idle, Facing4.Se, 0f);
+
+    public Facing4 LastFacing(string id) => _facing.TryGetValue(id, out var d) ? d : Facing4.Se;
 
     // ----- Queries used by the renderer ---------------------------------------------
 
@@ -116,9 +159,9 @@ public sealed class BattleAnimator
     public float FlashAmount(string id) =>
         _flash.TryGetValue(id, out var v) ? Math.Clamp(v / FlashDuration, 0f, 1f) : 0f;
 
-    public void DrawEffects(SpriteBatch sb, Primitives prim, PixelFont font)
+    public void DrawEffects(SpriteBatch sb, Primitives prim, PixelFont font, SpriteBank sprites)
     {
-        foreach (var c in _corpses) c.Draw(sb, prim);
+        foreach (var c in _corpses) c.Draw(sb, prim, sprites);
         foreach (var o in _overlays) o.Draw(sb, prim, font);
     }
 
@@ -137,6 +180,10 @@ public sealed class BattleAnimator
     private static Color ColorOf(Fighter f) =>
         f.Team == Team.Player ? Palette.HeroColor : Palette.CreatureColor(f.Name);
 
+    /// <summary>Sprite base name for a fighter (matches the renderer's lookup).</summary>
+    internal static string SpriteName(Fighter f) =>
+        f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant();
+
     internal static Color SpellColor(SpellDef spell)
     {
         if (spell.Effects.Any(e => e.Kind == EffectKind.Teleport)) return new Color(150, 210, 240);
@@ -152,6 +199,35 @@ public sealed class BattleAnimator
     }
 }
 
+// ---- Animation pose model -----------------------------------------------------------
+
+/// <summary>Which animation cycle a fighter is currently in. Die is handled by the corpse.</summary>
+public enum AnimState { Idle, Walk, Cast, Hurt, Die }
+
+/// <summary>The four isometric facings (matching the four grid-movement directions).</summary>
+public enum Facing4 { Se, Sw, Ne, Nw }
+
+public readonly record struct Pose(AnimState State, Facing4 Dir, float Clock);
+
+public static class Facing
+{
+    public static string ToKey(this Facing4 d) => d switch
+    {
+        Facing4.Se => "se",
+        Facing4.Sw => "sw",
+        Facing4.Ne => "ne",
+        _ => "nw",
+    };
+
+    /// <summary>Nearest of the four iso facings for a screen-space delta.</summary>
+    public static Facing4 FromScreenDelta(Vector2 d)
+    {
+        bool down = d.Y >= 0f;
+        bool right = d.X >= 0f;
+        return down ? (right ? Facing4.Se : Facing4.Sw) : (right ? Facing4.Ne : Facing4.Nw);
+    }
+}
+
 // ---- Blocking animations ------------------------------------------------------------
 
 internal interface IAnim
@@ -159,6 +235,11 @@ internal interface IAnim
     void Update(float dt);
     bool Done { get; }
     bool TryCenter(string id, out Vector2 center);
+
+    /// <summary>The fighter this animation drives (for pose/facing), or null.</summary>
+    string? ActorId => null;
+    AnimState ActorState => AnimState.Idle;
+    Facing4 ActorFacing => Facing4.Se;
 }
 
 /// <summary>Slides a fighter's token along a path, one segment at a time.</summary>
@@ -179,6 +260,19 @@ internal sealed class MoveAnim : IAnim
     private float Total => _perSeg * Math.Max(1, _pts.Length - 1);
     public bool Done => _t >= Total;
     public void Update(float dt) => _t += dt;
+
+    public string? ActorId => _id;
+    public AnimState ActorState => AnimState.Walk;
+    public Facing4 ActorFacing
+    {
+        get
+        {
+            if (_pts.Length < 2) return Facing4.Se;
+            float p = Math.Clamp(_t / _perSeg, 0f, _pts.Length - 1);
+            int i = Math.Min((int)p, _pts.Length - 2);
+            return DofusSlice.Game.Animation.Facing.FromScreenDelta(_pts[i + 1] - _pts[i]);
+        }
+    }
 
     public bool TryCenter(string id, out Vector2 center)
     {
@@ -209,6 +303,10 @@ internal sealed class CastAnim : IAnim
     }
 
     public bool Done => _t >= Dur;
+
+    public string? ActorId => _id;
+    public AnimState ActorState => AnimState.Cast;
+    public Facing4 ActorFacing => Facing.FromScreenDelta(_to - _from);
 
     public void Update(float dt)
     {
@@ -346,21 +444,32 @@ internal sealed class Corpse
     private const float Hold = 0.25f, Fade = 0.4f;
     private readonly Vector2 _center;
     private readonly Color _color;
+    private readonly string _name;
+    private readonly Facing4 _facing;
     private float _t;
 
-    public Corpse(Vector2 center, Color color) { _center = center; _color = color; }
+    public Corpse(Vector2 center, Color color, string name, Facing4 facing)
+    {
+        _center = center; _color = color; _name = name; _facing = facing;
+    }
+
     public bool Done => _t >= Hold + Fade;
     public void Update(float dt) => _t += dt;
 
-    public void Draw(SpriteBatch sb, Primitives prim)
+    public void Draw(SpriteBatch sb, Primitives prim, SpriteBank sprites)
     {
-        float scale = 1f, alpha = 1f;
-        if (_t > Hold)
+        float alpha = _t <= Hold ? 1f : 1f - (_t - Hold) / Fade;
+
+        // Play a die strip once if the art exists; otherwise the procedural token fade.
+        var sheet = sprites.GetSheet(_name, "die", _facing.ToKey());
+        if (sheet != null && sheet.FrameCount > 1)
         {
-            float p = (_t - Hold) / Fade;
-            scale = 1f - 0.6f * p;
-            alpha = 1f - p;
+            int frame = Math.Min((int)(_t * 10f), sheet.FrameCount - 1);
+            SpriteDraw.Feet(sb, sheet, _center + new Vector2(0, 4), Color.White * alpha, 64f, frame);
+            return;
         }
+
+        float scale = _t <= Hold ? 1f : 1f - 0.6f * ((_t - Hold) / Fade);
         var head = _center + new Vector2(0, -16);
         prim.DiscAt(sb, _center + new Vector2(0, 2), 13f * scale, new Color(0, 0, 0, 80) * alpha);
         prim.DiscAt(sb, head, 15f * scale, new Color(20, 20, 24) * alpha);

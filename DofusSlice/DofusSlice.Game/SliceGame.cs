@@ -229,7 +229,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         DrawFloor();
         DrawFloorOverlays();
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
-        _anim.DrawEffects(_sb, _prim, _font);  // corpses, impact flashes, floating numbers
+        _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
         DrawHud();
         // Hold the end screen until the final death/hit animation has played out.
         if (_engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
@@ -354,6 +354,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.DiscAt(_sb, center + new Vector2(-4, -12), 4, new Color(150, 136, 120));
     }
 
+    private const float AnimFps = 10f;
+
     private void DrawFighter(Fighter f)
     {
         var center = _anim.CenterFor(f);
@@ -362,13 +364,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         // Ground shadow.
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
 
-        var sprite = _sprites.Get(f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant());
+        string name = f.Team == Team.Player ? "iop" : f.Name.ToLowerInvariant();
+        var pose = _anim.PoseFor(f);
+        string state = pose.State switch
+        {
+            AnimState.Walk => "walk",
+            AnimState.Cast => "cast",
+            AnimState.Hurt => "hurt",
+            _ => "idle",
+        };
+        var sheet = _sprites.GetSheet(name, state, pose.Dir.ToKey());
+
         float topY;
-        if (sprite != null)
+        if (sheet != null)
         {
             var tint = flash > 0f ? Color.Lerp(Color.White, new Color(255, 90, 90), flash) : Color.White;
-            float h = TileH * 2.2f;
-            DrawSpriteFeet(sprite, center + new Vector2(0, 4), tint, h);
+            float h = TileH * 2.4f;
+            SpriteDraw.Feet(_sb, sheet, center + new Vector2(0, 4), tint, h, FrameIndex(pose, sheet));
             topY = center.Y + 4 - h;
         }
         else
@@ -383,6 +395,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
 
         DrawHpBar(f, center.X, topY - 10);
+    }
+
+    private static int FrameIndex(Pose pose, SpriteSheet sheet)
+    {
+        if (sheet.FrameCount <= 1) return 0;
+        // Hurt plays once and holds the last frame; idle/walk/cast loop.
+        return pose.State == AnimState.Hurt
+            ? Math.Min((int)(pose.Clock * 12f), sheet.FrameCount - 1)
+            : (int)(pose.Clock * AnimFps) % sheet.FrameCount;
     }
 
     /// <summary>Draw a sprite anchored at its feet (bottom-centre) on the cell centre.</summary>

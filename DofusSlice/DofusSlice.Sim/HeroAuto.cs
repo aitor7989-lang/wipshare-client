@@ -12,33 +12,44 @@ namespace DofusSlice.Sim;
 /// </summary>
 public static class HeroAuto
 {
+    // Damage spells in preference order (strongest first).
+    private static readonly SpellDef[] Attacks =
+    {
+        SpellLibrary.IopsWrath, SpellLibrary.SwordOfJudgment,
+        SpellLibrary.Pressure, SpellLibrary.Intimidation,
+    };
+
     public static void TakeTurn(CombatEngine engine, Fighter self)
     {
-        for (int guard = 0; guard < 20; guard++)
+        // Buff up when possible (Power is on a cooldown, so this only fires periodically).
+        if (engine.CanCast(self, SpellLibrary.Power, self.Pos, out _))
+            engine.TryCast(self, SpellLibrary.Power, self.Pos);
+
+        for (int guard = 0; guard < 24; guard++)
         {
             if (!self.IsAlive || engine.Outcome != FightOutcome.Ongoing) return;
 
+            // Focus-fire the weakest enemy to secure kills and cut incoming damage.
             var target = engine.Fighters
                 .Where(f => f.IsAlive && f.Team != self.Team)
-                .OrderBy(f => f.Pos.DistanceTo(self.Pos))
+                .OrderBy(f => f.Hp)
+                .ThenBy(f => f.Pos.DistanceTo(self.Pos))
                 .FirstOrDefault();
             if (target == null) return;
 
-            bool adjacent = self.Pos.IsAdjacentTo(target.Pos);
-
-            if (adjacent && engine.CanCast(self, SpellLibrary.IopsWrath, target.Pos, out _))
-            { engine.TryCast(self, SpellLibrary.IopsWrath, target.Pos); continue; }
-
-            if (engine.CanCast(self, SpellLibrary.Pressure, target.Pos, out _))
-            { engine.TryCast(self, SpellLibrary.Pressure, target.Pos); continue; }
-
-            if (adjacent && engine.CanCast(self, SpellLibrary.Intimidation, target.Pos, out _))
-            { engine.TryCast(self, SpellLibrary.Intimidation, target.Pos); continue; }
-
+            if (TryBestAttack(engine, self, target)) continue;
             if (Approach(engine, self, target)) continue;
             if (JumpToward(engine, self, target)) continue;
             break;
         }
+    }
+
+    private static bool TryBestAttack(CombatEngine engine, Fighter self, Fighter target)
+    {
+        foreach (var spell in Attacks)
+            if (engine.CanCast(self, spell, target.Pos, out _))
+                return engine.TryCast(self, spell, target.Pos);
+        return false;
     }
 
     private static bool Approach(CombatEngine engine, Fighter self, Fighter target)
@@ -47,8 +58,7 @@ public static class HeroAuto
         var reachable = engine.MovementRange(self);
         if (reachable.Count == 0) return false;
 
-        var spells = new[] { SpellLibrary.IopsWrath, SpellLibrary.Pressure, SpellLibrary.Intimidation }
-            .Where(s => s.ApCost <= self.CurrentAp).ToList();
+        var spells = Attacks.Where(s => s.ApCost <= self.CurrentAp).ToList();
 
         CellCoord? firing = reachable.Keys
             .Where(cell => spells.Any(s => CanHitFrom(engine, cell, self.Pos, target.Pos, s)))

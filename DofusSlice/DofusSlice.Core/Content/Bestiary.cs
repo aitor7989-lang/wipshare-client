@@ -19,13 +19,19 @@ public static class Bestiary
         Id = "hero",
         Name = name,
         Team = Team.Player,
-        MaxHp = 55,
-        Hp = 55,
+        MaxHp = 57,
+        Hp = 57,
         BaseAp = 6,
         BaseMp = 3,
-        Strength = 40,
+        Strength = 42,
         Initiative = 100,
         Pos = pos,
+        // A little all-round resistance so being outnumbered in Incarnam is survivable.
+        Resistances =
+        {
+            [Element.Neutral] = 4, [Element.Earth] = 4, [Element.Fire] = 4,
+            [Element.Water] = 4, [Element.Air] = 4,
+        },
         Spells = SpellLibrary.IopSpells,
     };
 

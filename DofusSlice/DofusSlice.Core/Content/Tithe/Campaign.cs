@@ -23,15 +23,15 @@ public sealed class CampaignUnit
     public List<string> Equipment { get; init; } = new();
 
     /// <summary>
-    /// Cumulative XP to reach each level, index = level. A 1.29-SHAPED placeholder: cheap early
-    /// bands that stretch hard, matching the Incarnam feel — but NOT the mined table. The real
-    /// 1.29 values (L2=110, L3=650, L4=1500…) must land together with per-mob XP values in the
-    /// §9 mining pass, since curve and mob XP only pace correctly as a pair (Bible §6.3).
+    /// Cumulative XP to reach each level, index = level — the classic Dofus 1.29 table, levels
+    /// 1–20 (Bible §6.3: adopt the 1.29 curve verbatim; cross-check against an emulator dump in
+    /// the §9 pass). Landed TOGETHER with Dofus-scale per-mob XP values, since curve and mob XP
+    /// only pace correctly as a pair. Mob gold is decoupled from XP (mobs carry a "gold" column).
     /// </summary>
     private static readonly int[] XpCurve =
     {
-        0, 0, 10, 35, 100, 220, 410, 690, 1080, 1600, 2270,
-        3110, 4140, 5380, 6850, 8570, 10560, 12840, 15430, 18350, 21620,
+        0, 0, 110, 650, 1500, 2800, 4800, 7300, 10500, 14500, 19200,
+        25200, 32600, 41000, 50500, 61000, 75000, 91000, 115000, 142000, 171000,
     };
 
     /// <summary>XP needed to advance from <paramref name="level"/> to the next (the 1.29 per-level cost).</summary>

@@ -14,11 +14,12 @@ public static class TitheTables
     // passive = a rule hook that changes what you watch happen (Bible §5 class table).
     //
     // Stats are the Dofus 1.29 block (Bible §6.2): baseHp is the level-1 body, and each point of
-    // Vitality is +1 max HP (so class HP = baseHp + vitality). Strength is the single active damage
-    // stat (elements deferred), read straight by the base × (100 + Strength)/100 formula. On each
-    // level the class auto-spends 5 characteristic points by its "growth" ratio (Bible §6.2/§6.3
-    // auto-template spending) — Bulwark banks Vitality to tank, Cannon banks Strength to nuke,
-    // Archer splits Strength/Agility. Wisdom feeds the XP bonus and AP/MP-loss resistance.
+    // Vitality is +1 max HP (so class HP = baseHp + vitality). Each class is element-themed and its
+    // element's stat scales its damage 1.29-style (Str→Earth, Int→Fire, Cha→Water, Agi→Air) via
+    // base × (100 + stat + Power)/100. On each level the class auto-spends 5 characteristic points
+    // by its "growth" ratio (Bible §6.2/§6.3 auto-template spending) — Bulwark banks Vitality to
+    // tank, Cannon banks Intelligence to nuke, Archer banks Agility. Wisdom = +1% XP per point
+    // (the 1.29 rule) and AP/MP-loss resistance.
     public const string ClassesJson = """
     [
       { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 24, "ap": 6, "mp": 4,
@@ -44,25 +45,25 @@ public static class TitheTables
     public const string MobsJson = """
     [
       { "id": "barrow_husk",   "name": "Barrow Husk",   "policy": "melee",   "maxHp": 54, "ap": 6, "mp": 3,
-        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 18,
+        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 110, "gold": 18,
         "essence": "Seize", "drop": 6, "gear": 4 },
       { "id": "marrow_spitter","name": "Marrow Spitter", "policy": "ranged",  "maxHp": 30, "ap": 6, "mp": 3,
         "strength": 14, "chance": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["marrow_spit"], "xp": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
+        "skills": ["marrow_spit"], "xp": 90, "gold": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
-        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 22,
+        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 130, "gold": 22,
         "essence": "Pounce", "drop": 5, "gear": 5, "resAir": 20 },
       { "id": "crypt_warden",  "name": "Crypt Warden",  "policy": "melee",   "maxHp": 72, "ap": 6, "mp": 2,
-        "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 26,
+        "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 170, "gold": 26,
         "essence": "Ironhide", "drop": 5, "gear": 7, "resEarth": 35, "resFire": 15 },
       { "id": "grave_mite",    "name": "Grave Mite",    "policy": "flanker", "maxHp": 12, "ap": 6, "mp": 4,
-        "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 6,
+        "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 35, "gold": 6,
         "essence": "Sap", "drop": 10, "gear": 2 },
       { "id": "bone_piper",    "name": "Bone Piper",    "policy": "support", "maxHp": 26, "ap": 6, "mp": 3,
         "strength": 10, "agility": 10, "initiative": 10, "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["piper_gift"], "xp": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
+        "skills": ["piper_gift"], "xp": 120, "gold": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
-        "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 120,
+        "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 700, "gold": 120,
         "essence": "Sexton's Toll", "drop": 100, "gear": 65, "resEarth": 20, "resFire": 20, "resAir": 20, "resWater": 20 }
     ]
     """;
@@ -199,9 +200,9 @@ public static class TitheTables
 
     // Set (panoply) bonuses (Bible §6.10): a tier table keyed by number of equipped pieces. Each
     // tier's numbers are the TOTAL bonus at that piece count (Dofus applies the highest tier ≤ the
-    // equipped count, not the sum of tiers). The full-set jump is deliberately a "screaming find":
-    // assembling the Adventurer set roughly doubles a light unit's HP and lifts every spell's
-    // damage by the Strength it grants — loot that changes what you watch happen (Pillar 3).
+    // equipped count, not the sum of tiers). The full-set jump is deliberately a "screaming find",
+    // capped by the classic Adventurer full-set reward: **+1 MP** — a behavior-changing bonus, the
+    // bible's canonical loot idiom (loot that changes what you watch happen, Pillar 3).
     public const string SetsJson = """
     [
       { "id": "adventurer", "name": "Adventurer Set", "tiers": [
@@ -210,7 +211,7 @@ public static class TitheTables
         { "pieces": 4, "vitality": 28, "strength": 6,  "intelligence": 6,  "agility": 3,  "power": 4 },
         { "pieces": 5, "vitality": 40, "strength": 10, "intelligence": 10, "agility": 6,  "wisdom": 4,  "power": 6 },
         { "pieces": 6, "vitality": 55, "strength": 15, "intelligence": 15, "agility": 10, "wisdom": 8,  "power": 10 },
-        { "pieces": 7, "vitality": 75, "strength": 22, "intelligence": 22, "agility": 15, "wisdom": 12, "power": 15 }
+        { "pieces": 7, "vitality": 75, "strength": 22, "intelligence": 22, "agility": 15, "wisdom": 12, "power": 15, "mp": 1 }
       ] }
     ]
     """;

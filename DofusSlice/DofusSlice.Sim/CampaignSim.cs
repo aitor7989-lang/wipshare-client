@@ -200,7 +200,8 @@ public static class CampaignSim
         // Damage lift = (100+stat_now)/(100+stat_base) − 1, the actual multiplier on its spells.
         int dmgLift = 100 * (100 + dmgNow) / (100 + dmg0) - 100;
         Console.WriteLine($"\n  Full kit vs fresh L1: +{final.MaxHp - TitheContent.ClassMaxHp("cannon")} HP, "
-            + $"{elem} damage stat {dmg0} → {dmgNow} (its spells hit ~{dmgLift}% harder than a naked L1).");
+            + $"{elem} damage stat {dmg0} → {dmgNow} (its spells hit ~{dmgLift}% harder than a naked L1)"
+            + (final.MpBonus > 0 ? $", and the full set grants +{final.MpBonus} MP — the screaming find." : "."));
         return 0;
     }
 

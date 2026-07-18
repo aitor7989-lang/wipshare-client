@@ -27,23 +27,27 @@ public static class TitheContent
                                    int PrefRangeMin, int PrefRangeMax, GrowthDto? Growth, string[] Skills, string? Blurb);
     private sealed record MobDto(string Id, string Name, string Policy, int MaxHp, int Ap, int Mp,
                                  int Strength, int Intelligence, int Chance, int Agility, int Initiative,
-                                 int PrefRangeMin, int PrefRangeMax, string[] Skills, int Xp, string? Essence,
-                                 int Drop, int Gear, int ResEarth, int ResFire, int ResAir, int ResWater);
+                                 int PrefRangeMin, int PrefRangeMax, string[] Skills, int Xp, int Gold,
+                                 string? Essence, int Drop, int Gear,
+                                 int ResEarth, int ResFire, int ResAir, int ResWater);
     private sealed record SpawnDto(string Mob, int X, int Y);
     private sealed record EncounterDto(string Name, SpawnDto[] Spawns);
 
     // Equipment + panoply rows (Bible §6.10). ItemDto carries the live prototype stats; SetDto is a
     // tier table keyed by equipped-piece count. Power adds to every element's damage (Dofus Power),
-    // so a set empowers any class regardless of its element.
+    // so a set empowers any class regardless of its element. Ap/Mp are the behavior-changing gear
+    // bonuses (the +1 MP boots / full-set idiom).
     public sealed record ItemDto(string Id, string Name, string Slot, string? Set,
-                                 int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom, int Power);
+                                 int Vitality, int Strength, int Intelligence, int Chance, int Agility,
+                                 int Wisdom, int Power, int Ap, int Mp);
     private sealed record SetTierDto(int Pieces, int Vitality, int Strength, int Intelligence, int Chance,
-                                     int Agility, int Wisdom, int Power);
+                                     int Agility, int Wisdom, int Power, int Ap, int Mp);
     private sealed record SetDto(string Id, string Name, SetTierDto[] Tiers);
 
     /// <summary>Effective Dofus stat block for a unit (class base + level growth + gear + set bonus).</summary>
     public readonly record struct UnitStats(int Vitality, int Strength, int Intelligence, int Chance,
-                                            int Agility, int Wisdom, int Power, int Initiative, int MaxHp);
+                                            int Agility, int Wisdom, int Power, int Initiative, int MaxHp,
+                                            int ApBonus, int MpBonus);
 
     public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
                                     int EssenceSell, int TitheEveryNDives, int TitheBase, int TitheGrowth);
@@ -230,7 +234,7 @@ public static class TitheContent
         int cha = c.Chance + g.Chance * lv;
         int agi = c.Agility + g.Agility * lv;
         int wis = c.Wisdom + g.Wisdom * lv;
-        int pow = 0;
+        int pow = 0, ap = 0, mp = 0;
 
         // Gear: sum the equipped pieces, then the highest set tier whose piece-count is satisfied.
         var counts = new Dictionary<string, int>();
@@ -238,7 +242,7 @@ public static class TitheContent
         {
             if (Item(id) is not { } it) continue;
             vit += it.Vitality; str += it.Strength; intel += it.Intelligence; cha += it.Chance;
-            agi += it.Agility; wis += it.Wisdom; pow += it.Power;
+            agi += it.Agility; wis += it.Wisdom; pow += it.Power; ap += it.Ap; mp += it.Mp;
             if (it.Set != null) counts[it.Set] = counts.GetValueOrDefault(it.Set) + 1;
         }
         foreach (var (setId, n) in counts)
@@ -248,11 +252,11 @@ public static class TitheContent
             if (tier != null)
             {
                 vit += tier.Vitality; str += tier.Strength; intel += tier.Intelligence; cha += tier.Chance;
-                agi += tier.Agility; wis += tier.Wisdom; pow += tier.Power;
+                agi += tier.Agility; wis += tier.Wisdom; pow += tier.Power; ap += tier.Ap; mp += tier.Mp;
             }
         }
 
-        return new UnitStats(vit, str, intel, cha, agi, wis, pow, c.Initiative, c.BaseHp + vit);
+        return new UnitStats(vit, str, intel, cha, agi, wis, pow, c.Initiative, c.BaseHp + vit, ap, mp);
     }
 
     /// <summary>Effective max HP for a persistent unit (baseHp + total Vitality).</summary>
@@ -275,8 +279,8 @@ public static class TitheContent
     public static int SetPiecesEquipped(CampaignUnit u, string setId) =>
         u.Equipment.Count(id => Item(id)?.Set == setId);
 
-    /// <summary>Coin a mob drops (Bible §6.11). One dial for the prototype: gold == XP value.</summary>
-    public static int MobGold(string mobId) => MobXp(mobId);
+    /// <summary>Coin a mob drops (Bible §6.11). Decoupled from XP since XP went to the Dofus band.</summary>
+    public static int MobGold(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Gold : 0;
 
     /// <summary>The Sexton's court — the Crypt's boss encounter, as a mob composition.</summary>
     public static IReadOnlyList<string> CryptComp() =>
@@ -305,7 +309,7 @@ public static class TitheContent
             Policy = ParsePolicy(c.Policy), Passive = c.Passive ?? "",
             PreferredRangeMin = c.PrefRangeMin, PreferredRangeMax = c.PrefRangeMax,
             MaxHp = s.MaxHp, Hp = hp,
-            BaseAp = c.Ap - (u.Wounded ? 1 : 0), BaseMp = c.Mp - (u.Wounded ? 1 : 0),
+            BaseAp = c.Ap + s.ApBonus - (u.Wounded ? 1 : 0), BaseMp = c.Mp + s.MpBonus - (u.Wounded ? 1 : 0),
             Strength = s.Strength, Intelligence = s.Intelligence, Chance = s.Chance,
             Agility = s.Agility, Wisdom = s.Wisdom, Power = s.Power, Initiative = s.Initiative,
             Level = u.Level, Xp = u.Xp,

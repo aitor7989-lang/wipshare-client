@@ -213,13 +213,21 @@ public static class EffectsTest
 
     private static void Tackle()
     {
-        var c = Caster(new(2, 4)); // no spells needed
-        var locker = Foe("t", new(3, 4)); // adjacent enemy locks the caster
+        // The bible's flattened tackle: a deterministic MP surcharge to leave melee —
+        // max(0, (tackler AGI - mover AGI) / 10) — no rolls, and never any AP loss.
+        var c = Caster(new(2, 4)); // Caster has AGI 0
+        var locker = new Fighter
+        {
+            Id = "t", Name = "Foet", Team = Team.Enemy, MaxHp = 100, Hp = 100,
+            BaseAp = 6, BaseMp = 3, Initiative = 10, Agility = 30, Pos = new(3, 4),
+        };
         var eng = Engine(c, locker);
-        int mpAfterMoveIfUnlocked = c.BaseMp - 2; // moving 2 cells costs 2 MP
-        eng.TryMove(c, new(2, 6)); // flee out of melee
-        Check("Tackle", c.CurrentMp < mpAfterMoveIfUnlocked && c.CurrentAp < c.BaseAp,
-            $"lost AP/MP leaving melee (AP {c.CurrentAp}/{c.BaseAp}, MP {c.CurrentMp})");
+        int surcharge = eng.TackleSurcharge(c);            // (30 - 0) / 10 = 3
+        var range = eng.MovementRange(c);
+        bool priced = range.TryGetValue(new(2, 6), out int cost) && cost == 2 + surcharge;
+        eng.TryMove(c, new(2, 6));                          // flee: 2 steps + surcharge
+        Check("Tackle", surcharge == 3 && priced && c.CurrentMp == c.BaseMp - 5 && c.CurrentAp == c.BaseAp,
+            $"surcharge {surcharge}, cost {cost} (2+{surcharge}), MP {c.CurrentMp}/{c.BaseMp}, AP untouched {c.CurrentAp}/{c.BaseAp}");
     }
 
     private static void Summon()

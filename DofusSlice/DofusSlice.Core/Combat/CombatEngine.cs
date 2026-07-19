@@ -57,9 +57,13 @@ public sealed class CombatEngine
     public bool IsOccupied(CellCoord cell) => FighterAt(cell) != null;
 
     /// <summary>Add a summoned fighter to the fight; it acts when the turn order reaches it.</summary>
-    public void Summon(Fighter fighter)
+    public void Summon(Fighter fighter, Fighter? summoner = null)
     {
-        _order.Add(fighter); // appended -> takes its turn later this round; safe w.r.t. the pointer
+        // 1.29: a summon takes its turn immediately after its summoner; without a known summoner
+        // it closes the round instead (still pointer-safe: insertion is always past the pointer).
+        int at = summoner != null ? _order.IndexOf(summoner) : -1;
+        if (at >= 0 && at >= _pointer) _order.Insert(at + 1, fighter);
+        else _order.Add(fighter);
         Emit($"{fighter.Name} is summoned.");
         Raise(new FighterSummoned(fighter));
     }
@@ -67,7 +71,25 @@ public sealed class CombatEngine
     public void Start()
     {
         if (_order.Count == 0) throw new InvalidOperationException("CombatEngine has no fighters");
-        _order.Sort((a, b) => b.Initiative.CompareTo(a.Initiative));
+
+        // 1.29 turn order: the team holding the highest-initiative fighter leads, then turns
+        // strictly alternate between the teams, each team consuming its own fighters in
+        // descending initiative; the larger team's leftovers close the round. The weave is
+        // computed once and stays fixed for the whole fight. Ties break by add order, so a
+        // fight replays identically from the same setup (the event-log parity discipline).
+        var indexed = _order.Select((f, i) => (f, i)).ToList();
+        List<Fighter> TeamLine(Team t) => indexed.Where(x => x.f.Team == t)
+            .OrderByDescending(x => x.f.Initiative).ThenBy(x => x.i).Select(x => x.f).ToList();
+        var lead = indexed.OrderByDescending(x => x.f.Initiative).ThenBy(x => x.i).First().f.Team;
+        var first = TeamLine(lead);
+        var second = TeamLine(lead == Team.Player ? Team.Enemy : Team.Player);
+        _order.Clear();
+        for (int k = 0; k < Math.Max(first.Count, second.Count); k++)
+        {
+            if (k < first.Count) _order.Add(first[k]);
+            if (k < second.Count) _order.Add(second[k]);
+        }
+
         Round = 1;
         _pointer = 0;
         Emit($"=== Round 1 ===");
@@ -128,11 +150,36 @@ public sealed class CombatEngine
 
     // ---- Movement -------------------------------------------------------------------
 
-    /// <summary>Cells the given fighter can walk to this turn, mapped to their MP cost.</summary>
-    public Dictionary<CellCoord, int> MovementRange(Fighter f) =>
-        f.IsRooted
-            ? new Dictionary<CellCoord, int>()
-            : Pathfinding.ReachableCells(Field, f.Pos, f.CurrentMp, c => c != f.Pos && IsOccupied(c));
+    /// <summary>The bible's flattened tackle (§3.4/§6.2): leaving an enemy's melee costs extra MP,
+    /// deterministically — max(0, (best tackler AGI − mover AGI) / divisor). No rolls, no AP loss.</summary>
+    public int TackleSurcharge(Fighter f)
+    {
+        var tacklers = TacklersOf(f);
+        if (tacklers.Count == 0) return 0;
+        return Math.Max(0, (tacklers.Max(t => t.Agility) - f.Agility) / TackleDivisor);
+    }
+
+    private const int TackleDivisor = 10; // the bible's placeholder divisor (§6.2)
+
+    /// <summary>Cells the given fighter can walk to this turn, mapped to their TRUE MP cost —
+    /// including the tackle surcharge on any destination that leaves the lockers' melee, so the
+    /// AI policies and any UI reason about what the move really costs.</summary>
+    public Dictionary<CellCoord, int> MovementRange(Fighter f)
+    {
+        if (f.IsRooted) return new Dictionary<CellCoord, int>();
+        var raw = Pathfinding.ReachableCells(Field, f.Pos, f.CurrentMp, c => c != f.Pos && IsOccupied(c));
+        int surcharge = TackleSurcharge(f);
+        if (surcharge == 0) return raw;
+        var tacklers = TacklersOf(f);
+        var priced = new Dictionary<CellCoord, int>();
+        foreach (var (cell, cost) in raw)
+        {
+            // Shuffling within a locker's melee pays nothing; breaking away pays the surcharge.
+            int true_ = cost + (tacklers.Any(t => t.Pos.DistanceTo(cell) == 1) ? 0 : surcharge);
+            if (true_ <= f.CurrentMp) priced[cell] = true_;
+        }
+        return priced;
+    }
 
     /// <summary>Living enemies orthogonally adjacent to (locking) the given fighter.</summary>
     public List<Fighter> TacklersOf(Fighter f) =>
@@ -146,36 +193,15 @@ public sealed class CombatEngine
         var range = MovementRange(f);
         if (!range.TryGetValue(dest, out int cost) || cost > f.CurrentMp) return false;
 
-        var tacklers = TacklersOf(f); // who locks us at the start cell
+        bool paidLock = TackleSurcharge(f) > 0 && cost > 0; // the surcharge is folded into cost
         var path = Pathfinding.FindPath(Field, f.Pos, dest, c => c != f.Pos && IsOccupied(c))
                    ?? new List<CellCoord> { f.Pos, dest };
         f.Pos = dest;
         f.CurrentMp -= cost;
-        Emit($"{f.Name} moves to {dest} (-{cost} MP, {f.CurrentMp} left).");
+        Emit($"{f.Name} moves to {dest} (-{cost} MP, {f.CurrentMp} left)"
+             + (paidLock ? " — pulled free of the lock." : "."));
         Raise(new FighterMoved(f, path, cost));
-
-        ApplyTackle(f, tacklers);
         return true;
-    }
-
-    /// <summary>
-    /// Tackle (lock): leaving melee of an enemy costs you AP/MP. How much you keep is an
-    /// Agility contest against the strongest tackler you escaped — high Agility dodges it.
-    /// </summary>
-    private void ApplyTackle(Fighter f, List<Fighter> tacklers)
-    {
-        var escaped = tacklers.Where(t => t.IsAlive && t.Pos.DistanceTo(f.Pos) > 1).ToList();
-        if (escaped.Count == 0) return;
-
-        int lockAgi = escaped.Max(t => t.Agility);
-        float keep = Math.Clamp((f.Agility + 1f) / (f.Agility + lockAgi + 2f), 0.15f, 1f);
-        int lostMp = (int)MathF.Floor(f.CurrentMp * (1f - keep));
-        int lostAp = (int)MathF.Floor(f.CurrentAp * (1f - keep));
-        if (lostMp <= 0 && lostAp <= 0) return;
-
-        f.CurrentMp = Math.Max(0, f.CurrentMp - lostMp);
-        f.CurrentAp = Math.Max(0, f.CurrentAp - lostAp);
-        Emit($"  {f.Name} is tackled leaving melee (-{lostAp} AP, -{lostMp} MP).");
     }
 
     // ---- Casting --------------------------------------------------------------------
@@ -335,7 +361,7 @@ public sealed class CombatEngine
             if (_summonFactory != null && Field.IsWalkable(impact) && !IsOccupied(impact))
             {
                 var ally = _summonFactory(effect.SummonKind, caster.Team, impact, $"summon_{_summonCounter++}");
-                if (ally != null) Summon(ally);
+                if (ally != null) Summon(ally, caster);
             }
             return;
         }

@@ -55,6 +55,8 @@ PIECES = {
     "spell_bg":      ("texture/hud/background_spell.png",      (7, 7, 7, 7)),
     # hud extras
     "hp_round":      ("texture/hud/background_round_hp.png",   None),
+    "ap_mp":         ("texture/hud/background_ap_mp.png",      None),
+    "chat_input":    ("texture/hud/chat_input_background.png", (8, 8, 8, 8)),
     "scroll_thumb":  ("common/scrollbar_cursor_normal.png",    (3, 3, 3, 3)),
 }
 

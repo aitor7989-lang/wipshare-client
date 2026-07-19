@@ -18,7 +18,7 @@ namespace DofusSlice.Game;
 /// combat (<see cref="_tithe"/>), where the whole crew and the skeleton pack act by AI policy and
 /// the player's agency is placement + speed control (Slice Bible M1).
 /// </summary>
-public sealed class SliceGame : Microsoft.Xna.Framework.Game
+public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 {
     private readonly bool _tithe;
     private bool _boss;                              // TITHE: fight the Sexton's court instead of the pack
@@ -120,12 +120,14 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
 
-    public SliceGame(bool tithe = false, int startSeed = 1, bool boss = false, bool loop = false)
+    public SliceGame(bool tithe = false, int startSeed = 1, bool boss = false, bool loop = false,
+        bool uiDemo = false)
     {
         _tithe = tithe;
         _seed = startSeed;
         _boss = boss;
         _loop = loop;
+        _uiDemo = uiDemo;
         _graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = ScreenW,
@@ -1001,6 +1003,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
         UpdateAmbient();
 
+        // F10: the UI-limits debug scene (the Dofus screenshot rebuilt from the oldUI theme).
+        if (Pressed(Keys.F10)) _uiDemo = !_uiDemo;
+        if (_uiDemo)
+        {
+            _time += (float)gameTime.ElapsedGameTime.TotalSeconds;
+            if (Pressed(Keys.Escape)) _uiDemo = false;
+            base.Update(gameTime);
+            return;
+        }
+
         if (_loop) { UpdateLoop((float)gameTime.ElapsedGameTime.TotalSeconds); base.Update(gameTime); return; }
 
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
@@ -1228,6 +1240,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Palette.Background);
 
+        if (_uiDemo) { DrawUiDemo(); base.Draw(gameTime); return; }
         if (_loop && _scene == Scene.City) { DrawCity(); _gum.Draw(); base.Draw(gameTime); return; }
         if (_loop && _scene == Scene.Graveyard) { DrawGraveyard(); _gum.Draw(); base.Draw(gameTime); return; }
 

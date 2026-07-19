@@ -24,10 +24,11 @@ try
     bool dofus = args.Any(a => a.Equals("dofus", StringComparison.OrdinalIgnoreCase));
     bool boss = args.Any(a => a.Equals("boss", StringComparison.OrdinalIgnoreCase));
     bool directFight = boss || args.Any(a => a.Equals("pack", StringComparison.OrdinalIgnoreCase));
+    bool uiDemo = args.Any(a => a.Equals("--uidemo", StringComparison.OrdinalIgnoreCase));
     bool tithe = !dofus;
     bool loop = tithe && !directFight;
     int seed = args.Select(a => int.TryParse(a, out int s) ? s : (int?)null).FirstOrDefault(s => s != null) ?? 1;
-    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop);
+    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo);
     game.Run();
 }
 catch (Exception ex)

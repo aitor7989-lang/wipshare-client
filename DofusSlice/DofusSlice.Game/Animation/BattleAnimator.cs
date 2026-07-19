@@ -63,7 +63,7 @@ public sealed class BattleAnimator
                     _proj.CellCenter(c.Target), c.Spell, this));
                 break;
             case DamageDealt d:
-                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical));
+                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical, d.Element));
                 break;
             case HealApplied h:
                 _queue.Enqueue(new HitAnim(h.Target.Id, _proj.CellCenter(h.At), -h.Amount, this));
@@ -352,12 +352,14 @@ internal sealed class HitAnim : IAnim
     private readonly int _amount;
     private readonly BattleAnimator _a;
     private readonly bool _crit;
+    private readonly Element _element;
     private float _t;
     private bool _spawned;
 
-    public HitAnim(string id, Vector2 at, int amount, BattleAnimator a, bool crit = false)
+    public HitAnim(string id, Vector2 at, int amount, BattleAnimator a, bool crit = false,
+        Element element = Element.Neutral)
     {
-        _id = id; _at = at; _amount = amount; _a = a; _crit = crit;
+        _id = id; _at = at; _amount = amount; _a = a; _crit = crit; _element = element;
     }
 
     public bool Done => _t >= Dur;
@@ -371,9 +373,17 @@ internal sealed class HitAnim : IAnim
             if (_amount > 0) _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));
             bool heal = _amount < 0;
             string text = (heal ? "+" : "-") + Math.Abs(_amount) + (_crit ? "!" : "");
+            // 1.29 floats the number in the element's colour; crits go gold, heals green.
             var color = heal ? new Color(120, 220, 130)
-                : _crit ? new Color(255, 210, 90)          // gold crit
-                : new Color(255, 120, 110);
+                : _crit ? new Color(255, 210, 90)
+                : _element switch
+                {
+                    Element.Fire => new Color(250, 120, 70),
+                    Element.Water => new Color(100, 170, 250),
+                    Element.Air => new Color(130, 225, 130),
+                    Element.Earth => new Color(205, 150, 90),
+                    _ => new Color(230, 224, 200),         // neutral grey-white
+                };
             int scale = _crit ? 3 : 2;
             _a.AddOverlay(new FloatingText(_at + new Vector2(0, -30), text, color, scale));
         }

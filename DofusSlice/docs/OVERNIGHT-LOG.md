@@ -207,3 +207,15 @@ halo under the crew, blue under the dead, brighter for the active unit; hovering
 shows the 1.29 rollover plate (name + health number). Placement paints both teams' ground —
 red yours, blue theirs. Everything here is procedural: the tactical look ships in the repo
 with zero art files.
+
+## QA runs + the hover pass
+
+Three full scripted playthroughs (city -> trade -> stash -> yard -> fight at speed -> aftermath
+-> back out) caught and fixed: the crypt label buried under mob huddles (z-order), and confirmed
+the loop banks gold, auto-equips found gear and clears packs correctly. UX layer on top of
+tactical mode: the rollover plate grew level, AP/MP and live status effects (POISON 6 (2T),
+MP DRAIN, POWER +%); graveyard packs got a composition tooltip with grade and "HUNTS THE
+LIVING" warnings; timeline cards show the fighter's plate on hover and ring its cell; services,
+the Lychgate and the open Crypt advertise their click ("CLICK TO TRADE / DIVE / DESCEND") when
+hovered. Floating damage numbers now wear their element's colour (Fire orange, Water blue, Air
+green, Earth ochre, Neutral bone; crits stay gold, heals green) — another AUDIT-129 item down.

@@ -917,6 +917,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
         DrawFloor();
         if (_placing) DrawPlacementCells(); else DrawFloorOverlays();
+        if (_timelineHover is { IsAlive: true } tlf)   // timeline card hover -> ring its cell
+            _prim.HaloAt(_sb, _proj.CellCenter(tlf.Pos) + new Vector2(0, 2), new Color(240, 220, 120));
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
         _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
         _sb.End();
@@ -1452,19 +1454,55 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// The 1.29 rollover: units carry no overhead UI, so hovering one shows a small plate
     /// with its name and health number next to the cursor (screen space, HUD pass).
     /// </summary>
+    /// <summary>Archetype id -> readable mob name for rollovers.</summary>
+    private static string MobDisplayName(string archetype) =>
+        archetype.Replace('_', ' ').ToUpperInvariant();
+
     private void DrawHoverUnitInfo()
     {
         if (!_engine.Field.InBounds(_hover)) return;
         var f = _engine.FighterAt(_hover);
         if (f == null || !f.IsAlive) return;
-        string name = f.Name.ToUpperInvariant();
-        string hp = $"{f.Hp} / {f.MaxHp} HP";
-        int w = Math.Max(_font.Measure(name, 1), _font.Measure(hp, 1)) + 16;
-        var r = new Rectangle(Math.Min(_mouse.X + 16, ScreenW - w - 4), Math.Max(4, _mouse.Y - 40), w, 32);
+        DrawUnitPlate(f, Math.Min(_mouse.X + 16, ScreenW - 190), Math.Max(4, _mouse.Y - 44));
+    }
+
+    /// <summary>One status effect as a short readable line ("POISON 6 (2T)").</summary>
+    private static string StatusLine(StatusEffect st)
+    {
+        string name = st.Kind switch
+        {
+            StatusKind.DamageBuff => $"POWER +{st.Magnitude}%",
+            StatusKind.Shield => $"SHIELD {st.Magnitude}",
+            StatusKind.Poison => $"POISON {st.Magnitude}",
+            StatusKind.Regen => $"REGEN {st.Magnitude}",
+            StatusKind.MpDrain => $"MP DRAIN {st.Magnitude}",
+            StatusKind.Rooted => "ROOTED",
+            StatusKind.Stabilized => "STABILIZED",
+            StatusKind.Reflect => $"REFLECT {st.Magnitude}%",
+            _ => st.Kind.ToString().ToUpperInvariant(),
+        };
+        return $"{name} ({st.Remaining}T)";
+    }
+
+    /// <summary>The 1.29 rollover plate: name + level, health, points, active effects.</summary>
+    private void DrawUnitPlate(Fighter f, int x, int y)
+    {
+        var lines = new List<(string text, Color color)>
+        {
+            ($"{f.Name.ToUpperInvariant()}  LVL {f.Level}", Palette.Text),
+            ($"{f.Hp} / {f.MaxHp} HP", new Color(150, 214, 130)),
+            ($"{f.BaseAp} AP   {f.BaseMp} MP", new Color(214, 196, 120)),
+        };
+        foreach (var st in f.Statuses.Where(st => st.Kind != StatusKind.None))
+            lines.Add((StatusLine(st), new Color(196, 150, 214)));
+
+        int w = lines.Max(l => _font.Measure(l.text, 1)) + 16;
+        int h = 8 + lines.Count * 13;
+        var r = new Rectangle(Math.Min(x, ScreenW - w - 4), Math.Max(4, Math.Min(y, HudTop - h - 4)), w, h);
         _prim.FillRect(_sb, r, new Color(12, 13, 17, 235));
         _prim.StrokeRect(_sb, r, 1, f.Team == Team.Player ? new Color(214, 60, 40) : new Color(84, 108, 214));
-        _font.Draw(_sb, name, r.X + 8, r.Y + 5, 1, Palette.Text);
-        _font.Draw(_sb, hp, r.X + 8, r.Y + 18, 1, new Color(150, 214, 130));
+        for (int i = 0; i < lines.Count; i++)
+            _font.Draw(_sb, lines[i].text, r.X + 8, r.Y + 5 + i * 13, 1, lines[i].color);
     }
 
     private void DrawHud()
@@ -1570,6 +1608,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// </summary>
     private void DrawTurnTimeline()
     {
+        Fighter? hoveredCard = null;
         var order = _engine.Fighters;
         const int cardW = 96, cardH = 46, gap = 8;
         int totalW = order.Count * cardW + (order.Count - 1) * gap;
@@ -1615,8 +1654,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
             if (current)
                 _prim.FillRect(_sb, new Rectangle(r.X, r.Bottom + 2, cardW, 3), Palette.CurrentRing);
+
+            if (r.Contains(new Point(_mouse.X, _mouse.Y)))
+            {
+                hoveredCard = f;
+                if (f.IsAlive) DrawUnitPlate(f, r.X, r.Bottom + 8);
+            }
         }
+        _timelineHover = hoveredCard; // world pass reads this next frame to ring the cell
     }
+
+    /// <summary>The fighter whose timeline card is under the mouse (1-frame latency is fine).</summary>
+    private Fighter? _timelineHover;
 
     private void DrawTurnTimer()
     {
@@ -1801,6 +1850,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 7), col * 1.25f);
         _font.DrawCentered(_sb, glyph, (int)center.X, (int)center.Y - 22, 2, Color.White);
         _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
+        if (c == _hover)
+            _font.DrawCentered(_sb, "CLICK TO TRADE", (int)center.X, (int)center.Y - 60, 1, new Color(232, 202, 92));
     }
 
     private void DrawLychgate(CellCoord c)
@@ -1813,6 +1864,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle((int)center.X - 20, (int)center.Y - 48, 40, 8), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 10, (int)center.Y - 40, 20, 40), new Color(8, 8, 12));
         _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 62, 1, new Color(200, 200, 220));
+        if (c == _hover)
+            _font.DrawCentered(_sb, "CLICK TO DIVE", (int)center.X, (int)center.Y - 74, 1, new Color(232, 202, 92));
     }
 
     private void DrawNpcPanel(int npc)
@@ -1875,11 +1928,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             var k = _graveMap.Tile(c.X, c.Y);
             if (k is TileKind.Rock or TileKind.Tree) DrawObstacleKind(_proj.CellCenter(c), k);
         }
-        DrawCrypt();
         if (_dive != null)
             foreach (var p in _dive.Packs)
                 if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell))
                     DrawPackToken(cell, p);
+        DrawCrypt(); // after the packs so its label is never buried under a huddle
         if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
         _sb.End();
@@ -1928,6 +1981,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         string sub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
         _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, 1,
             locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
+        if (CryptCell == _hover && !locked && !_cryptCleared)
+            _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - 68, 1, new Color(232, 202, 92));
     }
 
     private void DrawPartyToken(Vector2 center)
@@ -1983,6 +2038,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
         _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - 30, 1,
             afford ? Palette.Text : Palette.TextDim);
+
+        if (c == _hover)
+        {
+            // Pack rollover: the composition, grouped, plus the grade threat marker.
+            var groups = p.Def.Comp.GroupBy(a => a).Select(g => $"{g.Count()}x {MobDisplayName(g.Key)}").ToList();
+            if (p.Def.Grade > 1) groups.Add($"GRADE +{p.Def.Grade - 1} (STRONGER)");
+            if (p.Def.Hunts) groups.Add("HUNTS THE LIVING");
+            int w = groups.Max(t => _font.Measure(t, 1)) + 16;
+            var box = new Rectangle((int)center.X - w / 2, (int)center.Y - 46 - groups.Count * 13,
+                w, 8 + groups.Count * 13);
+            _prim.FillRect(_sb, box, new Color(12, 13, 17, 235));
+            _prim.StrokeRect(_sb, box, 1, new Color(84, 108, 214));
+            for (int i = 0; i < groups.Count; i++)
+                _font.Draw(_sb, groups[i], box.X + 8, box.Y + 5 + i * 13, 1,
+                    i < p.Def.Comp.GroupBy(a => a).Count() ? Palette.Text : new Color(214, 150, 96));
+        }
         // A hunting pack with the crew in its aggro radius is actively closing — flag it.
         if (p.Def.Hunts && c.DistanceTo(_partyCell) <= HuntAggroRadius)
             _font.DrawCentered(_sb, "!", (int)center.X + 20, (int)center.Y - 44, 3, new Color(224, 80, 64));

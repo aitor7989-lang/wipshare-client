@@ -98,17 +98,18 @@ public sealed partial class SliceGame
         }
     }
 
-    /// <summary>A dark pill row: icon, white label, white value right-aligned; the orange [+]
-    /// spender sits OUTSIDE the row, 1.29-style.</summary>
+    /// <summary>A dark pill row with real inner padding: icon, white label, value right-aligned
+    /// clear of the rounded edge; the orange [+] spender sits OUTSIDE the row, 1.29-style.</summary>
     private void DemoRow(Rectangle r, string icon, string label, string value, Point mp,
         bool plus = false, bool big = false)
     {
         _dof.Panel(_sb, r);
-        if (!_dof.StatIcon(_sb, icon, new Rectangle(r.X + 7, r.Y + (r.Height - 16) / 2, 16, 16)))
-            _prim.DiscAt(_sb, new Vector2(r.X + 15, r.Center.Y), 7, new Color(180, 60, 50));
-        DT(label, r.X + 30, r.Center.Y - 7, 1, Color.White);
+        if (!_dof.StatIcon(_sb, icon, new Rectangle(r.X + 10, r.Y + (r.Height - 16) / 2, 16, 16)))
+            _prim.DiscAt(_sb, new Vector2(r.X + 18, r.Center.Y), 7, new Color(180, 60, 50));
+        DT(label, r.X + 34, r.Center.Y - 7, 1, Color.White);
         int vs = big ? 2 : 1;
-        DT(value, r.Right - 12 - DM(value, vs), r.Center.Y - (big ? 12 : 7), vs, Color.White);
+        int vh = big ? 9 : 7; // half the glyph height, so values sit centered INSIDE the pill
+        DT(value, r.Right - 16 - DM(value, vs), r.Center.Y - vh, vs, Color.White);
         if (plus)
         {
             var b = new Rectangle(r.Right + 8, r.Y + (r.Height - 20) / 2, 22, 20);
@@ -124,51 +125,51 @@ public sealed partial class SliceGame
         _dof.Window(_sb, a);
         DemoTitle(a, "CARACTERISTIQUES", mp, centered: false, help: true);
 
-        // Everything inside real margins: the frame's rail is ~14px, content starts at +28.
-        int L = a.X + 28, R = a.Right - 28, W = R - L;
+        // Real margins: the silver rail is ~14px; content keeps a further ~20px of air.
+        int L = a.X + 34, R = a.Right - 34, W = R - L;
 
         // Tabs at native-ish proportions, seated on a hairline.
         var tabs = new[] { "Resume", "Details" };
         int tabY = a.Y + 50;
         for (int i = 0; i < 2; i++)
         {
-            var t = new Rectangle(L + i * 92, tabY, 88, 34);
+            var t = new Rectangle(L + i * 90, tabY, 86, 32);
             if (t.Contains(mp) && LeftClicked()) _demoTab = i;
             _dof.Tab(_sb, t, _demoTab == i, t.Contains(mp));
             // The reference's SELECTED tab is the light dome with DARK text.
-            DTC(tabs[i], t.Center.X, t.Y + 10, 1, _demoTab == i ? new Color(52, 48, 44) : WinInkDim);
+            DTC(tabs[i], t.Center.X, t.Y + 9, 1, _demoTab == i ? new Color(52, 48, 44) : WinInkDim);
         }
-        var heartTab = new Rectangle(L + 196, tabY, 44, 34);
+        var heartTab = new Rectangle(L + 190, tabY, 42, 32);
         _dof.Tab(_sb, heartTab, false, heartTab.Contains(mp));
-        _dof.StatIcon(_sb, "vit", new Rectangle(heartTab.Center.X - 10, heartTab.Y + 8, 20, 20));
-        _prim.FillRect(_sb, new Rectangle(L, tabY + 34, W, 1), new Color(146, 116, 58) * 0.6f);
+        _dof.StatIcon(_sb, "vit", new Rectangle(heartTab.Center.X - 9, heartTab.Y + 8, 18, 18));
+        _prim.FillRect(_sb, new Rectangle(L, tabY + 32, W, 1), new Color(146, 116, 58) * 0.6f);
 
         // Portrait + identity.
-        var port = new Rectangle(L, a.Y + 96, 84, 84);
+        var port = new Rectangle(L, a.Y + 94, 80, 80);
         _dof.Slot(_sb, port, hover: port.Contains(mp));
         var sheet = _sprites.GetSheet("hero", "idle", "se");
         if (sheet != null)
-            SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X, port.Bottom - 8), Color.White, 66f,
+            SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X + 3, port.Bottom - 10), Color.White, 58f,
                 (int)(_time * 6) % sheet.FrameCount);
-        _dof.Draw(_sb, "help", new Rectangle(L - 8, a.Y + 90, 18, 18)); // the eye chip
-        var plus = new Rectangle(L - 8, a.Y + 112, 18, 18);            // the "+" chip below it
+        _dof.Draw(_sb, "help", new Rectangle(L - 9, a.Y + 90, 18, 18)); // the eye chip
+        var plus = new Rectangle(L - 9, a.Y + 112, 18, 18);            // the "+" chip below it
         _dof.Button(_sb, plus, hover: plus.Contains(mp));
         DTC("+", plus.Center.X, plus.Y + 2, 1, Color.White);
-        DT("Aspette", L + 98, a.Y + 100, 2, WinInk);
-        DT("Omega 191", L + 98, a.Y + 128, 1, WinInkDim);
-        DT("15 080 points", L + 98, a.Y + 146, 1, WinGold);
-        DT("Beta-Major", L, a.Y + 186, 1, WinInkDim);
+        DT("Aspette", L + 94, a.Y + 98, 2, WinInk);
+        DT("Omega 191", L + 94, a.Y + 122, 1, WinInkDim);
+        DT("15 080 points", L + 94, a.Y + 140, 1, WinGold);
+        DT("Beta-Major", L, a.Y + 182, 1, WinInkDim);
 
         // Experience / Energie candy bars.
-        DT("Experience", L, a.Y + 208, 1, WinInk);
-        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 208, W - 96, 12), 0.62f, "gauge_timer");
-        DT("Energie", L, a.Y + 226, 1, WinInk);
-        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 226, W - 96, 12), 0.55f, "gauge_timer");
+        DT("Experience", L, a.Y + 204, 1, WinInk);
+        _dof.Gauge(_sb, new Rectangle(L + 92, a.Y + 204, W - 92, 12), 0.62f, "gauge_timer");
+        DT("Energie", L, a.Y + 222, 1, WinInk);
+        _dof.Gauge(_sb, new Rectangle(L + 92, a.Y + 222, W - 92, 12), 0.55f, "gauge_timer");
 
-        // The three vital rows.
-        DemoRow(new Rectangle(L, a.Y + 248, W, 26), "vit", "Points de vie (PV)", "2 330", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 278, W, 26), "ap", "Points d'action (PA)", "7", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 308, W, 26), "mp", "Points de mouvement (PM)", "3", mp, big: true);
+        // The three vital rows (values from the 18px atlas — they FIT inside the pills now).
+        DemoRow(new Rectangle(L, a.Y + 244, W, 28), "vit", "Points de vie (PV)", "2 330", mp, big: true);
+        DemoRow(new Rectangle(L, a.Y + 276, W, 28), "ap", "Points d'action (PA)", "7", mp, big: true);
+        DemoRow(new Rectangle(L, a.Y + 308, W, 28), "mp", "Points de mouvement (PM)", "3", mp, big: true);
 
         // The six characteristics; the [+] spenders sit outside the rows like the original.
         (string icon, string label, string val)[] stats =
@@ -177,25 +178,25 @@ public sealed partial class SliceGame
             ("str", "Force", "166"), ("int", "Intelligence", "167"), ("wis", "Sagesse", "209"),
         };
         for (int i = 0; i < stats.Length; i++)
-            DemoRow(new Rectangle(L, a.Y + 344 + i * 29, W - 32, 25),
+            DemoRow(new Rectangle(L, a.Y + 344 + i * 28, W - 32, 24),
                 stats[i].icon, stats[i].label, stats[i].val, mp, plus: true);
 
-        // Points to spend: label, then the dark INPUT WELL with the number, then the round
-        // orange refresh — three separate elements, like the reference.
-        DT("Points a repartir :", L, a.Y + 522, 1, WinInk);
-        var well = new Rectangle(L + 132, a.Y + 518, 76, 22);
+        // Points to spend: label + dark input well + round orange refresh.
+        DT("Points a repartir :", L, a.Y + 518, 1, WinInk);
+        var well = new Rectangle(L + 128, a.Y + 514, 70, 22);
         _dof.Slice(_sb, "chat_input", well);
         DT("995", well.X + 10, well.Y + 4, 1, Color.White);
         var refresh = new Rectangle(well.Right + 10, well.Y, 22, 22);
         _dof.Slice(_sb, "scroll_thumb", refresh);
         DTC("o", refresh.Center.X, refresh.Y + 3, 1, Color.White);
 
-        var ens = new Rectangle(L, a.Y + 544, 130, 28);
-        var srt = new Rectangle(L + 150, a.Y + 544, 130, 28);
+        // Footer pills, fully INSIDE the frame.
+        var ens = new Rectangle(L, a.Y + 542, 124, 26);
+        var srt = new Rectangle(L + 144, a.Y + 542, 124, 26);
         _dof.Button(_sb, ens, hover: ens.Contains(mp));
         _dof.Button(_sb, srt, hover: srt.Contains(mp));
-        DTC("Ensembles", ens.Center.X, ens.Y + 7, 1, new Color(46, 26, 10));
-        DTC("Sorts", srt.Center.X, srt.Y + 7, 1, new Color(46, 26, 10));
+        DTC("Ensembles", ens.Center.X, ens.Y + 6, 1, new Color(46, 26, 10));
+        DTC("Sorts", srt.Center.X, srt.Y + 6, 1, new Color(46, 26, 10));
     }
 
     // ----- INVENTAIRE -------------------------------------------------------------------
@@ -229,24 +230,18 @@ public sealed partial class SliceGame
             DemoEquipSlot(new Rectangle(doll.Right - 62, doll.Y + 74 + i * 62, 52, 52), mp, rightSil[i]);
         DemoEquipSlot(new Rectangle(doll.X + 10, doll.Y + 248, 52, 52), mp, "weapon", "item_adv_blade");
         DemoEquipSlot(new Rectangle(doll.X + 72, doll.Y + 248, 52, 52), mp, "shield");
-        DemoEquipSlot(new Rectangle(doll.Center.X - 19, doll.Y + 256, 38, 38), mp, null);
-        DemoEquipSlot(new Rectangle(doll.Right - 124, doll.Y + 248, 52, 52), mp, "pet");
-        DemoEquipSlot(new Rectangle(doll.Right - 62, doll.Y + 248, 52, 52), mp, "pet", "item_pipers_whistle");
 
+        // The character CENTERED in the doll's free middle, small rotate arrows at its feet.
         var hero = _sprites.GetSheet("hero", "idle", "se");
+        int midX = doll.Center.X + 2; // nudged for the sprite's sword-side lean
+        int feetY = doll.Center.Y + 64;
         if (hero != null)
-            SpriteDraw.Feet(_sb, hero, new Vector2(doll.Center.X, doll.Bottom - 72), Color.White, 150f,
+            SpriteDraw.Feet(_sb, hero, new Vector2(midX, feetY), Color.White, 140f,
                 (int)(_time * 5) % hero.FrameCount);
-        // The rotate arrows from the user's sprite sheet, flanking the FEET like the original.
         if (_dof.Texture("rot_l") != null)
         {
-            _dof.Draw(_sb, "rot_l", new Rectangle(doll.Center.X - 64, doll.Bottom - 106, 26, 42));
-            _dof.Draw(_sb, "rot_r", new Rectangle(doll.Center.X + 38, doll.Bottom - 106, 26, 42));
-        }
-        else
-        {
-            _dof.Draw(_sb, "turn_l", new Rectangle(doll.Center.X - 64, doll.Bottom - 100, 30, 28));
-            _dof.Draw(_sb, "turn_r", new Rectangle(doll.Center.X + 36, doll.Bottom - 100, 30, 28));
+            _dof.Draw(_sb, "rot_l", new Rectangle(midX - 46, feetY - 26, 15, 24));
+            _dof.Draw(_sb, "rot_r", new Rectangle(midX + 31, feetY - 26, 15, 24));
         }
 
         // The pet / consumable strip: eggs, one locked, one item.
@@ -265,15 +260,6 @@ public sealed partial class SliceGame
             if (i == 6 && _dof.Texture("egg_24") != null) // the golden idol slot: Dolmanax
                 _dof.Draw(_sb, "egg_24", new Rectangle(s.X + 4, s.Y + 4, 38, 38));
         }
-
-        // The oldUI Remake plaque (the screenshot's watermark corner, as a wink).
-        var plaque = new Rectangle(L, b.Y + 424, 344, 128);
-        _dof.Panel(_sb, plaque);
-        for (int i = 0; i < 4; i++)
-            _prim.DiamondAt(_sb, new Vector2(plaque.X + 60 + i % 2 * 32, plaque.Y + 50 + i / 2 * 16 + i % 2 * 8),
-                new Color(196, 186, 150) * (i % 2 == 0 ? 0.9f : 0.55f));
-        DT("oldUI", plaque.X + 140, plaque.Y + 28, 2, Color.White);
-        DT("Remake", plaque.X + 140, plaque.Y + 62, 2, Color.White);
 
         // Right pane: category tabs, dropdown, the EGG grid, search, kamas.
         int rx = b.X + 388, ry = b.Y + 48;
@@ -338,11 +324,12 @@ public sealed partial class SliceGame
 
     private void DrawDemoHud(Point mp)
     {
-        // The 1.29 bar: the exact dark grey of the user's sheet canvas (48,48,48), flat,
-        // with a hairline top edge. No chat, no minimap (user's call).
-        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, ScreenH - 628), new Color(48, 48, 48));
-        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, 1), new Color(96, 94, 90));
-        _prim.FillRect(_sb, new Rectangle(0, 629, ScreenW, 1), new Color(24, 24, 24));
+        // The bar is a CENTERED plate now (not full width), in the sheet's canvas grey.
+        var bar = new Rectangle(350, 630, 580, 104);
+        _prim.FillRect(_sb, bar, new Color(48, 48, 48));
+        _prim.FillRect(_sb, new Rectangle(bar.X, bar.Y, bar.Width, 1), new Color(96, 94, 90));
+        _prim.FillRect(_sb, new Rectangle(bar.X, bar.Y + 1, bar.Width, 1), new Color(24, 24, 24));
+        _prim.StrokeRect(_sb, bar, 1, new Color(20, 20, 20));
 
         // Vitals: the theme's OWN sprites — the winged heart with the PA star and PM leaf.
         var heartC = new Point(430, 684);
@@ -383,17 +370,7 @@ public sealed partial class SliceGame
         DTC("v", dn.Center.X, dn.Y + 1, 1, new Color(46, 26, 10));
         DTC("1", px + 10, 655, 1, Color.White);
 
-        // Right cluster: the two rows of round option chips (the minimap is gone).
-        string[] glyphs = { "icon_cat_equip", "icon_cat_useful", "icon_cat_quest", "icon_gear",
-                            "icon_cat_res", "icon_cat_all", "help", "icon_gear" };
-        for (int i = 0; i < 8; i++)
-        {
-            var o = new Rectangle(1128 + i % 4 * 28, 648 + i / 4 * 28, 24, 24);
-            _dof.Slice(_sb, "scroll_thumb", o);
-            _dof.Draw(_sb, glyphs[i], new Rectangle(o.X + 5, o.Y + 5, 14, 14), Color.White); // ref: white glyphs
-        }
-
-        // The LEVEL bar: the yellow strip flush along the very bottom, full width.
-        _dof.Gauge(_sb, new Rectangle(0, ScreenH - 10, ScreenW, 10), 0.78f, "gauge_timer");
+        // The LEVEL bar: the yellow strip under the plate, same width — not screen-wide.
+        _dof.Gauge(_sb, new Rectangle(350, ScreenH - 14, 580, 10), 0.78f, "gauge_timer");
     }
 }

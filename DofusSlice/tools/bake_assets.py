@@ -189,8 +189,9 @@ def main():
     if a.font:
         print("font:")
         bake_font(a.font, a.font_size)
-        # A true large atlas for headings/values, so nothing integer-doubles into chunkiness.
-        bake_font(a.font, a.font_size * 2, "ui_font_big")
+        # A true heading/value atlas at ~1.4x, so nothing integer-doubles into chunkiness
+        # and big values still FIT inside 26-28px rows.
+        bake_font(a.font, max(a.font_size + 5, int(a.font_size * 1.4)), "ui_font_big")
 
 
 if __name__ == "__main__":

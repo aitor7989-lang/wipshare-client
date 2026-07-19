@@ -394,3 +394,13 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - Item-grid stack counts moved top-left; padlocks centered on dimmed cells (grid + pet strip).
 - The pet strip's last slot holds the golden Dolmanax idol.
 - The right-side HUD chips draw WHITE glyphs on orange, like the reference.
+
+## Demo pass 7: proportion + declutter (user notes)
+- Rotate arrows shrunk to feet-size; the character stands CENTERED in the doll's free middle.
+- Doll decluttered: 3 slots left, 4 right, weapon+shield below — mini slot, pet slots and the
+  flute removed; the oldUI Remake plaque deleted.
+- The bottom bar is a CENTERED plate (580px) instead of full-width; the eight right chips are
+  gone; the level strip matches the plate's width.
+- Type unified for real: ui_font_big rebaked at 18px (was 26) so headings/values FIT inside
+  their pills; rows gained inner padding; the whole characteristics column re-metered inside
+  wider margins (34px) with the footer pills fully inside the frame.

@@ -135,11 +135,12 @@ public sealed partial class SliceGame
             var t = new Rectangle(L + i * 92, tabY, 88, 34);
             if (t.Contains(mp) && LeftClicked()) _demoTab = i;
             _dof.Tab(_sb, t, _demoTab == i, t.Contains(mp));
-            DTC(tabs[i], t.Center.X, t.Y + 10, 1, _demoTab == i ? Color.White : WinInkDim);
+            // The reference's SELECTED tab is the light dome with DARK text.
+            DTC(tabs[i], t.Center.X, t.Y + 10, 1, _demoTab == i ? new Color(52, 48, 44) : WinInkDim);
         }
         var heartTab = new Rectangle(L + 196, tabY, 44, 34);
         _dof.Tab(_sb, heartTab, false, heartTab.Contains(mp));
-        _dof.StatIcon(_sb, "vit", new Rectangle(heartTab.Center.X - 8, heartTab.Y + 10, 16, 16));
+        _dof.StatIcon(_sb, "vit", new Rectangle(heartTab.Center.X - 10, heartTab.Y + 8, 20, 20));
         _prim.FillRect(_sb, new Rectangle(L, tabY + 34, W, 1), new Color(146, 116, 58) * 0.6f);
 
         // Portrait + identity.
@@ -149,7 +150,10 @@ public sealed partial class SliceGame
         if (sheet != null)
             SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X, port.Bottom - 8), Color.White, 66f,
                 (int)(_time * 6) % sheet.FrameCount);
-        _dof.Draw(_sb, "help", new Rectangle(L - 8, a.Y + 90, 18, 18));
+        _dof.Draw(_sb, "help", new Rectangle(L - 8, a.Y + 90, 18, 18)); // the eye chip
+        var plus = new Rectangle(L - 8, a.Y + 112, 18, 18);            // the "+" chip below it
+        _dof.Button(_sb, plus, hover: plus.Contains(mp));
+        DTC("+", plus.Center.X, plus.Y + 2, 1, Color.White);
         DT("Aspette", L + 98, a.Y + 100, 2, WinInk);
         DT("Omega 191", L + 98, a.Y + 128, 1, WinInkDim);
         DT("15 080 points", L + 98, a.Y + 146, 1, WinGold);
@@ -176,12 +180,14 @@ public sealed partial class SliceGame
             DemoRow(new Rectangle(L, a.Y + 344 + i * 29, W - 32, 25),
                 stats[i].icon, stats[i].label, stats[i].val, mp, plus: true);
 
-        // Points to spend + the two footer pills.
-        var pts = new Rectangle(L, a.Y + 518, 216, 22);
-        _dof.Panel(_sb, pts, light: true);
-        DT("Points a repartir :   995", pts.X + 10, pts.Y + 4, 1, Color.White);
-        var refresh = new Rectangle(pts.Right + 10, pts.Y, 22, 22);
-        _dof.Button(_sb, refresh, hover: refresh.Contains(mp));
+        // Points to spend: label, then the dark INPUT WELL with the number, then the round
+        // orange refresh — three separate elements, like the reference.
+        DT("Points a repartir :", L, a.Y + 522, 1, WinInk);
+        var well = new Rectangle(L + 132, a.Y + 518, 76, 22);
+        _dof.Slice(_sb, "chat_input", well);
+        DT("995", well.X + 10, well.Y + 4, 1, Color.White);
+        var refresh = new Rectangle(well.Right + 10, well.Y, 22, 22);
+        _dof.Slice(_sb, "scroll_thumb", refresh);
         DTC("o", refresh.Center.X, refresh.Y + 3, 1, Color.White);
 
         var ens = new Rectangle(L, a.Y + 544, 130, 28);
@@ -253,11 +259,11 @@ public sealed partial class SliceGame
                 _dof.Draw(_sb, egg, new Rectangle(s.X + 4, s.Y + 4, 38, 38));
             if (i == 5)
             {
-                _prim.FillRect(_sb, s, Color.Black * 0.35f);
-                _dof.Draw(_sb, "lock", new Rectangle(s.Right - 18, s.Bottom - 18, 14, 14));
+                _prim.FillRect(_sb, s, Color.Black * 0.45f);
+                _dof.Draw(_sb, "lock", new Rectangle(s.Center.X - 8, s.Center.Y - 8, 16, 16));
             }
-            if (i == 6 && _dof.Texture("item_adv_belt") != null)
-                _dof.Draw(_sb, "item_adv_belt", new Rectangle(s.X + 4, s.Y + 4, 38, 38));
+            if (i == 6 && _dof.Texture("egg_24") != null) // the golden idol slot: Dolmanax
+                _dof.Draw(_sb, "egg_24", new Rectangle(s.X + 4, s.Y + 4, 38, 38));
         }
 
         // The oldUI Remake plaque (the screenshot's watermark corner, as a wink).
@@ -280,10 +286,12 @@ public sealed partial class SliceGame
             _dof.Draw(_sb, cats[i], new Rectangle(c.Center.X - 10, c.Y + 6, 20, 20),
                 _demoCat == i ? Color.White : new Color(74, 64, 54));
         }
-        var drop = new Rectangle(rx, ry + 36, 198, 22);
+        var drop = new Rectangle(rx, ry + 36, 176, 22);
         _dof.Panel(_sb, drop, light: true);
         DT("Dofus", drop.X + 8, drop.Y + 4, 1, Color.White);
-        DT("v", drop.Right - 14, drop.Y + 4, 1, Color.White);
+        var dropBtn = new Rectangle(drop.Right, ry + 36, 22, 22); // attached orange ▼, ref-style
+        _dof.Button(_sb, dropBtn, hover: dropBtn.Contains(mp));
+        DTC("v", dropBtn.Center.X, dropBtn.Y + 3, 1, Color.White);
         var gear = new Rectangle(rx + 206, ry + 36, 22, 22);
         _dof.Button(_sb, gear, hover: gear.Contains(mp));
         _dof.Draw(_sb, "icon_gear", new Rectangle(gear.X + 3, gear.Y + 3, 16, 16), new Color(46, 26, 10));
@@ -302,13 +310,13 @@ public sealed partial class SliceGame
                 else
                     _dof.SpellIcon(_sb, DemoSpellKeys[idx % DemoSpellKeys.Length],
                         new Rectangle(cell.X + 4, cell.Y + 4, 36, 36));
-                if (idx is 6 or 9 or 22)
+                if (idx is 6 or 9 or 22) // locked: dimmed cell, padlock CENTERED (ref-style)
                 {
-                    _prim.FillRect(_sb, cell, Color.Black * 0.35f);
-                    _dof.Draw(_sb, "lock", new Rectangle(cell.Right - 16, cell.Bottom - 16, 13, 13));
+                    _prim.FillRect(_sb, cell, Color.Black * 0.45f);
+                    _dof.Draw(_sb, "lock", new Rectangle(cell.Center.X - 8, cell.Center.Y - 8, 16, 16));
                 }
-                if (idx is 7 or 18)
-                    DT(((idx * 7) % 9 + 2).ToString(), cell.Right - 12, cell.Y + 1, 1, Color.White);
+                if (idx is 7 or 18) // stack counts sit TOP-LEFT in the reference
+                    DT(((idx * 7) % 9 + 2).ToString(), cell.X + 3, cell.Y + 1, 1, Color.White);
             }
 
         // Search + kamas (inside the frame's bottom rail).
@@ -382,7 +390,7 @@ public sealed partial class SliceGame
         {
             var o = new Rectangle(1128 + i % 4 * 28, 648 + i / 4 * 28, 24, 24);
             _dof.Slice(_sb, "scroll_thumb", o);
-            _dof.Draw(_sb, glyphs[i], new Rectangle(o.X + 5, o.Y + 5, 14, 14), new Color(46, 26, 10));
+            _dof.Draw(_sb, glyphs[i], new Rectangle(o.X + 5, o.Y + 5, 14, 14), Color.White); // ref: white glyphs
         }
 
         // The LEVEL bar: the yellow strip flush along the very bottom, full width.

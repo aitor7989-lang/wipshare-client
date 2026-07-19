@@ -385,3 +385,12 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - The bottom bar was read as "flat black" — it now uses the EXACT canvas grey sampled from
   the user's sprite sheet, RGB(48,48,48) flat with a double hairline top edge, verified by
   sampling the rendered output. Backdrop lifted to the same neutral family (34,34,34).
+
+## Demo pass 6: element-by-element polish vs the reference
+- Selected tab = light dome with DARK text (was inverted); heart tab icon enlarged.
+- The "+" chip joined the eye chip beside the portrait.
+- "Points a repartir" decomposed into label + dark input well + round orange refresh.
+- Dropdown gained its attached orange arrow button.
+- Item-grid stack counts moved top-left; padlocks centered on dimmed cells (grid + pet strip).
+- The pet strip's last slot holds the golden Dolmanax idol.
+- The right-side HUD chips draw WHITE glyphs on orange, like the reference.

@@ -258,6 +258,9 @@ public static class CampaignSim
         // A FRESH level-1 crew, so the g3 hounds genuinely reach melee and force the escapes.
         var c2 = Campaign.NewGame("cannon");
         c2.Gold += 600;
+        // Campaigns start SOLO since the fun pivot — the sim hires its crew like a player would.
+        c2.Hire("archer", "Wren", 1);
+        c2.Hire("bulwark", "Bern", 1);
         var archer = c2.Crew.First(u => u.ClassId == "archer");
         var bulwark = c2.Crew.First(u => u.ClassId == "bulwark");
         c2.BuyEssence("Blink"); c2.TeachEssence(archer, "Blink");

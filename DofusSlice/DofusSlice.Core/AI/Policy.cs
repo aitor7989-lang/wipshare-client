@@ -48,16 +48,38 @@ public static class Policy
             engine.TryCast(self, buff, self.Pos);
     }
 
-    /// <summary>Blood Pact: a self-targeted AP grant paid in HP. Cast while healthy (above ~40%)
-    /// with an enemy near enough that the extra action will be spent on something real.</summary>
+    /// <summary>Blood Pact: a self-targeted AP grant paid in HP. Blood is only spent when it
+    /// BUYS something (Pass 3, owner report: the cannon bled itself for nothing): the bonus AP
+    /// must unlock at least one more attack this turn, and the enemies still standing must be
+    /// able to absorb what we could already afford — no paying HP to overkill a won fight.</summary>
     private static void TrySelfEconomy(CombatEngine engine, Fighter self)
     {
         if (self.Hp * 5 <= self.MaxHp * 2) return;
         if (DistToNearestEnemy(engine, self, self.Pos) > 10) return;
         var pact = self.Spells.FirstOrDefault(s => s.MaxRange == 0 &&
             s.Effects.Any(e => e.Kind == EffectKind.GrantAp));
-        if (pact != null && engine.CanCast(self, pact, self.Pos, out _))
-            engine.TryCast(self, pact, self.Pos);
+        if (pact == null || !engine.CanCast(self, pact, self.Pos, out _)) return;
+
+        var attack = DamageSpells(self).OrderBy(s => s.ApCost).FirstOrDefault();
+        if (attack == null) return;
+        int bonus = pact.Effects.Where(e => e.Kind == EffectKind.GrantAp).Sum(e => e.Min);
+        int castsNow = self.CurrentAp / attack.ApCost;
+        int castsWith = (self.CurrentAp - pact.ApCost + bonus) / attack.ApCost;
+        if (castsWith <= castsNow) return;   // the pact buys no extra swing — keep the blood
+
+        // Overkill guard: measure the affordable swings (stat-scaled, vs the nearest target)
+        // against every living enemy's HP. If that already finishes the fight, don't bleed.
+        var nearest = engine.Fighters.Where(f => f.IsAlive && f.Team != self.Team)
+            .OrderBy(f => f.Pos.DistanceTo(self.Pos)).FirstOrDefault();
+        if (nearest == null) return;
+        int avg = engine.EstimateDamage(self, attack, nearest.Pos) is { } est
+            ? Math.Max(1, (est.min + est.max) / 2)
+            : Math.Max(1, attack.Effects.Where(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal)
+                .Sum(e => (e.Min + e.Max) / 2));
+        int enemyHp = engine.Fighters.Where(f => f.IsAlive && f.Team != self.Team).Sum(f => f.Hp);
+        if (castsNow * avg >= enemyHp) return;
+
+        engine.TryCast(self, pact, self.Pos);
     }
 
     /// <summary>Blink: a ground-targeted self-teleport used as an escape — when meleed, jump to

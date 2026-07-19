@@ -36,20 +36,20 @@ The vitals color code, applied EVERYWHERE (bars, numbers, floats, icons, rows):
 
 ## PASS 3 — "FAIR TURNS, HONEST AI" (systems + fixes)
 
-- [ ] 3.1 INITIATIVE, Dofus-style: order from the fighters' stats, ALTERNATING
+- [x] 3.1 INITIATIVE, Dofus-style: order from the fighters' stats, ALTERNATING
       sides — one ally, one enemy, one ally… (or enemy-first if their best
       initiative wins).
-- [ ] 3.2 CANNON AI FIX: Blood Pact (pay HP for AP) only when the extra AP
+- [x] 3.2 CANNON AI FIX: Blood Pact (pay HP for AP) only when the extra AP
       actually enables a cast this turn — never for nothing, and never when the
       target already dies to what's armed. No more self-harm for zero value.
-- [ ] 3.3 Spell progression rework: START WITH ONE spell, gain a NEW one every
+- [x] 3.3 Spell progression rework: START WITH ONE spell, gain a NEW one every
       level (kits become a ladder, not a bundle).
-- [ ] 3.4 LEVEL UP = FULL HEAL. Your life refills the moment you ding.
-- [ ] 3.4b LEVEL UP deserves a MOMENT, not a line in the loot UI: a Dofus-style
+- [x] 3.4 LEVEL UP = FULL HEAL. Your life refills the moment you ding.
+- [x] 3.4b LEVEL UP deserves a MOMENT, not a line in the loot UI: a Dofus-style
       celebration — its own popup/flash ("LEVEL 4!", the new spell unveiled, the
       full-heal shown), sound, a beat of wow before play resumes.
-- [ ] 3.5 REMOVE the AUTO-SPEND ALL button — points are spent by hand, always.
-- [ ] 3.6 MOB RESPAWN: cleared packs return to the yard after a timer.
+- [x] 3.5 REMOVE the AUTO-SPEND ALL button — points are spent by hand, always.
+- [x] 3.6 MOB RESPAWN: cleared packs return to the yard after a timer.
 
 ## PASS 4 — "TOUCH THE LOOT" (inventory feel + drops)
 

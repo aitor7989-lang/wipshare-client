@@ -37,6 +37,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private DiveSession.FightReport? _fightReport;    // the just-finished fight's result
     private bool _combatResolved;                     // ApplyResult already folded this fight in
     private List<(string name, int level)> _levelUps = new(); // level-ups from the last fight
+    private (int level, string? spellKey)? _celebrate;        // the LEADER's ding, staged for its moment
+    private bool _celebrating;                                // the moment is on screen now
+    private float _celebrateAt;                               // when it began (drives the pulse)
     private bool _reportSounded;                      // the loot window's one-time stings
     private int _openNpc = -1;                        // which City building's panel is open
     private MapData _cityMap = null!, _graveMap = null!;
@@ -529,6 +532,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         MovePartyAlongPath(dt);
         if (_dive.ConsumeDeparture() is { } dep) { _yardMsg = dep; _yardMsgTimer = 4f; } // the Grasping exit
+        if (_dive.ConsumeRespawn() is { } rs) { _yardMsg = rs; _yardMsgTimer = 3.5f; }   // the grave refills
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
         // Number keys walk the party to THIS yard's packs in reach order (a quick shortcut).
@@ -726,11 +730,26 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _levelUps = _campaign.Crew
                     .Where(u => preLevels.TryGetValue(u.Id, out int was) && u.Level > was)
                     .Select(u => (u.Name, u.Level)).ToList();
+                // The LEADER'S ding earns its own moment (Pass 3.4b): stage the celebration
+                // that plays after the loot window, with the freshly unlocked spell if any.
+                var av = _campaign.Avatar;
+                if (av != null && preLevels.TryGetValue(av.Id, out int had) && av.Level > had)
+                {
+                    var keysNow = TitheContent.ClassSkillsAt(av.ClassId, av.Level).ToList();
+                    string? newKey = keysNow.Count > TitheContent.ClassSkillsAt(av.ClassId, had).Count()
+                        ? keysNow[^1] : null;
+                    _celebrate = (av.Level, newKey);
+                }
                 _reportSounded = false;
                 _combatResolved = true;
             }
             if (_combatResolved && (Pressed(Keys.Space) || Pressed(Keys.Enter) || LeftClicked()))
-                AdvanceAfterCombat();
+            {
+                if (_celebrate != null && !_celebrating)
+                { _celebrating = true; _celebrateAt = _time; _sfx.Play("levelup", 0.9f, jitter: false); }
+                else
+                { _celebrating = false; _celebrate = null; AdvanceAfterCombat(); }
+            }
             return;
         }
 
@@ -2989,8 +3008,54 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 ScreenW / 2, 552, 1, new Color(204, 172, 224));
         if (_jumpedFight && !_combatResolved) // caught in the open — the fight found YOU
             _font.DrawCentered(_sb, "JUMPED — THE PACK FINDS YOU IN THE OPEN", ScreenW / 2, 528, 1, new Color(224, 96, 88));
-        if (_combatResolved && _fightReport != null && !_anim.IsBusy) DrawFightReport();
+        if (_combatResolved && _fightReport != null && !_anim.IsBusy)
+        {
+            if (_celebrating) DrawLevelUpMoment();
+            else DrawFightReport();
+        }
         _sb.End();
+    }
+
+    /// <summary>The Dofus ding, given its own beat (Pass 3.4b): black-out, a pulsing star
+    /// wearing the new level, rotating rays, the full-heal promise, and — when the ladder
+    /// grants one — the freshly unlocked spell with its glyph in its element's ink.</summary>
+    private void DrawLevelUpMoment()
+    {
+        var a = _campaign.Avatar;
+        if (_celebrate is not { } c || a == null) return;
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(0, 0, 0, 200));
+        float t = _time - _celebrateAt;
+
+        var ctr = new Vector2(ScreenW / 2f, 286);
+        for (int i = 0; i < 12; i++)   // slow-turning rays: cheap, loud, right
+        {
+            float ang = i * MathF.Tau / 12f + t * 0.5f;
+            var dir = new Vector2(MathF.Cos(ang), MathF.Sin(ang));
+            _prim.Line(_sb, ctr + dir * 58, ctr + dir * (128 + 12 * MathF.Sin(t * 3f + i)), 3f,
+                Mono.Ink * 0.22f);
+        }
+        if (!DrawUiSprite("onebit_star", ctr, 76 + 6 * MathF.Sin(t * 4f), Mono.Ap))
+            _prim.DiscAt(_sb, ctr, 40, Mono.Ap);
+        OutlinedCentered($"{c.level}", (int)ctr.X, (int)ctr.Y - 12, 3, Mono.Ink);
+
+        _font.DrawCentered(_sb, "LEVEL UP!", ScreenW / 2, 386, 5, Mono.Ink);
+        _font.DrawCentered(_sb, $"{a.Name.ToUpperInvariant()} REACHES LEVEL {c.level}",
+            ScreenW / 2, 442, 2, Mono.Dim);
+        _font.DrawCentered(_sb, "LIFE FULLY RESTORED", ScreenW / 2, 470, 2, Mono.Heal);
+
+        if (c.spellKey != null)
+        {
+            var sp = TitheContent.UnitSkill(a, c.spellKey);
+            _font.DrawCentered(_sb, "NEW SPELL UNLOCKED", ScreenW / 2, 506, 1, Mono.Dim);
+            var well = new Rectangle(ScreenW / 2 - 23, 520, 46, 46);
+            Mono.Slot(_sb, _prim, well, selected: true);
+            if (!DrawSpellIcon(sp, well, SpellInk(sp)))
+                _font.DrawCentered(_sb, sp.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 15, 2, SpellInk(sp));
+            _font.DrawCentered(_sb, sp.Name.ToUpperInvariant(), ScreenW / 2, 576, 2, SpellInk(sp));
+        }
+
+        _font.DrawCentered(_sb, "+5 STAT POINTS  ·  +1 SPELL POINT      (SPACE)",
+            ScreenW / 2, c.spellKey != null ? 612 : 530, 1, Mono.Dim);
     }
 
     private void DrawFightReport()

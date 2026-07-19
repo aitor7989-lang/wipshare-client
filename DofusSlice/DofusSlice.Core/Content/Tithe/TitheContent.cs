@@ -136,9 +136,10 @@ public static class TitheContent
     public static string? SkillKeyById(int id) =>
         SkillIds.FirstOrDefault(kv => kv.Value == id).Key;
 
-    /// <summary>The class kit at a given level: three signatures, the fourth at level 4.</summary>
+    /// <summary>The class kit as a LADDER (Pass 3): one spell at level 1, a new one
+    /// unlocked at every level after, until the class list runs dry.</summary>
     public static IEnumerable<string> ClassSkillsAt(string classId, int level) =>
-        Classes[classId].Skills.Take(level >= 4 ? 4 : 3);
+        Classes[classId].Skills.Take(Math.Max(1, level));
 
     /// <summary>A unit's spell keys in kit order: the class signature, then taught essences.</summary>
     public static IEnumerable<string> UnitSkillKeys(CampaignUnit u) =>

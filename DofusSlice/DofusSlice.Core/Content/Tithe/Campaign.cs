@@ -93,6 +93,7 @@ public sealed class CampaignUnit
             Xp -= XpForNextLevel(Level); Level++;
             SpellPoints++;   // 1.29: one spell point per level (Bible §6.3)
             StatPoints += 5; // 1.29: five characteristic points per level, player-spent
+            CurrentHp = null; // the ding restores you whole (Pass 3: level up = full life)
         }
     }
 }

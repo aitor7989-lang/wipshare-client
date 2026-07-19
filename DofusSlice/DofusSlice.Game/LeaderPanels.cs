@@ -119,15 +119,10 @@ public partial class SliceGame
             }
         }
 
-        // Points + auto-spend, then the effective damage line the fights actually use.
+        // Points banked, then the effective damage line the fights actually use.
+        // (AUTO-SPEND is gone — Pass 3: the leader's points are spent by hand, always.)
         _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
             L, w.Y + 432, 1, a.StatPoints > 0 ? Mono.Ink : Mono.Dim);
-        if (a.StatPoints > 0)
-        {
-            bool hov = CharAutoRect.Contains(mp);
-            Mono.Button(_sb, _prim, CharAutoRect, hover: hov);
-            _font.DrawCentered(_sb, "AUTO-SPEND ALL", CharAutoRect.Center.X, CharAutoRect.Y + 5, 1, Mono.ButtonInk(hov));
-        }
         var elem = TitheContent.ClassElement(a.ClassId);
         _font.Draw(_sb, $"{elem.ToString().ToUpperInvariant()} POWER {TitheContent.DamageStatFor(s, elem)}"
             + $"   ·   INITIATIVE {s.Initiative}", L, w.Y + 458, 1, Mono.Dim);
@@ -172,7 +167,6 @@ public partial class SliceGame
 
     private static Rectangle CharPlusRect(int i) => new(CharWin.X + 28 + (CharWin.Width - 56) - 24,
         CharWin.Y + 240 + i * 30 + 3, 22, 20);
-    private static Rectangle CharAutoRect => new(CharWin.Right - 28 - 124, CharWin.Y + 428, 124, 18);
 
     private void ClickCharacterWindow(Point m)
     {
@@ -180,11 +174,8 @@ public partial class SliceGame
         if (a == null) return;
         if (PanelCloseRect(CharWin).Contains(m)) { _charOpen = false; _sfx.Play("click"); return; }
         if (a.StatPoints > 0)
-        {
             for (int i = 0; i < StatRows.Length; i++)
                 if (CharPlusRect(i).Contains(m)) { a.SpendStat(StatRows[i].key); _sfx.Play("click"); return; }
-            if (CharAutoRect.Contains(m)) { TitheContent.AutoSpendStats(a); _sfx.Play("coin"); return; }
-        }
     }
 
     // ----- THE INVENTORY (I) — the demo's right window: doll + strip + grid + gold ------

@@ -60,29 +60,45 @@ public static class EffectsTest
         Check("Blink escape", dist > 1, $"meleed 0-MP skirmisher blinked to {archer.Pos} (dist {dist} from lockers)");
     }
 
-    /// <summary>Blood Pact (Temple exclusive): the self-economy trigger trades HP for AP while
-    /// healthy — cast exactly once (its per-turn cap), never suicidally.</summary>
+    /// <summary>Blood Pact (Pass 3, honest AI): blood buys AP only when the AP buys a swing.
+    /// With a 3-AP attack and 6 AP the pact's net +2 unlocks nothing — REFUSED, no scar.
+    /// With 7 AP it unlocks a third swing into a 100-HP target — PAID, exactly once.</summary>
     private static void BloodPact()
     {
-        var pact = new SpellDef
+        SpellDef Pact() => new()
         {
             Id = 901, Name = "Blood Pact", ApCost = 1, MinRange = 0, MaxRange = 0,
             RequiresLineOfSight = false, NeedsTarget = false, MaxCastsPerTurn = 1,
             Effects = new[] { SpellEffect.SelfHpCost(10), SpellEffect.GrantAp(3) },
         };
-        var bulwark = new Fighter
+        SpellDef Slam() => new()
+        {
+            Id = 902, Name = "Slam", ApCost = 3, MinRange = 1, MaxRange = 1,
+            Effects = new[] { SpellEffect.Damage(Element.Earth, 6, 8) },
+        };
+        Fighter Bul(int ap) => new()
         {
             Id = "b", Name = "Bulwark", Team = Team.Player, PlayerControlled = true,
             Policy = AiPolicy.Bruiser,
-            MaxHp = 100, Hp = 100, BaseAp = 6, BaseMp = 0, Initiative = 100,
-            Pos = new(5, 4), Spells = new[] { pact },
+            MaxHp = 100, Hp = 100, BaseAp = ap, BaseMp = 0, Initiative = 100,
+            Pos = new(6, 4), Spells = new[] { Pact(), Slam() },
         };
-        var eng = new CombatEngine(new Battlefield(11, 9),
-            new List<Fighter> { bulwark, Foe("f1", new(7, 4)) }, new SystemRng(1));
-        eng.Start();
-        DofusSlice.Core.AI.Policy.TakeTurn(eng, bulwark);
-        Check("Blood Pact", bulwark.Hp == 90 && bulwark.CurrentAp == 6 - 1 + 3,
-            $"paid 10 HP (at {bulwark.Hp}) for net +2 AP (at {bulwark.CurrentAp}), one cast only");
+
+        var b1 = Bul(6); // 2 slams now, still 2 with the pact -> the blood buys nothing
+        var eng1 = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { b1, Foe("f1", new(7, 4)) }, new SystemRng(1));
+        eng1.Start();
+        DofusSlice.Core.AI.Policy.TakeTurn(eng1, b1);
+        Check("Blood Pact refusal", b1.Hp == 100,
+            $"a pact that buys no extra swing is refused (HP stayed {b1.Hp})");
+
+        var b2 = Bul(7); // 2 slams now, 3 with the pact, target far from overkill -> pay once
+        var eng2 = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { b2, Foe("f2", new(7, 4)) }, new SystemRng(1));
+        eng2.Start();
+        DofusSlice.Core.AI.Policy.TakeTurn(eng2, b2);
+        Check("Blood Pact", b2.Hp == 90,
+            $"paid 10 HP for the swing it unlocks (HP {b2.Hp}), one cast only");
     }
 
     private static void Check(string name, bool ok, string detail)

@@ -676,3 +676,30 @@ The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
   the TEAM column; DrawCampaignHud deleted.
 - QA: city band + quick wells + corner menu screenshot-verified; bag toggles from
   the menu both ways; placement FIGHT starts the fight; corner log confirmed live.
+
+## v9.0: PASS 3 "FAIR TURNS, HONEST AI" — systems + fixes
+- 3.1 ALTERNATING INITIATIVE was already the engine's law (CombatEngine.Start: the
+  side with the top initiative leads, then strict team alternation, leftovers close
+  the round) — verified, no change needed.
+- 3.2 BLOOD PACT HONESTY (the owner's cannon bled for nothing): TrySelfEconomy now
+  requires the bonus AP to UNLOCK an extra attack this turn AND refuses when the
+  already-affordable swings (stat-scaled vs the nearest target) cover every living
+  enemy's HP. Effects suite grew a refusal case: 18/18 PASS.
+- 3.3 THE SPELL LADDER: ClassSkillsAt = one spell at level 1, +1 per level until
+  the class list ends. Kits, spell book, auto-spend and fight factories all flow
+  from it.
+- 3.4 LEVEL UP = FULL LIFE: GainXp's level loop sets CurrentHp = null.
+- 3.4b THE MOMENT: after the loot window, the LEADER's ding gets its own screen —
+  blackout, rotating rays, the pulsing AP-blue star wearing the new level, LIFE
+  FULLY RESTORED, and the freshly unlocked spell's glyph + name in its element ink.
+  SPACE advances. (Code-complete; a live ding wasn't stageable in headless QA — the
+  solo opener kept wiping, see the balance note.)
+- 3.5 AUTO-SPEND ALL removed from the character sheet (mercs still self-manage).
+- 3.6 THE GRAVE REFILLS: cleared yard packs respawn 75 bell-seconds later
+  (PackState.ClearedAtClock; ConsumeRespawn feeds the yard message).
+- Sims: effects 18/18; campaign progression REPAIRED for the solo start (it still
+  assumed the pre-pivot 3-member crew — hires added); survey 40+40 runs clean.
+- M5 BALANCE WATCH: with one spell at level 1, a SOLO fresh campaign now loses the
+  near-yard pack more often than not (watched twice in QA — dragged-out flow held
+  both times). Hiring first is the intended answer (45g/head from 160g), but the
+  opening pack may want a soft-touch variant for solo divers.

@@ -17,6 +17,8 @@ public sealed class DiveSession
     {
         public required TitheContent.PackDef Def { get; init; }
         public bool Cleared { get; set; }
+        /// <summary>Bell reading when the pack fell — the respawn timer counts from here.</summary>
+        public float ClearedAtClock { get; set; }
     }
 
     /// <summary>The most recent fight's per-unit resolution (XP shares, fates) for the UI.</summary>
@@ -126,10 +128,22 @@ public sealed class DiveSession
     public bool CanAfford(PackState p) => !p.Cleared && Clock - p.Def.Reach - FightCost(p.Def) > 0;
 
     /// <summary>Advance the clock (real-time in the game); ejects when it runs out.</summary>
+    // The grave refills (Pass 3): a cleared yard pack crawls back out after this long.
+    private const float PackRespawnSeconds = 75f;
+    private string? _respawnNote;
+
+    /// <summary>One-shot UI message when a pack has respawned (mirrors ConsumeDeparture).</summary>
+    public string? ConsumeRespawn() { var n = _respawnNote; _respawnNote = null; return n; }
+
     public void Tick(float seconds)
     {
         if (Ended) return;
         Clock -= seconds;
+        foreach (var p in Packs.Where(p => p.Cleared && p.ClearedAtClock - Clock >= PackRespawnSeconds))
+        {
+            p.Cleared = false;
+            _respawnNote = $"THE GRAVE REFILLS — {p.Def.Id.Replace('_', ' ').ToUpperInvariant()} CRAWLS BACK OUT";
+        }
         CheckBetrayal(); // the bell sinking below the threshold can trigger the exit on its own
         if (Clock <= 0) { Clock = 0; Eject("the bell — clock expired"); }
     }
@@ -211,6 +225,7 @@ public sealed class DiveSession
         if (res.Outcome == FightOutcome.Victory)
         {
             pack.Cleared = true;
+            pack.ClearedAtClock = Clock; // starts the respawn timer (the grave refills)
             int gold = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
                 .Sum(TitheContent.MobGoldOf); // grade-aware: deep packs pay their risk premium
 

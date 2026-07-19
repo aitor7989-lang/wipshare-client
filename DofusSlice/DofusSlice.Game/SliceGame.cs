@@ -53,14 +53,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private bool _jumpedFight;                        // this fight began as an aggro-catch
     private float _huntTimer;                         // cadence of the hunting packs' steps
     private bool _hireOnArrive;                       // walking to the wandering survivor
-    private static readonly CellCoord SurvivorCell = new(9, 7);
+    private static readonly CellCoord SurvivorHint = new(9, 7);
+
+    // The graveyard is now THREE connected yards (navigate via the edge gates); every yard is
+    // a generated map, so the landmark cells are snapped to the nearest walkable ground.
+    private int _yardDepth;
+    private MapData[] _yardMaps = Array.Empty<MapData>();
+    private CellCoord _gateDeeper = CellCoord.Invalid, _gateBack = CellCoord.Invalid;
+    private CellCoord _survivorCell = CellCoord.Invalid, _cryptCell = CellCoord.Invalid;
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
     private int _cryptRoom;
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
     private string _yardMsg = "";
     private float _yardMsgTimer;
-    private static readonly CellCoord PartyStart = new(1, 6), CryptCell = new(13, 11);
+    private static readonly CellCoord PartyStartHint = new(1, 6), CryptHint = new(13, 11);
     private const int CryptLevel = 3;
+    private const float PlaceSeconds = 30f;           // the 1.29 ready-phase countdown
+    private float _placeClock = PlaceSeconds;
     private const int ScreenW = 1280;
     private const int ScreenH = 760;
     private const int TileW = 64;
@@ -185,13 +194,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _anim = new BattleAnimator(_proj)
         {
             Sfx = (name, vol) => _sfx.Play(name, vol),
-            // Corpses reuse the exact sheet + pixel height the fighter was drawn with.
+            // Corpses reuse the exact sheet, pixel height and tint the fighter was drawn with.
             CorpseSpriteOf = f =>
             {
-                var (sprite, _, scl) = PixActor(f.Archetype);
+                var (sprite, tint, scl) = PixActor(f.Archetype);
                 var sheet = _sprites.GetSheet(sprite, "die", "se");
                 float h = sheet != null ? sheet.FrameHeight * ChamberSet.PxScale * scl : 64f;
-                return (sprite, h);
+                return (sprite, h, tint);
             },
         };
 
@@ -255,6 +264,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _turnClock = TurnSeconds;   // fresh clock so an R-restart never inherits a timed-out turn
         _turnOwner = "";
         _placing = true;            // place the crew before combat begins
+        _placeClock = PlaceSeconds; // the 1.29 ready countdown
     }
 
     /// <summary>Leave the placement phase and start the turn-based fight.</summary>
@@ -335,8 +345,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     // ----- The stash & kit screen (Bible §6.13: manage the stash and equip units) -----
 
-    private static Rectangle EquipRowRect(int i) => new(260, 292 + i * 34, 372, 30);
-    private static Rectangle StashRowRect(int i) => new(648, 292 + i * 34, 372, 30);
+    private const int KitY = 104, KitH = 540; // the kit panel grew a SPELLS section (rank-ups)
+
+    private static Rectangle EquipRowRect(int i) => new(260, KitY + 230 + i * 34, 372, 30);
+    private static Rectangle StashRowRect(int i) => new(648, KitY + 230 + i * 34, 372, 30);
+    private static Rectangle SpellRowRect(int i) => new(260, KitY + 120 + i * 30, 760, 28);
+    private static Rectangle RankUpRect(int i)
+    { var r = SpellRowRect(i); return new(r.Right - 96, r.Y + 4, 92, 20); }
 
     /// <summary>Click an equipped row to strip it to the stash; click a stash row to equip it.
     /// Only the avatar re-gears (Bible §6.6.9 — mercs keep the kit they were hired with).</summary>
@@ -345,9 +360,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         ("vit", "VIT"), ("str", "STR"), ("int", "INT"), ("cha", "CHA"), ("agi", "AGI"), ("wis", "WIS"),
     };
 
-    private static Rectangle EquipTabRect(int i) => new(260 + i * 130, 168, 124, 22);
-    private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, 226, 20, 18);
-    private static Rectangle AutoSpendRect => new(896, 226, 124, 18);
+    private static Rectangle EquipTabRect(int i) => new(260 + i * 130, KitY + 18, 124, 22);
+    private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, KitY + 76, 20, 18);
+    private static Rectangle AutoSpendRect => new(896, KitY + 76, 124, 18);
 
     private CampaignUnit? EquipShownUnit =>
         _campaign.Crew.Count == 0 ? null : _campaign.Crew[Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1)];
@@ -367,6 +382,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (AutoSpendRect.Contains(m)) { TitheContent.AutoSpendStats(u); _sfx.Play("coin"); return; }
         }
 
+        // Spell rank-ups (1.29 spell points, spent by the PLAYER here).
+        var skillKeys = TitheContent.UnitSkillKeys(u).Take(3).ToList();
+        for (int i = 0; i < skillKeys.Count; i++)
+            if (RankUpRect(i).Contains(m) && TitheContent.RankUp(u, skillKeys[i]))
+            { _sfx.Play("levelup", 0.55f, jitter: false); return; }
+
         // Only the avatar re-gears (Bible §6.10) — mercenaries keep their hire kit.
         if (!u.IsAvatar) return;
         for (int i = 0; i < u.Equipment.Count; i++)
@@ -379,7 +400,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         var a = EquipShownUnit;
         if (a == null) return;
-        var r = new Rectangle(236, 150, 800, 470);
+        var r = new Rectangle(236, KitY, 800, KitH);
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
         _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
         var mp = new Point(_mouse.X, _mouse.Y);
@@ -433,16 +454,46 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1, Palette.Text);
         }
 
+        // SPELLS: the unit's kit — the class signature plus taught essences — with the 1.29
+        // rank-ups, spent by the PLAYER (a rank changes economics or shape, never just damage).
+        _font.Draw(_sb, "SPELLS", 260, r.Y + 106, 1, Palette.TextDim);
+        _font.Draw(_sb, a.SpellPoints > 0 ? $"SPELL POINTS: {a.SpellPoints}" : "no spell points banked",
+            330, r.Y + 106, 1, a.SpellPoints > 0 ? new Color(240, 208, 120) : Palette.TextDim);
+        var skillKeys = TitheContent.UnitSkillKeys(a).Take(3).ToList();
+        for (int i = 0; i < skillKeys.Count; i++)
+        {
+            var row = SpellRowRect(i);
+            _prim.FillRect(_sb, row, Palette.HudPanel);
+            _prim.StrokeRect(_sb, row, 1, new Color(60, 64, 72));
+            var sp = TitheContent.UnitSkill(a, skillKeys[i]);
+            int rank = a.RankOf(skillKeys[i]), maxR = TitheContent.MaxRank(skillKeys[i]);
+            var dmgFx = sp.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
+            var col = dmgFx != null ? EwChrome.ElementColor(dmgFx.Element) : Palette.Text;
+            _font.Draw(_sb, $"{sp.Name.ToUpperInvariant()}   RANK {rank}/{maxR}", row.X + 8, row.Y + 4, 1, col);
+            string info = string.Join("  ·  ", sp.Effects.Select(e => EffectLine(e).text))
+                + $"  ·  AP {sp.ApCost}  ·  RANGE {sp.MinRange}-{sp.MaxRange}"
+                + (sp.Cooldown > 0 ? $"  ·  CD {sp.Cooldown}" : "");
+            _font.Draw(_sb, Trunc(info, 84), row.X + 8, row.Y + 16, 1, Palette.TextDim);
+            if (a.SpellPoints > 0 && rank < maxR)
+            {
+                var b = RankUpRect(i);
+                _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
+                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1, Color.White);
+            }
+            else if (rank >= maxR)
+                _font.Draw(_sb, "MAX", row.Right - 36, row.Y + 9, 1, Palette.TextDim);
+        }
+
         if (!a.IsAvatar)
         {
             _font.DrawCentered(_sb, "MERCENARIES KEEP THEIR HIRE KIT — ONLY THE AVATAR RE-GEARS",
-                r.Center.X, 340, 1, Palette.TextDim);
+                r.Center.X, r.Y + 250, 1, Palette.TextDim);
             DrawEquipFooter(a, r);
             return;
         }
 
-        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 122, 1, Palette.TextDim);
-        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 122, 1, Palette.TextDim);
+        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 212, 1, Palette.TextDim);
+        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 212, 1, Palette.TextDim);
 
         for (int i = 0; i < a.Equipment.Count; i++)
         {
@@ -454,7 +505,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
         }
         if (a.Equipment.Count == 0)
-            _font.Draw(_sb, "— nothing worn —", 268, 298, 1, Palette.TextDim);
+            _font.Draw(_sb, "— nothing worn —", 268, KitY + 236, 1, Palette.TextDim);
 
         for (int i = 0; i < _campaign.Stash.Count; i++)
         {
@@ -466,7 +517,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
         }
         if (_campaign.Stash.Count == 0)
-            _font.Draw(_sb, "— the stash is empty —", 656, 298, 1, Palette.TextDim);
+            _font.Draw(_sb, "— the stash is empty —", 656, KitY + 236, 1, Palette.TextDim);
 
         DrawEquipFooter(a, r);
     }
@@ -496,8 +547,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 if (_campaign.TitheDue)
                     a.Add(($"PAY THE TITHE  ({_campaign.TitheAmount}g)", _campaign.Gold >= _campaign.TitheAmount,
                            () => _campaign.PayTithe()));
-                a.Add(($"BUY HARD BREAD  ({P.HardBread}g)   [have {_campaign.Bread}]", _campaign.Gold >= P.HardBread,
-                       () => _campaign.BuyBread()));
+                a.Add(($"BUY HARD BREAD  ({P.HardBread}g)   [have {_campaign.Bread}]  — MENDS {P.BreadHeal} HP BETWEEN FIGHTS",
+                       _campaign.Gold >= P.HardBread, () => _campaign.BuyBread()));
                 if (_campaign.Essences.Count > 0)
                     a.Add(($"SELL ESSENCE: {_campaign.Essences[0].ToUpperInvariant()}  (+{P.EssenceSell}g)", true,
                            () => _campaign.SellEssence(_campaign.Essences[0])));
@@ -549,32 +600,108 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         _dive = new DiveSession(_campaign, _diveRng);
         _scene = Scene.Graveyard;
-        SetupView(_graveMap);
-        AssignPackCells();
 
-        _graveField = _graveMap.ToBattlefield();
-        _partyCell = PartyStart;
-        _partyWorld = _proj.CellCenter(PartyStart);
-        _partyPath.Clear();
-        _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
-        _cryptRoom = 0; _yardMsg = ""; _yardMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
+        // Three fresh generated yards per dive, connected by edge gates: near / mid / deep.
+        int seedBase = _campaign.Dives * 101 + _seed * 7;
+        _yardMaps = new[]
+        {
+            TitheContent.GenerateArena(seedBase),
+            TitheContent.GenerateArena(seedBase + 1),
+            TitheContent.GenerateArena(seedBase + 2),
+        };
+        _cryptCleared = false; _cryptRun = false; _cryptRoom = 0;
+        _yardMsg = "the yard goes deeper east — the gates glow"; _yardMsgTimer = 4f;
+        _huntTimer = 0f; _jumpedFight = false;
         _lastDiveClock = float.MaxValue;
-        _graveMap = TitheContent.Arena(_campaign.Dives); // a fresh yard layout each dive
+        EnterYardDepth(0, fromWest: true);
         _sfx.Play("bell", 0.9f, jitter: false);
-        _hireOnArrive = false;
     }
 
-    private static readonly CellCoord[] PackCells =
+    /// <summary>Which yard a pack roams: its travel reach maps to near / mid / deep ground.</summary>
+    private static int DepthOf(DiveSession.PackState p) =>
+        p.Def.Reach <= 30 ? 0 : p.Def.Reach <= 50 ? 1 : 2;
+
+    /// <summary>Step into one of the three yards and re-seat every landmark on its ground.</summary>
+    private void EnterYardDepth(int depth, bool fromWest)
     {
-        new(4, 3), new(6, 9), new(8, 5), new(10, 2), new(11, 10), new(13, 6),
-    };
+        _yardDepth = Math.Clamp(depth, 0, _yardMaps.Length - 1);
+        _graveMap = _yardMaps[_yardDepth];
+        _graveField = _graveMap.ToBattlefield();
+        SetupView(_graveMap);
+        _partyPath.Clear();
+        _engageOnArrive = null; _cryptOnArrive = false; _hireOnArrive = false;
+
+        _gateDeeper = _yardDepth < _yardMaps.Length - 1 ? YardEdgeCell(east: true) : CellCoord.Invalid;
+        _gateBack = _yardDepth > 0 ? YardEdgeCell(east: false) : CellCoord.Invalid;
+        _cryptCell = _yardDepth == 2 ? NearestYardCell(CryptHint) : CellCoord.Invalid;
+        _survivorCell = _yardDepth == 1 ? NearestYardCell(SurvivorHint) : CellCoord.Invalid;
+
+        _partyCell = _yardDepth == 0 && fromWest ? NearestYardCell(PartyStartHint)
+            : fromWest ? _gateBack : _gateDeeper;
+        if (_partyCell == CellCoord.Invalid) _partyCell = NearestYardCell(PartyStartHint);
+        _partyWorld = _proj.CellCenter(_partyCell);
+        AssignPackCells();
+    }
+
+    /// <summary>The east/west-most walkable cell (middle rows preferred) — the yard's gate.</summary>
+    private CellCoord YardEdgeCell(bool east)
+    {
+        var best = CellCoord.Invalid;
+        foreach (var c in AllYardCells().Where(_graveMap.IsWalkable))
+        {
+            if (best == CellCoord.Invalid) { best = c; continue; }
+            bool further = east ? c.X > best.X : c.X < best.X;
+            bool tie = c.X == best.X && Math.Abs(c.Y - 6) < Math.Abs(best.Y - 6);
+            if (further || tie) best = c;
+        }
+        return best;
+    }
+
+    /// <summary>Nearest walkable ground to a landmark hint on the current generated yard.</summary>
+    private CellCoord NearestYardCell(CellCoord hint)
+    {
+        var best = CellCoord.Invalid;
+        int bd = int.MaxValue;
+        foreach (var c in AllYardCells().Where(_graveMap.IsWalkable))
+        {
+            int d = c.DistanceTo(hint);
+            if (d < bd) { bd = d; best = c; }
+        }
+        return best;
+    }
+
+    private IEnumerable<CellCoord> AllYardCells()
+    {
+        for (int y = 0; y < _graveMap.Height; y++)
+            for (int x = 0; x < _graveMap.Width; x++)
+                yield return new CellCoord(x, y);
+    }
 
     private void AssignPackCells()
     {
+        // Only this yard's packs, scattered on its generated ground (never on a landmark,
+        // never crowding one another) — deterministic per dive+depth.
         _packCells.Clear();
-        var ordered = _dive!.Packs.OrderBy(p => p.Def.Reach).ToList();
-        for (int i = 0; i < ordered.Count && i < PackCells.Length; i++)
-            _packCells[ordered[i].Def.Id] = PackCells[i];
+        var rng = new Random(_campaign.Dives * 131 + _yardDepth * 17 + _seed);
+        var taken = new List<CellCoord> { _partyCell };
+        foreach (var c in new[] { _cryptCell, _survivorCell, _gateDeeper, _gateBack })
+            if (c != CellCoord.Invalid) taken.Add(c);
+
+        foreach (var p in _dive!.Packs.Where(p => DepthOf(p) == _yardDepth).OrderBy(p => p.Def.Reach))
+        {
+            var cell = CellCoord.Invalid;
+            for (int t = 0; t < 300 && cell == CellCoord.Invalid; t++)
+            {
+                var c = new CellCoord(4 + rng.Next(Math.Max(1, _graveMap.Width - 5)),
+                    rng.Next(_graveMap.Height));
+                if (!_graveMap.IsWalkable(c)) continue;
+                if (taken.Any(tc => tc.DistanceTo(c) < 3)) continue;
+                cell = c;
+            }
+            if (cell == CellCoord.Invalid) cell = NearestYardCell(new CellCoord(8, 6));
+            taken.Add(cell);
+            _packCells[p.Def.Id] = cell;
+        }
     }
 
     private void UpdateGraveyard(float dt)
@@ -584,12 +711,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive.Ended) { EnterCity(); return; }
         if (_yardMsgTimer > 0f) _yardMsgTimer -= dt;
 
+        // The kit screen works mid-dive too — inventory, stats and spell ranks, anywhere.
+        if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; return; }
+        if (_equipOpen)
+        {
+            if (Pressed(Keys.Escape)) { _equipOpen = false; return; }
+            if (LeftClicked()) ClickEquipPanel(new Point(_mouse.X, _mouse.Y));
+            return; // the bell keeps ticking above — reading your kit is not a pause
+        }
+
         MovePartyAlongPath(dt);
         if (_dive.ConsumeDeparture() is { } dep) { _yardMsg = dep; _yardMsgTimer = 4f; } // the Grasping exit
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
-        // Number keys walk the party to packs in reach order (a quick shortcut).
-        var ordered = _dive.Packs.Where(p => !p.Cleared).OrderBy(p => p.Def.Reach).ToList();
+        // Number keys walk the party to THIS yard's packs in reach order (a quick shortcut).
+        var ordered = _dive.Packs.Where(p => !p.Cleared && DepthOf(p) == _yardDepth)
+            .OrderBy(p => p.Def.Reach).ToList();
         for (int i = 0; i < ordered.Count && i < 6; i++)
             if (Pressed(Keys.D1 + i)) { WalkToPack(ordered[i]); return; }
 
@@ -599,9 +736,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         foreach (var p in _dive.Packs)
             if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell) && cell == target) { WalkToPack(p); return; }
-        if (target == CryptCell) { WalkTo(CryptCell, null, crypt: true); return; }
-        if (_dive.Survivor != null && target == SurvivorCell)
-        { WalkTo(SurvivorCell, null, crypt: false); _hireOnArrive = true; return; }
+        if (target == _cryptCell) { WalkTo(_cryptCell, null, crypt: true); return; }
+        if (_dive.Survivor != null && target == _survivorCell)
+        { WalkTo(_survivorCell, null, crypt: false); _hireOnArrive = true; return; }
         if (_graveMap.IsWalkable(target)) WalkTo(target, null, crypt: false);
     }
 
@@ -682,6 +819,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (_engageOnArrive is { } p) { _engageOnArrive = null; EngagePack(p); }
         else if (_cryptOnArrive) { _cryptOnArrive = false; TryEnterCrypt(); }
+        else if (_gateDeeper != CellCoord.Invalid && _partyCell == _gateDeeper)
+        {
+            _sfx.Play("zip", 0.6f);
+            EnterYardDepth(_yardDepth + 1, fromWest: true);
+            _yardMsg = $"deeper into the yard  ({_yardDepth + 1}/3)"; _yardMsgTimer = 3f;
+        }
+        else if (_gateBack != CellCoord.Invalid && _partyCell == _gateBack)
+        {
+            _sfx.Play("zip", 0.6f);
+            EnterYardDepth(_yardDepth - 1, fromWest: false);
+            _yardMsg = $"back toward the lychgate  ({_yardDepth + 1}/3)"; _yardMsgTimer = 3f;
+        }
         else if (_hireOnArrive)
         {
             _hireOnArrive = false;
@@ -728,12 +877,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         SetupView(_graveMap);
         _anim.Reset(_engine.Fighters);
         WireEngine();
+        if (_dive.ConsumeMend() is { } mend) { _log.Add(mend); _sfx.Play("heal", 0.6f); } // bread, visibly
         _scene = Scene.Combat;
         _selCrew = _engine.Fighters.FirstOrDefault(f => f.Team == Team.Player);
         _selectedSpell = -1; _enemyTimer = 0f; _enemyActed = false; _turnClock = TurnSeconds; _turnOwner = "";
         // Jumped tier (Bible §6.6): caught in the open — no placement phase, the fight is already on.
         if (jumped) { _placing = false; _engine.Start(); }
-        else _placing = true;
+        else { _placing = true; _placeClock = PlaceSeconds; } // the 1.29 ready-phase countdown
     }
 
     private void UpdateCampaignCombat(float dt)
@@ -750,7 +900,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
         _camera.Update(dt, follow);
 
-        if (_placing) { UpdateTithePlacement(); return; }
+        if (_placing) { UpdateTithePlacement(dt); return; }
 
         _dive?.Tick(dt); // the floor clock never pauses, even in a fight (Bible §3.1.3)
 
@@ -836,7 +986,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
         _camera.Update(dt, follow);
 
-        if (_placing) { UpdatePlacement(); base.Update(gameTime); return; }
+        if (_placing) { UpdatePlacement((float)gameTime.ElapsedGameTime.TotalSeconds); base.Update(gameTime); return; }
 
         if (_engine.Outcome != FightOutcome.Ongoing)
         {
@@ -864,9 +1014,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         base.Update(gameTime);
     }
 
-    private void UpdatePlacement()
+    private void UpdatePlacement(float dt)
     {
-        if (_tithe) { UpdateTithePlacement(); return; }
+        if (_tithe) { UpdateTithePlacement(dt); return; }
 
         var hero = Hero;
         if (hero == null) { BeginFight(); return; }
@@ -882,9 +1032,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
     }
 
-    /// <summary>Place the crew before a watched fight: click a member to select, a start cell to move it.</summary>
-    private void UpdateTithePlacement()
+    /// <summary>Place the crew before a watched fight: click a member to select, a start cell to
+    /// move it. A 1.29-style ready countdown runs — when it hits zero the fight starts itself.</summary>
+    private void UpdateTithePlacement(float dt)
     {
+        _placeClock -= dt;
+        if (_placeClock <= 0f) { BeginFight(); return; }
         if (Pressed(Keys.Space)) { BeginFight(); return; }
 
         if (LeftClicked())
@@ -1329,6 +1482,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _ew.Pill(_sb, pill, gold: true, pressed: hover);
         _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3, Color.White);
         _font.DrawCentered(_sb, "(SPACE)", r.Center.X, pill.Bottom + 10, 1, Ew.InkSoft);
+
+        // The 1.29 ready countdown: the fight starts itself when the clock runs out.
+        int left = (int)MathF.Ceiling(Math.Max(0f, _placeClock));
+        _font.DrawCentered(_sb, $"{left}", pill.Center.X, pill.Y - 26, 3,
+            left <= 10 ? new Color(226, 96, 76) : Ew.Gold);
         DrawHoverUnitInfo();
     }
 
@@ -1386,6 +1544,34 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var faceL = new Color(top.R * 68 / 100, top.G * 68 / 100, top.B * 68 / 100);
         var faceR = new Color(top.R * 84 / 100, top.G * 84 / 100, top.B * 84 / 100);
         _prim.BlockAt(_sb, center, top, faceL, faceR);
+
+        // A little more ART on the blocks (still pure blocks): deterministic per cell so the
+        // dressing never flickers frame to frame.
+        var blockTop = center + new Vector2(0, -Primitives.BlockH);
+        int h = (int)center.X * 73856093 ^ (int)center.Y * 19349663;
+        if (kind == TileKind.Tree)
+        {
+            // A stump of trunk and a stacked two-tier canopy on the raised tile.
+            var trunk = new Color(88, 62, 40);
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X - 2, (int)blockTop.Y - 14, 5, 14), new Color(24, 20, 16));
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X - 1, (int)blockTop.Y - 13, 3, 13), trunk);
+            var deep = new Color(38, 76, 44); var mid = new Color(52, 100, 58); var lit = new Color(70, 124, 74);
+            _prim.DiscAt(_sb, blockTop + new Vector2(0, -16), 11, new Color(16, 18, 16));
+            _prim.DiscAt(_sb, blockTop + new Vector2(0, -16), 9.5f, deep);
+            _prim.DiscAt(_sb, blockTop + new Vector2(-1, -23), 7.5f, mid);
+            _prim.DiscAt(_sb, blockTop + new Vector2((h & 3) - 1.5f, -29), 5f, lit);
+        }
+        else
+        {
+            // A boulder: outlined rubble lumps and a chip of highlight on the raised tile.
+            var dark = new Color(top.R * 55 / 100, top.G * 55 / 100, top.B * 58 / 100);
+            var lit = new Color(Math.Min(255, top.R + 34), Math.Min(255, top.G + 34), Math.Min(255, top.B + 30));
+            _prim.DiscAt(_sb, blockTop + new Vector2(-6 + (h & 3), -3), 6f, new Color(18, 18, 20));
+            _prim.DiscAt(_sb, blockTop + new Vector2(-6 + (h & 3), -3), 5f, top);
+            _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -6), 7f, new Color(18, 18, 20));
+            _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -6), 6f, dark);
+            _prim.DiscAt(_sb, blockTop + new Vector2(3 - (h >> 4 & 3), -9), 2.5f, lit);
+        }
     }
 
     // Fallback vector tree when no tile_tree sprite is present: shadow, trunk, three foliage tiers.
@@ -1806,19 +1992,85 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             y += 26;
         }
 
-        // The actor's spells as slot wells, right side (element letter + AP cost).
+        // The actor's spells as slot wells, right side. HOVER a well for the full spell card.
         _font.Draw(_sb, $"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT", 934, HudTop + 14, 1, Ew.InkSoft);
+        _font.Draw(_sb, "(hover)", 934 + _font.Measure($"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT", 1) + 8,
+            HudTop + 14, 1, Ew.InkMuted);
         int sx = 934;
+        SpellDef? tip = null; int tipX = 0;
+        var kmp = new Point(_mouse.X, _mouse.Y);
         foreach (var spell in cur.Spells.Take(6))
         {
             var well = new Rectangle(sx, HudTop + 32, 46, 46);
+            bool hov = well.Contains(kmp);
+            if (hov) { tip = spell; tipX = well.X; }
             _ew.Well(_sb, well);
+            if (hov) _prim.StrokeRect(_sb, well, 1, Ew.AccentBright);
             var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
             var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
             _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
             _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1, Ew.InkSoft);
             sx += 52;
         }
+        if (tip != null) DrawSpellCard(tip, Math.Min(tipX, ScreenW - 300), HudTop - 6);
+    }
+
+    /// <summary>One spell effect as a legible line ("AIR DAMAGE 11-16", "PUSHES 1 CELL"…).</summary>
+    private static (string text, Color color) EffectLine(SpellEffect e) => e.Kind switch
+    {
+        EffectKind.Damage => ($"{e.Element.ToString().ToUpperInvariant()} DAMAGE {e.Min}-{e.Max}",
+            EwChrome.ElementColor(e.Element)),
+        EffectKind.Heal => ($"HEALS {e.Min}-{e.Max} HP", Ew.Gale),
+        EffectKind.Push => ($"PUSHES {e.Min} CELL{(e.Min > 1 ? "S" : "")}", Ew.InkSoft),
+        EffectKind.Pull => ($"PULLS {e.Min} CELL{(e.Min > 1 ? "S" : "")}", Ew.InkSoft),
+        EffectKind.Swap => ("SWAPS PLACES WITH THE TARGET", Ew.Moon),
+        EffectKind.Teleport => ("TELEPORTS TO THE CELL", Ew.Moon),
+        EffectKind.Lifesteal => ($"{e.Element.ToString().ToUpperInvariant()} STEALS {e.Min}-{e.Max} HP",
+            EwChrome.ElementColor(e.Element)),
+        EffectKind.StealAp => ($"STEALS {e.Min} AP", Ew.Ap),
+        EffectKind.StealMp => ($"STEALS {e.Min} MP", Ew.Mp),
+        EffectKind.GrantAp => ($"GRANTS +{e.Min} AP", Ew.Ap),
+        EffectKind.Summon => ("SUMMONS AN ALLY", Ew.Gale),
+        EffectKind.SelfHpCost => ($"COSTS {e.Min} OF YOUR OWN HP", Ew.Danger),
+        EffectKind.ApplyStatus => (e.Status switch
+        {
+            StatusKind.Shield => $"SHIELD: -{e.Min} FROM HITS ({e.Max} TURN{(e.Max > 1 ? "S" : "")})",
+            StatusKind.Poison => $"POISON {e.Min}/TURN ({e.Max} TURN{(e.Max > 1 ? "S" : "")})",
+            StatusKind.MpDrain => $"-{e.Min} MP ({e.Max} TURN{(e.Max > 1 ? "S" : "")})",
+            StatusKind.Regen => $"REGEN {e.Min}/TURN ({e.Max} TURN{(e.Max > 1 ? "S" : "")})",
+            StatusKind.DamageBuff => $"+{e.Min}% DAMAGE ({e.Max} TURN{(e.Max > 1 ? "S" : "")})",
+            StatusKind.Rooted => "ROOTS THE TARGET",
+            StatusKind.Stabilized => "STABILIZES (NO PUSH/PULL)",
+            StatusKind.Reflect => $"REFLECTS {e.Min}% SPELL DAMAGE",
+            _ => e.Status.ToString().ToUpperInvariant(),
+        }, Ew.Moon),
+        _ => (e.Kind.ToString().ToUpperInvariant(), Ew.InkSoft),
+    };
+
+    /// <summary>The full spell card (name, cost, range, every effect) drawn above bottomY.</summary>
+    private void DrawSpellCard(SpellDef spell, int x, int bottomY)
+    {
+        var lines = new List<(string t, Color c)>();
+        foreach (var e in spell.Effects) lines.Add(EffectLine(e));
+        string meta = $"AP {spell.ApCost}  ·  RANGE {spell.MinRange}-{spell.MaxRange}";
+        if (spell.LineOnly) meta += "  ·  LINE";
+        if (!spell.RequiresLineOfSight) meta += "  ·  NO SIGHT NEEDED";
+        lines.Add((meta, Ew.InkSoft));
+        if (spell.Cooldown > 0)
+            lines.Add(($"COOLDOWN: EVERY {spell.Cooldown + 1} TURNS", Ew.InkSoft));
+        if (spell.MaxCastsPerTurn != int.MaxValue)
+            lines.Add(($"{spell.MaxCastsPerTurn}x PER TURN", Ew.InkSoft));
+
+        int w = Math.Max(_font.Measure(spell.Name.ToUpperInvariant(), 1) + 26,
+            lines.Max(l => _font.Measure(l.t, 1)) + 26);
+        w = Math.Max(w, 200);
+        int h = 34 + lines.Count * 13;
+        var r = new Rectangle(x, bottomY - h, w, h);
+        _ew.Panel(_sb, r, sunken: false, radius: 8);
+        _ew.HeaderStrip(_sb, new Rectangle(r.X + 2, r.Y + 2, r.Width - 4, 20));
+        _font.Draw(_sb, spell.Name.ToUpperInvariant(), r.X + 12, r.Y + 8, 1, Ew.Gold);
+        int ly = r.Y + 28;
+        foreach (var (t, c) in lines) { _font.Draw(_sb, t, r.X + 12, ly, 1, c); ly += 13; }
     }
 
     /// <summary>The crew panel: each member's token colour, class, HP bar and fate.</summary>
@@ -2079,6 +2331,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
         _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   E: STASH & KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
+            _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, new Color(240, 208, 120));
         DrawCampaignHud();
         if (_openNpc >= 0 && !_equipOpen) DrawNpcPanel(_openNpc);
         if (_equipOpen) DrawEquipPanel();
@@ -2161,9 +2415,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, _proj.CellCenter(c), 4, new Color(232, 222, 140, 150));
         if (_graveField != null && _graveField.InBounds(_hover))
         {
-            bool interactive = _hover == CryptCell ||
-                (_dive?.Survivor != null && _hover == SurvivorCell) ||
-                (_dive != null && _dive.Packs.Any(p => !p.Cleared && _packCells.TryGetValue(p.Def.Id, out var pc) && pc == _hover));
+            bool interactive = _hover == _cryptCell
+                || (_dive?.Survivor != null && _hover == _survivorCell)
+                || (_gateDeeper != CellCoord.Invalid && _hover == _gateDeeper)
+                || (_gateBack != CellCoord.Invalid && _hover == _gateBack)
+                || (_dive != null && _dive.Packs.Any(p => !p.Cleared && _packCells.TryGetValue(p.Def.Id, out var pc) && pc == _hover));
             if (interactive || _graveMap.IsWalkable(_hover))
                 _prim.DiamondAt(_sb, _proj.CellCenter(_hover), Palette.CurrentRing * (interactive ? 0.35f : 0.16f));
         }
@@ -2177,24 +2433,46 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             foreach (var p in _dive.Packs)
                 if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell))
                     DrawPackToken(cell, p);
+        DrawYardGates();
         DrawCrypt(); // after the packs so its label is never buried under a huddle
         if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
         _sb.End();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   REACH THE CRYPT AT LEVEL {CryptLevel}", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   E: KIT   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
             _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
+        if (_equipOpen) DrawEquipPanel();
         _sb.End();
+    }
+
+    /// <summary>The edge gates between the three yards: raised doorframes with a direction read.</summary>
+    private void DrawYardGates()
+    {
+        void Gate(CellCoord c, string label, bool deeper)
+        {
+            if (c == CellCoord.Invalid) return;
+            var center = _proj.CellCenter(c);
+            var glow = deeper ? new Color(204, 150, 96) : new Color(140, 170, 210);
+            if (c == _hover) _prim.DiamondAt(_sb, center, glow * 0.4f);
+            _prim.DiamondAt(_sb, center, glow * (0.22f + 0.1f * MathF.Sin(_time * 3f)));
+            _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 36, 28, 36), new Color(14, 14, 18));
+            _prim.FillRect(_sb, new Rectangle((int)center.X - 11, (int)center.Y - 32, 22, 30), glow * 0.5f);
+            _prim.FillRect(_sb, new Rectangle((int)center.X - 6, (int)center.Y - 26, 12, 24), new Color(8, 8, 12));
+            _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, glow);
+        }
+        Gate(_gateDeeper, $"DEEPER >  ({_yardDepth + 2}/3)", deeper: true);
+        Gate(_gateBack, $"< BACK  ({_yardDepth}/3)", deeper: false);
     }
 
     /// <summary>A survivor wandering the yard (Bible §6.12): class and price visible, nature not.</summary>
     private void DrawSurvivorToken(DiveSession.SurvivorOffer offer)
     {
-        var center = _proj.CellCenter(SurvivorCell);
+        if (_survivorCell == CellCoord.Invalid) return; // they wander the MID yard only
+        var center = _proj.CellCenter(_survivorCell);
         if (Pix)
         {
             _prim.DiscAt(_sb, center + new Vector2(0, 7), 11, new Color(120, 190, 150) * 0.55f);
@@ -2214,7 +2492,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawCrypt()
     {
-        var center = _proj.CellCenter(CryptCell);
+        if (_cryptCell == CellCoord.Invalid) return; // the Crypt waits in the DEEP yard
+        var center = _proj.CellCenter(_cryptCell);
         bool locked = (_campaign.Avatar?.Level ?? 1) < CryptLevel;
         var col = _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
@@ -2226,7 +2505,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         string sub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
         _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, 1,
             locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
-        if (CryptCell == _hover && !locked && !_cryptCleared)
+        if (_cryptCell == _hover && !locked && !_cryptCleared)
             _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - 68, 1, new Color(232, 202, 92));
     }
 
@@ -2234,11 +2513,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (Pix)
         {
-            // The crew in a loose wedge — hero flanked by soldiers on the overworld.
-            DrawPixActorIdle("soldier", center + new Vector2(-15, -4), Color.White);
-            DrawPixActorIdle("soldier", center + new Vector2(15, -2), new Color(216, 224, 236));
-            DrawPixActorIdle("hero", center + new Vector2(0, 3), Color.White);
-            _font.DrawCentered(_sb, "CREW", (int)center.X, (int)center.Y - 52, 1, Palette.Text);
+            // The crew in a loose wedge — exactly as many figures as you actually field.
+            var party = _campaign.DiveParty;
+            var offsets = new[] { new Vector2(0, 3), new Vector2(-15, -4), new Vector2(15, -2) };
+            for (int i = Math.Min(party.Count, 3) - 1; i >= 0; i--)
+                DrawPixActorIdle(PixActor(party[i].ClassId).sprite, center + offsets[i],
+                    i == 0 ? Color.White : new Color(222, 226, 234));
+            _font.DrawCentered(_sb, party.Count > 1 ? "CREW" : "YOU", (int)center.X, (int)center.Y - 52, 1, Palette.Text);
             return;
         }
         var col = new Color(120, 190, 120);
@@ -2320,7 +2601,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawCampaignHud()
     {
-        UiTitle(_scene == Scene.City ? "THE CITY" : "THE GRAVEYARD", 16, 12, Palette.Text);
+        UiTitle(_scene == Scene.City ? "THE CITY"
+            : $"THE GRAVEYARD — {_yardDepth switch { 0 => "NEAR YARD", 1 => "MID YARD", _ => "DEEP YARD" }}",
+            16, 12, Palette.Text);
 
         _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
         _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
@@ -2453,7 +2736,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                     panel.Center.X, y, 1, new Color(190, 140, 20)); y += 18;
             }
             if (_levelUps.Count > 0)
-            { _font.DrawCentered(_sb, "spend points in the city: E, then the + buttons", panel.Center.X, y, 1, inkDim); y += 22; }
+            { _font.DrawCentered(_sb, "press E anywhere: spend stat points and RANK UP your spell", panel.Center.X, y, 1, inkDim); y += 22; }
 
             if (r.Gear.Count > 0)
             { _font.DrawCentered(_sb, "FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(),

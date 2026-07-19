@@ -225,8 +225,7 @@ public sealed class DiveSession
             {
                 var cu = _campaign.Crew.FirstOrDefault(x => x.Id == u.Id);
                 if (cu == null) continue;
-                cu.GainXp(u.XpGained);
-                TitheContent.AutoSpendSpellPoints(cu); // ranks buy themselves until the spend screen ships
+                cu.GainXp(u.XpGained); // spell + stat points bank; the PLAYER spends them (kit screen)
                 if (u.Died) { _campaign.Crew.Remove(cu); lost.Add(cu.Name); continue; }
                 cu.CurrentHp = engine.Fighters.First(f => f.Id == u.Id).Hp; // carry damage into the next fight
                 if (u.Wounded) { cu.Wounded = true; wounded.Add(cu.Name); }
@@ -244,9 +243,16 @@ public sealed class DiveSession
             Array.Empty<string>(), Array.Empty<string>(), lost, Array.Empty<string>());
     }
 
+    private string? _mendMsg;
+
+    /// <summary>One-shot report of the last bread mend, for the game to show as a yard message
+    /// (the player asked what bread is FOR — this is the answer, made visible).</summary>
+    public string? ConsumeMend() { var m = _mendMsg; _mendMsg = null; return m; }
+
     /// <summary>Spend Hard Bread to mend the party's most-hurt units before a fight (Bible §4).</summary>
     private void MendWithBread()
     {
+        var mends = new Dictionary<string, int>();
         while (_campaign.Bread > 0)
         {
             var hurt = _campaign.DiveParty
@@ -255,8 +261,13 @@ public sealed class DiveSession
             if (hurt == null) break;
             _campaign.Bread--;
             int max = TitheContent.UnitMaxHp(hurt);
-            hurt.CurrentHp = Math.Min(max, (hurt.CurrentHp ?? max) + TitheContent.Prices.BreadHeal);
+            int before = hurt.CurrentHp ?? max;
+            hurt.CurrentHp = Math.Min(max, before + TitheContent.Prices.BreadHeal);
+            mends[hurt.Name] = mends.GetValueOrDefault(hurt.Name) + (hurt.CurrentHp.Value - before);
         }
+        if (mends.Count > 0)
+            _mendMsg = "HARD BREAD: " + string.Join("  ", mends.Select(m => $"{m.Key} +{m.Value} HP"))
+                + $"  ({_campaign.Bread} left)";
     }
 
     private static void RunCombat(CombatEngine e, int maxRounds = 40)

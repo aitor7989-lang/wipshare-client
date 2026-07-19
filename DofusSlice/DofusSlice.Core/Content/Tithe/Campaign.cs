@@ -129,18 +129,10 @@ public sealed class Campaign
 
     public static Campaign NewGame(string avatarClass)
     {
+        // You start ALONE (the Dofus way): one avatar, enough gold to hire a crew at the
+        // Hiring Post if you choose to — building the party is the player's first decision.
         var c = new Campaign { Gold = 160, Bread = 2, Draughts = 0 };
         c.Crew.Add(new CampaignUnit { Id = "avatar", ClassId = avatarClass, Name = "You", IsAvatar = true });
-
-        // Start with a viable party of three: the avatar plus the two other archetypes as hired
-        // mercenaries. The campaign's economy is then about replacing the ones you lose.
-        int m = 0;
-        foreach (var cls in new[] { "bulwark", "archer", "cannon" })
-        {
-            if (cls == avatarClass || c.Crew.Count >= 3) continue;
-            c.Crew.Add(new CampaignUnit { Id = $"merc_{m}_{cls}", ClassId = cls, Name = $"{cls}-merc" });
-            m++;
-        }
         return c;
     }
 

@@ -132,6 +132,26 @@ public static class TitheContent
     public static int MaxRank(string key) =>
         SkillRows.TryGetValue(key, out var s) ? 1 + (s.Ranks?.Length ?? 0) : 1;
 
+    /// <summary>A unit's spell keys in kit order: the class signature, then taught essences.</summary>
+    public static IEnumerable<string> UnitSkillKeys(CampaignUnit u) =>
+        Classes[u.ClassId].Skills
+            .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>());
+
+    /// <summary>Build a unit's skill at its current bought rank (the kit screen's view).</summary>
+    public static SpellDef UnitSkill(CampaignUnit u, string key) => BuildSkill(key, u.RankOf(key));
+
+    /// <summary>Preview a skill one rank up (so the spend button can show what changes).</summary>
+    public static SpellDef SkillAtRank(string key, int rank) => BuildSkill(key, rank);
+
+    /// <summary>Manually spend one spell point ranking a skill up (the 1.29 spend screen).</summary>
+    public static bool RankUp(CampaignUnit u, string key)
+    {
+        if (u.SpellPoints <= 0 || u.RankOf(key) >= MaxRank(key)) return false;
+        u.SpellPoints--;
+        u.SpellRanks[key] = u.RankOf(key) + 1;
+        return true;
+    }
+
     /// <summary>
     /// Spend a unit's banked spell points by the class template (Bible §6.3: 1 point per level;
     /// mercs auto-spend, the avatar too until the manual spend screen ships): signature skills
@@ -465,13 +485,133 @@ public static class TitheContent
 
     // ----- Encounter assembly -------------------------------------------------------
 
-    public static MapData Arena(int variant = 0) => MapLoader.Parse(((variant % 4 + 4) % 4) switch
+    /// <summary>Arena by variant — now always a generated ground (the player asked for proper
+    /// auto-generated maps); the handcrafted tables remain as reference data.</summary>
+    public static MapData Arena(int variant = 0) => GenerateArena(unchecked(variant * 2654435761u).GetHashCode());
+
+    /// <summary>
+    /// Procedurally generate an irregular fight ground, deterministic by seed:
+    /// the silhouette is a union of overlapping ellipses on a void sea (never a plain rectangle),
+    /// obstacles grow in small CLUSTERS, and a flood-fill pass guarantees the crew's west landing
+    /// can always reach the pack's east ground — clustered, but never sealed. Unreachable pockets
+    /// become void so nothing can ever spawn where no path leads.
+    /// </summary>
+    public static MapData GenerateArena(int seed)
     {
-        1 => TitheTables.ArenaJson2,
-        2 => TitheTables.ArenaJson3,
-        3 => TitheTables.ArenaJson4,
-        _ => TitheTables.ArenaJson,
-    });
+        const int W = 15, H = 13;
+        var rng = new Random(seed);
+        var west = new CellCoord(2, H / 2);
+        var east = new CellCoord(W - 3, H / 2);
+
+        // 1. The landmass: one broad ellipse that always spans west→east, plus a few side blobs.
+        bool[,] land = new bool[W, H];
+        void Blob(double cx, double cy, double rx, double ry)
+        {
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                {
+                    double dx = (x - cx) / rx, dy = (y - cy) / ry;
+                    if (dx * dx + dy * dy <= 1.0) land[x, y] = true;
+                }
+        }
+        Blob(W * 0.5 + rng.NextDouble() - 0.5, H * 0.5 + rng.NextDouble() - 0.5,
+             W * 0.40 + rng.NextDouble() * 1.6, H * 0.36 + rng.NextDouble() * 1.4);
+        int blobs = 2 + rng.Next(3);
+        for (int i = 0; i < blobs; i++)
+            Blob(2.5 + rng.NextDouble() * (W - 5), 2.0 + rng.NextDouble() * (H - 4),
+                 2.0 + rng.NextDouble() * 2.8, 1.6 + rng.NextDouble() * 2.4);
+        for (int y = H / 2 - 2; y <= H / 2 + 2; y++)             // west landing + east ground,
+            for (int x = 1; x <= 3; x++)                          // always solid
+            { land[x, y] = true; land[W - 1 - x, y] = true; }
+
+        var tiles = new char[W, H];
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                tiles[x, y] = land[x, y] ? '.' : 'o';
+
+        // 2. Obstacle clusters: a few seeds, each grown by random adjacent steps — accumulation
+        //    here and there, open ground elsewhere. The start strip and both anchors stay clear.
+        bool NearStart(int x, int y) => x <= 3 && Math.Abs(y - H / 2) <= 2;
+        bool Protected(int x, int y) => NearStart(x, y)
+            || (Math.Abs(x - east.X) <= 1 && Math.Abs(y - east.Y) <= 1);
+        int clusters = 3 + rng.Next(3), placed = 0;
+        for (int c = 0; c < clusters; c++)
+        {
+            int cx = 4 + rng.Next(W - 6), cy = 1 + rng.Next(H - 2);
+            if (!land[cx, cy] || Protected(cx, cy)) continue;
+            int size = 2 + rng.Next(4);                          // 2-5 stones per cluster
+            char kind = rng.NextDouble() < 0.30 ? 'T' : '#';
+            for (int s = 0; s < size && placed < 14; s++)
+            {
+                if (land[cx, cy] && !Protected(cx, cy) && tiles[cx, cy] == '.')
+                { tiles[cx, cy] = rng.NextDouble() < 0.8 ? kind : (kind == '#' ? 'T' : '#'); placed++; }
+                int step = rng.Next(4);
+                cx = Math.Clamp(cx + (step == 0 ? 1 : step == 1 ? -1 : 0), 1, W - 2);
+                cy = Math.Clamp(cy + (step == 2 ? 1 : step == 3 ? -1 : 0), 1, H - 2);
+            }
+        }
+
+        // 3. Connectivity guarantee: flood from the west landing; chip away frontier obstacles
+        //    until the east ground is reached, then drown any leftover unreachable pockets.
+        bool Walk(char t) => t == '.';
+        HashSet<CellCoord> Flood()
+        {
+            var seen = new HashSet<CellCoord> { west };
+            var q = new Queue<CellCoord>(); q.Enqueue(west);
+            while (q.Count > 0)
+            {
+                var c = q.Dequeue();
+                foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                {
+                    var n = new CellCoord(c.X + dx, c.Y + dy);
+                    if (n.X < 0 || n.Y < 0 || n.X >= W || n.Y >= H) continue;
+                    if (!Walk(tiles[n.X, n.Y]) || !seen.Add(n)) continue;
+                    q.Enqueue(n);
+                }
+            }
+            return seen;
+        }
+        var reach = Flood();
+        while (!reach.Contains(east))
+        {
+            // Clear one obstacle that borders the reached region (opens the shortest new ground).
+            var openable = new List<CellCoord>();
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    if (tiles[x, y] is '#' or 'T'
+                        && new[] { (1, 0), (-1, 0), (0, 1), (0, -1) }
+                           .Any(d => reach.Contains(new CellCoord(x + d.Item1, y + d.Item2))))
+                        openable.Add(new CellCoord(x, y));
+            if (openable.Count == 0) break;                       // fully open land — cannot happen
+            var pick = openable[rng.Next(openable.Count)];
+            tiles[pick.X, pick.Y] = '.';
+            reach = Flood();
+        }
+        for (int y = 0; y < H; y++)                               // pockets nothing can reach → void
+            for (int x = 0; x < W; x++)
+                if (tiles[x, y] == '.' && !reach.Contains(new CellCoord(x, y)))
+                    tiles[x, y] = 'o';
+
+        // 4. The crew's placement zone: 'P' on the landing, 's' on its nearest walkable ring.
+        tiles[west.X, west.Y] = 'P';
+        int starts = 0;
+        foreach (var c in reach.OrderBy(c => c.DistanceTo(west)).ThenBy(c => c.X))
+        {
+            if (starts >= 8) break;
+            if (c == west || tiles[c.X, c.Y] != '.') continue;
+            if (c.X > 4) continue;                                // the zone hugs the west edge
+            tiles[c.X, c.Y] = 's'; starts++;
+        }
+
+        var rows = new string[H];
+        for (int y = 0; y < H; y++)
+        {
+            var sb = new System.Text.StringBuilder(W);
+            for (int x = 0; x < W; x++) sb.Append(tiles[x, y]);
+            rows[y] = sb.ToString();
+        }
+        return MapLoader.Parse(JsonSerializer.Serialize(new { name = "The Yard", rows }));
+    }
 
     /// <summary>
     /// Assemble a ready-to-watch fight: the graveyard arena, a crew placed on the start cells,

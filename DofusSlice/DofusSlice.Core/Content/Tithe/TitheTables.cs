@@ -22,18 +22,18 @@ public static class TitheTables
     // (the 1.29 rule) and AP/MP-loss resistance.
     public const string ClassesJson = """
     [
-      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 24, "ap": 6, "mp": 4,
-        "vitality": 12, "strength": 6, "intelligence": 4, "chance": 4, "agility": 22, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
+      { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 26, "ap": 6, "mp": 4,
+        "vitality": 14, "strength": 6, "intelligence": 4, "chance": 4, "agility": 20, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
         "growth": { "vitality": 1, "agility": 4 },
-        "skills": ["piercing_shot", "crippling_arrow"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
-      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 38, "ap": 6, "mp": 3,
-        "vitality": 40, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
+        "skills": ["piercing_shot"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
+      { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 48, "ap": 6, "mp": 3,
+        "vitality": 52, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
         "growth": { "vitality": 3, "strength": 2 },
-        "skills": ["slam", "bastion"], "blurb": "An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage." },
-      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "element": "fire", "baseHp": 27, "ap": 7, "mp": 3,
-        "vitality": 15, "strength": 6, "intelligence": 30, "chance": 4, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
-        "growth": { "vitality": 1, "intelligence": 4 },
-        "skills": ["ruin_bolt", "flashfire"], "blurb": "A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage." }
+        "skills": ["slam"], "blurb": "An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage." },
+      { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "element": "fire", "baseHp": 34, "ap": 7, "mp": 3,
+        "vitality": 24, "strength": 6, "intelligence": 30, "chance": 4, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
+        "growth": { "vitality": 2, "intelligence": 3 },
+        "skills": ["ruin_bolt"], "blurb": "A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage." }
     ]
     """;
 
@@ -84,7 +84,7 @@ public static class TitheTables
     [
       { "key": "piercing_shot", "name": "Piercing Shot", "ap": 4, "min": 4, "max": 8, "los": true,
         "ranks": [ { "min": 3 }, { "max": 9 } ],
-        "effects": [ { "kind": "damage", "element": "air", "min": 13, "max": 18 } ] },
+        "effects": [ { "kind": "damage", "element": "air", "min": 11, "max": 16 } ] },
       { "key": "slam", "name": "Slam", "ap": 4, "min": 1, "max": 1, "los": true,
         "ranks": [ { "max": 2 }, { "ap": 3 } ],
         "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 }, { "kind": "push", "cells": 1 } ] },

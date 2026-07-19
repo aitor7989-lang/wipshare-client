@@ -44,9 +44,10 @@ public sealed class BattleAnimator
     /// The game wires it to the SoundBank; null means silence, never a crash.</summary>
     public Action<string, float>? Sfx { get; set; }
 
-    /// <summary>Optional resolver so corpses use the same sheet AND pixel height the renderer
-    /// drew the fighter with (tithe mode maps archetypes, not fighter names). Null = defaults.</summary>
-    public Func<Fighter, (string sprite, float heightPx)>? CorpseSpriteOf { get; set; }
+    /// <summary>Optional resolver so corpses use the same sheet, pixel height AND tint the
+    /// renderer drew the fighter with (tithe mode maps archetypes onto tinted shared sheets —
+    /// an untinted corpse reads as a different creature). Null = defaults.</summary>
+    public Func<Fighter, (string sprite, float heightPx, Color tint)>? CorpseSpriteOf { get; set; }
 
     /// <summary>True while a blocking animation or death fade is still playing.</summary>
     public bool IsBusy => _queue.Count > 0 || _corpses.Any(c => !c.Done);
@@ -88,6 +89,9 @@ public sealed class BattleAnimator
             case SpellCast c:
                 _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target, 0.85f));
                 _queue.Enqueue(new CastAnim(c.Caster.Id, _proj.CellCenter(c.Target), c.Spell, this));
+                // Anything cast from range visibly TRAVELS: an arrow-streak flies caster→target
+                // before the hit lands (melee-range casts skip it — nothing to see).
+                _queue.Enqueue(new ProjectileAnim(this, c.Caster.Id, c.Target, SpellColor(c.Spell)));
                 break;
             case DamageDealt d:
                 _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical, d.Element));
@@ -99,10 +103,10 @@ public sealed class BattleAnimator
                 // Death replays IN SEQUENCE: the unit stays on the board (StillShown) until
                 // the killing blow's animations have played, then the corpse takes over.
                 _pendingDeaths.Add(dd.Fighter.Id);
-                var (corpseSprite, corpseH) = CorpseSpriteOf?.Invoke(dd.Fighter)
-                    ?? (SpriteName(dd.Fighter), 64f);
+                var (corpseSprite, corpseH, corpseTint) = CorpseSpriteOf?.Invoke(dd.Fighter)
+                    ?? (SpriteName(dd.Fighter), 64f, Color.White);
                 _queue.Enqueue(new DeathAnim(this, dd.Fighter.Id, _proj.CellCenter(dd.At),
-                    ColorOf(dd.Fighter), corpseSprite, corpseH));
+                    ColorOf(dd.Fighter), corpseSprite, corpseH, corpseTint));
                 break;
             case FighterSummoned s:
                 _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
@@ -395,7 +399,10 @@ internal sealed class CastAnim : IAnim
         if (!_spawned && _t >= Dur * 0.4f)
         {
             _spawned = true;
-            _a.AddOverlay(new ImpactFlash(_to + new Vector2(0, -16), _impact));
+            // Melee-range casts flash at the point of contact; ranged ones leave the impact
+            // to the projectile's arrival, so nothing lands before the shot does.
+            if ((_to - _from).Length() < 70f)
+                _a.AddOverlay(new ImpactFlash(_to + new Vector2(0, -16), _impact));
         }
         _t += dt;
     }
@@ -489,6 +496,42 @@ internal sealed class TeleportAnim : IAnim
 }
 
 /// <summary>
+/// The ranged read: a streak that flies from the caster to the target cell, blocking the
+/// queue so the hit number only appears when the shot ARRIVES. Melee range = no projectile.
+/// </summary>
+internal sealed class ProjectileAnim : IAnim
+{
+    private readonly BattleAnimator _a;
+    private readonly string _casterId;
+    private readonly CellCoord _target;
+    private readonly Color _color;
+    private float _dur = -1f; // resolved on first update from the replay ledger
+    private float _t;
+
+    public ProjectileAnim(BattleAnimator a, string casterId, CellCoord target, Color color)
+    { _a = a; _casterId = casterId; _target = target; _color = color; }
+
+    public bool Done => _dur >= 0f && _t >= _dur;
+
+    public void Update(float dt)
+    {
+        if (_dur < 0f)
+        {
+            var from = _a.Projector.CellCenter(_a.DisplayCellOf(_casterId)) + new Vector2(0, -22);
+            var to = _a.Projector.CellCenter(_target) + new Vector2(0, -16);
+            float dist = (to - from).Length();
+            if (dist < 70f) { _dur = 0f; return; }     // adjacent: the lunge already reads
+            _dur = Math.Clamp(dist / 900f, 0.12f, 0.45f);
+            _a.AddOverlay(new ProjectileOverlay(from, to, _dur, _color));
+            _a.Sfx?.Invoke("zip", 0.35f);
+        }
+        _t += dt;
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
+/// <summary>
 /// The queued death beat: only when this replays does the fallen unit leave the board and
 /// hand over to its corpse fade — never before the blow that killed it has landed.
 /// </summary>
@@ -501,10 +544,12 @@ internal sealed class DeathAnim : IAnim
     private readonly Color _color;
     private readonly string _sprite;
     private readonly float _heightPx;
+    private readonly Color _tint;
     private float _t;
 
-    public DeathAnim(BattleAnimator a, string id, Vector2 at, Color color, string sprite, float heightPx)
-    { _a = a; _id = id; _at = at; _color = color; _sprite = sprite; _heightPx = heightPx; }
+    public DeathAnim(BattleAnimator a, string id, Vector2 at, Color color, string sprite,
+        float heightPx, Color tint)
+    { _a = a; _id = id; _at = at; _color = color; _sprite = sprite; _heightPx = heightPx; _tint = tint; }
 
     public bool Done => _t >= Dur;
 
@@ -513,7 +558,7 @@ internal sealed class DeathAnim : IAnim
         if (_t == 0f)
         {
             _a.ReleaseDeath(_id);
-            _a.SpawnCorpse(new Corpse(_at, _color, _sprite, _a.LastFacing(_id), _heightPx));
+            _a.SpawnCorpse(new Corpse(_at, _color, _sprite, _a.LastFacing(_id), _heightPx, _tint));
             _a.Sfx?.Invoke("death", 0.8f);
         }
         _t += dt;
@@ -554,6 +599,36 @@ internal sealed class FloatingText : Overlay
     }
 }
 
+/// <summary>The flying shot itself: a bright head with a fading three-dot trail, on a low arc.</summary>
+internal sealed class ProjectileOverlay : Overlay
+{
+    private readonly Vector2 _from, _to;
+    private readonly float _dur;
+    private readonly Color _color;
+    private float _t;
+
+    public ProjectileOverlay(Vector2 from, Vector2 to, float dur, Color color)
+    { _from = from; _to = to; _dur = Math.Max(0.05f, dur); _color = color; }
+
+    public override bool Done => _t >= _dur;
+    public override void Update(float dt) => _t += dt;
+
+    private Vector2 At(float p) =>
+        Vector2.Lerp(_from, _to, p) + new Vector2(0, -14f * MathF.Sin(MathF.PI * p)); // the arc
+
+    public override void Draw(SpriteBatch sb, Primitives prim, PixelFont font)
+    {
+        float p = Math.Clamp(_t / _dur, 0f, 1f);
+        for (int i = 3; i >= 1; i--)                       // trail, dimmer and smaller behind
+        {
+            float tp = Math.Clamp(p - i * 0.06f, 0f, 1f);
+            prim.DiscAt(sb, At(tp), 3.5f - i * 0.8f, _color * (0.5f - i * 0.12f));
+        }
+        prim.DiscAt(sb, At(p), 4f, Color.White * 0.9f);    // the bright head
+        prim.DiscAt(sb, At(p), 2.5f, _color);
+    }
+}
+
 internal sealed class ImpactFlash : Overlay
 {
     private const float Dur = 0.3f;
@@ -581,11 +656,14 @@ internal sealed class Corpse
     private readonly string _name;
     private readonly Facing4 _facing;
     private readonly float _heightPx;
+    private readonly Color _tint;
     private float _t;
 
-    public Corpse(Vector2 center, Color color, string name, Facing4 facing, float heightPx = 64f)
+    public Corpse(Vector2 center, Color color, string name, Facing4 facing,
+        float heightPx = 64f, Color? tint = null)
     {
         _center = center; _color = color; _name = name; _facing = facing; _heightPx = heightPx;
+        _tint = tint ?? Color.White;
     }
 
     public bool Done => _t >= Hold + Fade;
@@ -600,7 +678,7 @@ internal sealed class Corpse
         if (sheet != null && sheet.FrameCount > 1)
         {
             int frame = Math.Min((int)(_t * 10f), sheet.FrameCount - 1);
-            SpriteDraw.Feet(sb, sheet, _center + new Vector2(0, 4), Color.White * alpha, _heightPx, frame);
+            SpriteDraw.Feet(sb, sheet, _center + new Vector2(0, 4), _tint * alpha, _heightPx, frame);
             return;
         }
 

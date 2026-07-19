@@ -293,3 +293,27 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   genuine bow shot (the pack even ships the arrow projectile), so the bake now builds the
   archer from it in ranger greens; the bulwark takes the sword-and-shield hero, and the
   cannon wears the hero re-forged in ember reds (`recolor_fire`). Three distinct silhouettes.
+
+## Playtest batch 2: agency, legibility, generated ground
+- One SIGNATURE spell per crew class (piercing shot / slam / ruin bolt) — essences add more.
+  Spell ranks are now PLAYER-SPENT: the kit screen grew a SPELLS section with RANK UP buttons
+  (auto-spend removed from the dive path; sims still auto-spend).
+- Spell legibility: hover any kit well in combat for the full card (element damage, AP, range,
+  cooldown, every effect); the kit screen prints the same line under each spell.
+- The kit screen (E) now opens in the graveyard too — inventory, stats, ranks, mid-dive.
+- Balance: archer 11-16 (was 13-18) and AGI 20; bulwark 100 HP at L1 (was 78); cannon 58 (was 42).
+- Corpses now carry the fighter's tint (a tinted shared sheet without its tint read as a
+  different creature — "the death anim is using old sprites").
+- Bread made visible: the mend prints into the fight log ("HARD BREAD: bulwark +22 HP (1 left)")
+  and the shop line says what bread does.
+- SOLO START: a new campaign is just you; the Hiring Post is the first decision (160g covers
+  two L1 hires). The city header says so.
+- Ready phase has the 1.29 countdown (30s over the FIGHT! pill, red under 10, auto-starts).
+- Ranged casts fly a PROJECTILE (arced streak, element-colored, queue-blocking so the hit
+  lands when the shot does).
+- PROPER GENERATED MAPS: TitheContent.GenerateArena — irregular ellipse-union silhouettes,
+  clustered obstacles, flood-fill connectivity guarantee (west landing always reaches east
+  ground; sealed pockets drown). Every fight and every yard uses them.
+- THE YARD IS THREE MAPS: near/mid/deep, connected by glowing edge gates; packs sort by reach,
+  the survivor wanders the mid yard, the Crypt waits in the deep one.
+- Obstacles got art: stacked-canopy trees and rubble boulders on the raised blocks.

@@ -13,7 +13,7 @@ namespace DofusSlice.Game.Rendering;
 public sealed class TileSet
 {
     public const int Src = 8;    // tile size in the sheet
-    public const int Cell = 40;  // on-screen cell size (a crisp 5× point scale)
+    public const int Cell = 32;  // on-screen cell size (a crisp 4× point scale)
 
     private const int Pad = Src + 2; // padded stride: 1px extruded gutter kills atlas bleeding
 
@@ -76,22 +76,27 @@ public sealed class TileSet
 /// </summary>
 public static class Tid
 {
-    // Purple interior (the City; the Crypt's stonework cousin lives in the blue set).
+    // Purple interior (the City). Wall sandwich per TILESET-RULES.md §1.
     public const int CityFloor = 15;
-    public static readonly int[] CityVariants = { 13, 14 };
-    public const int CityWall = 5;
+    public static readonly int[] CityClumps = { 13, 14 };
+    public const int CityBand = 2, CityCornerL = 1, CityCornerR = 3, CitySide = 3;
+    public static readonly int[] CityFace = { 5, 13, 14, 13 };
+    public const int CityDecor = 12, CitySkirt = 46;
     public const int RugGold = 20, RugCheck = 21, RugWeave = 47, RugBlue = 52;
     public const int Shelf = 6, Console = 10, Brazier = 50, Statue = 12;
 
-    // Mossy outdoors (the Graveyard floor).
-    public const int YardFloor = 88;
-    public static readonly int[] YardVariants = { 89, 97 };
-    public const int YardBorder = 94;
+    // Dark mossy outdoors (the Graveyard): dark ground, mossy growth in clumps.
+    public static readonly int[] YardBase = { 82, 83 };  // mixed per-cell, reference-style
+    public static readonly int[] YardMoss = { 88, 89, 97 };
+    public const int YardBramble = 90;                   // rare accent, never common
+    public const int DunBand = 105, DunCornerL = 84, DunCornerR = 85, DunSide = 94;
+    public static readonly int[] DunFace = { 111, 112, 113, 112 };
+    public const int DunDecor = 114, DunSkirt = 106, DunSkirtAlt = 107;
+    public const int YardVoid = 94, CityVoid = 7, DunVoid = 91;
 
     // Blue dungeon (the Crypt's fight arenas).
-    public const int CryptFloor = 82;
-    public static readonly int[] CryptVariants = { 83, 86 };
-    public const int CryptBorder = 91;
+    public const int CryptFloor = 25;
+    public static readonly int[] CryptClumps = { 82, 83, 86, 93 };
 
     public const int Void = 94, Water = 92, WaterGlint = 98;
     public const int Tombstone = 110, Tree = 45, RockBlob = 44, Pillar = 33;

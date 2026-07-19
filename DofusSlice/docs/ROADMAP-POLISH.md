@@ -22,16 +22,16 @@ The vitals color code, applied EVERYWHERE (bars, numbers, floats, icons, rows):
 
 ## PASS 2 — "ONE BAR, EVERYWHERE" (HUD unification + declutter)
 
-- [ ] 2.1 The SAME bottom bar outside combat: heart/AP/MP vitals stay, the spell
+- [x] 2.1 The SAME bottom bar outside combat: heart/AP/MP vitals stay, the spell
       wells become QUICK-ACCESS ITEM slots (bread, draughts…). Using one updates
       the HP in the bar live.
-- [ ] 2.2 Healing shows in the WORLD too: the same floating letters as damage,
+- [x] 2.2 Healing shows in the WORLD too: the same floating letters as damage,
       but "+N" in green, over the healed character.
-- [ ] 2.3 PLACEMENT uses that same bar — the END TURN button IS the FIGHT button
+- [x] 2.3 PLACEMENT uses that same bar — the END TURN button IS the FIGHT button
       while getting ready. One button, one place, all phases. Keep it simple.
-- [ ] 2.4 Kill the redundant hint text ("C: CHARACTER · S: SPELLS · I: BAG"…) —
+- [x] 2.4 Kill the redundant hint text ("C: CHARACTER · S: SPELLS · I: BAG"…) —
       a Dofus-style ICON menu in the BOTTOM-RIGHT opens each window.
-- [ ] 2.5 The bottom-left pile (coin, bread chips, tithe due…) moves INTO the
+- [x] 2.5 The bottom-left pile (coin, bread chips, tithe due…) moves INTO the
       inventory window. The HUD breathes.
 
 ## PASS 3 — "FAIR TURNS, HONEST AI" (systems + fixes)

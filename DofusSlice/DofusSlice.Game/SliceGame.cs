@@ -329,6 +329,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
+        if (ClickCampaignBand(m)) return;   // quick items + the corner menu own the band
 
         if (_openNpc >= 0)
         {
@@ -536,7 +537,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         for (int i = 0; i < ordered.Count && i < 6; i++)
             if (Pressed(Keys.D1 + i)) { WalkToPack(ordered[i]); return; }
 
-        if (!LeftClicked() || _mouse.Y >= HudTop) return;
+        if (!LeftClicked()) return;
+        if (ClickCampaignBand(new Point(_mouse.X, _mouse.Y))) return; // quick items + corner menu
         var target = _hover;
         if (!_graveField.InBounds(target)) return;
 
@@ -874,7 +876,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (LeftClicked())
         {
             var m = new Point(_mouse.X, _mouse.Y);
-            if (_endTurnButton.Contains(m)) { BeginFight(); return; } // "FIGHT!" button
+            if (TitheEndTurn.Contains(m)) { BeginFight(); return; } // the band's FIGHT button
             if (m.Y >= HudTop) return;
 
             var onCell = _engine.FighterAt(_hover);
@@ -1475,22 +1477,37 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         _ew.Panel(_sb, new Rectangle(-6, HudTop + 2, ScreenW + 12, ScreenH - HudTop + 16));
         if (_tithe) DrawCrewRoster();
-        _font.DrawCentered(_sb, _tithe ? "PLACE YOUR CREW, THEN PRESS FIGHT — THEN WATCH"
+        _font.DrawCentered(_sb, _tithe ? "PLACE YOUR CREW — FIGHT WHEN READY"
                                        : "POSITION YOUR HERO ON A BLUE STARTING CELL, THEN FIGHT",
             ScreenW / 2, _tithe ? HudTop + 14 : HudTop + 60, 2, Palette.Text);
 
-        var r = _endTurnButton;
-        bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
-        var pill = new Rectangle(r.X, r.Y + 20, r.Width, 56);
-        _ew.Pill(_sb, pill, gold: true, pressed: hover);
-        _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3,
-            Mono.On ? Mono.ButtonInk(hover) : Color.White);
-        _font.DrawCentered(_sb, "(SPACE)", r.Center.X, pill.Bottom + 10, 1, Ew.InkSoft);
-
-        // The 1.29 ready countdown: the fight starts itself when the clock runs out.
         int left = (int)MathF.Ceiling(Math.Max(0f, _placeClock));
-        _font.DrawCentered(_sb, $"{left}", pill.Center.X, pill.Y - 26, 3,
-            left <= 10 ? (Mono.On ? Mono.Danger : new Color(226, 96, 76)) : Ew.Gold);
+        if (_tithe)
+        {
+            // ONE button, all phases: the END TURN slot says FIGHT while getting ready,
+            // and the plate-wide bar drains the 1.29 ready countdown. Keep it simple.
+            bool etHov = TitheEndTurn.Contains(new Point(_mouse.X, _mouse.Y));
+            Mono.Button(_sb, _prim, TitheEndTurn, hover: etHov);
+            _font.DrawCentered(_sb, "FIGHT", TitheEndTurn.Center.X, TitheEndTurn.Y + 8, 1,
+                Mono.ButtonInk(etHov));
+            _font.DrawCentered(_sb, "(SPACE)", TitheEndTurn.Center.X, TitheEndTurn.Bottom + 6, 1, Ew.InkSoft);
+            float pFrac = Math.Clamp(_placeClock / PlaceSeconds, 0f, 1f);
+            Mono.Bar(_sb, _prim, new Rectangle(350, HudTop + 118, 580, 8), pFrac,
+                left <= 10 ? Mono.Danger : Mono.Ink);
+            OutlinedCentered($"{left}", 944, HudTop + 116, 2, left <= 10 ? Mono.Danger : Mono.Ink);
+        }
+        else
+        {
+            var r = _endTurnButton;
+            bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
+            var pill = new Rectangle(r.X, r.Y + 20, r.Width, 56);
+            _ew.Pill(_sb, pill, gold: true, pressed: hover);
+            _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3,
+                Mono.On ? Mono.ButtonInk(hover) : Color.White);
+            _font.DrawCentered(_sb, "(SPACE)", r.Center.X, pill.Bottom + 10, 1, Ew.InkSoft);
+            _font.DrawCentered(_sb, $"{left}", pill.Center.X, pill.Y - 26, 3,
+                left <= 10 ? (Mono.On ? Mono.Danger : new Color(226, 96, 76)) : Ew.Gold);
+        }
         DrawHoverUnitInfo();
     }
 
@@ -2105,11 +2122,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawHoverUnitInfo();
     }
 
-    /// <summary>The Emberwick combat chat, BOTTOM-LEFT like the Dofus chat box — tucked
-    /// above the band, clear of the turn order that owns the top-right.</summary>
+    /// <summary>The Emberwick combat chat, IN the bottom-left corner like the Dofus chat
+    /// box — it rides the band itself, left of the plate.</summary>
     private void DrawEmberwickLog()
     {
-        var panel = new Rectangle(8, HudTop - 232, 344, 208);
+        var panel = new Rectangle(8, HudTop + 6, 334, ScreenH - HudTop - 14);
         _ew.Panel(_sb, panel, sunken: true, radius: 10);
         _ew.HeaderStrip(_sb, new Rectangle(panel.X + 2, panel.Y + 2, panel.Width - 4, 22));
         _font.DrawCentered(_sb, "THE FIGHT", panel.Center.X, panel.Y + 9, 1, Ew.Ink);
@@ -2248,12 +2265,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
             _font.DrawCentered(_sb, "END TURN", TitheEndTurn.Center.X, TitheEndTurn.Y + 8, 1,
                 Mono.On ? (low && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
-            _font.Draw(_sb, "1-6: ARM A SPELL", 16, HudTop + 24, 1, Ew.InkSoft);
-            _font.Draw(_sb, "CLICK: MOVE / CAST", 16, HudTop + 40, 1, Ew.InkSoft);
-            _font.Draw(_sb, "SPACE: AUTO   ·   ENTER: END", 16, HudTop + 56, 1, Ew.InkSoft);
+            // The corner belongs to the log now — the piloting hints live top-left.
+            _font.Draw(_sb, "1-6: ARM A SPELL   ·   CLICK: MOVE / CAST", 16, 74, 1, Ew.InkSoft);
+            _font.Draw(_sb, "SPACE: AUTO   ·   ENTER: END", 16, 88, 1, Ew.InkSoft);
         }
         else
-            _font.Draw(_sb, "WATCHING — HOVER UNITS AND SPELLS", 16, HudTop + 24, 1, Ew.InkMuted);
+            _font.Draw(_sb, "WATCHING — HOVER UNITS AND SPELLS", 16, 74, 1, Ew.InkMuted);
 
         // The avatar's LEVEL strip lives with the team column now.
         var av = _campaign?.Avatar;
@@ -2635,10 +2652,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   C: CHARACTER   ·   S: SPELLS   ·   I: BAG   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        UiTitle("THE CITY", 16, 12, Palette.Text);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
-            _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
-        DrawCampaignHud();
+            _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 44, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
+        DrawCampaignBand();
         if (_openNpc >= 0) DrawNpcPanel(_openNpc);
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
@@ -2751,11 +2768,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawCrypt(); // after the packs so its label is never buried under a huddle
         if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
+        DrawFloatList(_worldFloats);   // "+15" over the party when bread lands
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   C: CHARACTER   ·   S: SPELLS   ·   I: BAG   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
-        DrawCampaignHud();
+        UiTitle($"THE GRAVEYARD — {_yardDepth switch { 0 => "NEAR YARD", 1 => "MID YARD", _ => "DEEP YARD" }}",
+            16, 12, Palette.Text);
+        DrawCampaignBand();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
             _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 96)));
@@ -2952,84 +2971,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     }
 
     // ----- Shared campaign HUD + combat overlays ------------------------------------
-
-    private void DrawCampaignHud()
-    {
-        UiTitle(_scene == Scene.City ? "THE CITY"
-            : $"THE GRAVEYARD — {_yardDepth switch { 0 => "NEAR YARD", 1 => "MID YARD", _ => "DEEP YARD" }}",
-            16, 12, Palette.Text);
-
-        if (_dof.Loaded) _dof.Slice(_sb, "float_bg", new Rectangle(-8, HudTop, ScreenW + 16, ScreenH - HudTop + 14));
-        else _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-        // The purse and the pack-chips: pack glyphs when baked, the old text otherwise.
-        if (DrawIconRect("icon_ui_gold", new Rectangle(12, HudTop + 6, 32, 32), pad: 0))
-            _font.Draw(_sb, $"{_campaign.Gold}", 48, HudTop + 14, 2, Mono.On ? Mono.Ink : new Color(232, 202, 92));
-        else
-            _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
-        var sundry = new (string icon, string label, int n)[]
-        {
-            ("icon_ui_bread", "BREAD", _campaign.Bread),
-            ("icon_ui_draught", "DRAUGHTS", _campaign.Draughts),
-            ("icon_ui_essence", "ESSENCES", _campaign.Essences.Count),
-        };
-        int chX = 16;
-        foreach (var (icon, label, n) in sundry)
-        {
-            if (DrawIconRect(icon, new Rectangle(chX, HudTop + 38, 18, 18), Mono.On ? Mono.Dim : Palette.TextDim, pad: 0))
-            {
-                _font.Draw(_sb, $"x{n}", chX + 22, HudTop + 43, 1, Palette.TextDim);
-                chX += 22 + _font.Measure($"x{n}", 1) + 20;
-            }
-            else
-            {
-                _font.Draw(_sb, $"{label} {n}", chX, HudTop + 43, 1, Palette.TextDim);
-                chX += _font.Measure($"{label} {n}", 1) + 20;
-            }
-        }
-        int per = TitheContent.Prices.TitheEveryNDives;
-        string tithe = _campaign.TitheDue ? $"TITHE DUE: {_campaign.TitheAmount}g"
-            : $"tithe in {per - (_campaign.Dives % per)} dive(s)";
-        _font.Draw(_sb, tithe, 16, HudTop + 58, 1,
-            _campaign.TitheDue ? (Mono.On ? Mono.Danger : new Color(226, 122, 82)) : Palette.TextDim);
-
-        int x = 560, y = HudTop + 12;
-        _font.Draw(_sb, "CREW", x, y, 1, Palette.TextDim);
-        y += 16;
-        foreach (var u in _campaign.Crew)
-        {
-            var col = TitheTokenColor(u.ClassId);
-            _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 8, new Color(18, 18, 22));
-            _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 6, col);
-            _font.DrawCentered(_sb, TitheGlyph(u.ClassId), x + 8, y + 2, 1, Color.White);
-            int xpNeed = CampaignUnit.XpForNextLevel(u.Level);
-            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24, 120, 4),
-                Mono.On ? Mono.Faint * 0.7f : new Color(38, 40, 48));
-            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24,
-                (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
-            if (u.StatPoints > 0)
-                _font.Draw(_sb, $"+{u.StatPoints} PTS (C)", x + 152, y + 21, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
-            string tag = u.IsAvatar ? "AVATAR" : "MERC";
-            _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
-                x + 22, y + 3, 1, u.Wounded ? (Mono.On ? Mono.Danger : new Color(230, 200, 70)) : Palette.Text);
-            // Effective Dofus stats (grown by level + gear) — the class's own damage element leads
-            // (Fire Cannon reads INT, Air Archer AGI, Earth Bulwark STR), then the utility stats.
-            var s = TitheContent.StatsOf(u);
-            var elem = TitheContent.ClassElement(u.ClassId);
-            string sheet = $"{s.MaxHp} HP  {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}"
-                + $"  AGI {s.Agility}  WIS {s.Wisdom}";
-            if (u.IsAvatar)
-            {
-                int set = TitheContent.SetPiecesEquipped(u, TitheContent.GraveyardSet);
-                if (set > 0) sheet += $"   ADV {set}/7";
-            }
-            if (u.EssenceSlots.Count > 0)
-                sheet += "   [" + string.Join(" + ", u.EssenceSlots.Select(e => e.ToUpperInvariant())) + "]";
-            if (u.Temperament != Temperament.None)
-                sheet += u.Vetted ? $"   ({u.Temperament.ToString().ToUpperInvariant()})" : "   (NATURE?)";
-            _font.Draw(_sb, sheet, x + 22, y + 15, 1, Palette.TextDim);
-            y += 34;
-        }
-    }
 
     private void DrawDiveCombatOverlay()
     {

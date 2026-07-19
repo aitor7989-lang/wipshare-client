@@ -127,6 +127,9 @@ ICON_MAP = {
     "icon_spell_piper_gift": "Media_Musical_Instrument_Flute_1",
     "icon_spell_sexton_smash": "RPG_Item_Weapon_Hammer_Mace_Crushing_Damage",
     # UI chips
+    "icon_ui_char": "Travel_Person_Player_Character_Single",
+    "icon_ui_book": "Misc_Religion_Christianity_Bible_Book_Cross_Tome_Libram",
+    "icon_ui_bag": "Travel_Backpack_Bag_Pouch_Small",
     "icon_ui_gold": "RPG_Coin_Gold_Currency_Money_GP",
     "icon_ui_bread": "Food_Bread_Loaf",
     "icon_ui_draught": "Alchemy_Potion_Vial_Bottle_Heart_Health_Life_Full",

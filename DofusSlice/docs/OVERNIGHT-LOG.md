@@ -656,3 +656,23 @@ The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
 - QA (live fight): blue-ringed cannon vs red-ringed barrows, heads + team borders
   on the timeline, red heart/blue star/green shield, fire-orange Ruin Bolt glyph,
   footsteps + "3 MP" verified on screenshot.
+
+## v8.9: PASS 2 "ONE BAR, EVERYWHERE" — HUD unification
+- The fight log now sits IN the bottom-left corner (owner correction: literally the
+  corner), riding the band left of the plate; piloting hints moved top-left.
+- CampaignBand.cs: city + graveyard wear the SAME band as combat — heart/star/shield
+  vitals (avatar HP live), the well grid holding QUICK ITEMS (bread eat-now with
+  count, draught treats the wounded, carried essences), TEAM column right with red
+  HP bars, the leader's XP on the plate-wide strip. Bread heals float "+N" green
+  over the band AND over the party token in the graveyard world.
+- The corner MENU (Dofus-style): three icon buttons bottom-right (character/book/
+  bag; 3 new baked icons) replace every "C: CHARACTER · S: SPELLS · I: BAG" hint
+  line; they toggle their windows open AND closed (UpdateLeaderPanels lets the menu
+  through while a window is open — found in QA).
+- PLACEMENT keeps ONE button: the END TURN slot reads FIGHT, the plate-wide bar
+  drains the ready countdown. The big gold pill is demo-mode-only now.
+- The bottom-left pile (gold, sundry chips, tithe due, wide CREW block) is GONE
+  from the HUD — gold/tithe/counts live in the bag (tithe line added), the crew in
+  the TEAM column; DrawCampaignHud deleted.
+- QA: city band + quick wells + corner menu screenshot-verified; bag toggles from
+  the menu both ways; placement FIGHT starts the fight; corner log confirmed live.

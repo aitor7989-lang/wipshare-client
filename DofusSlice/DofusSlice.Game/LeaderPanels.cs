@@ -336,6 +336,13 @@ public partial class SliceGame
             }
         }
 
+        // The Tithe-Keeper's shadow lives in the bag now (the HUD stays clean).
+        int per = TitheContent.Prices.TitheEveryNDives;
+        _font.Draw(_sb, _campaign.TitheDue
+                ? $"TITHE DUE: {_campaign.TitheAmount}G — THE KEEPER WAITS"
+                : $"TITHE IN {per - (_campaign.Dives % per)} DIVE(S)",
+            w.X + 34, w.Y + 424, 1, _campaign.TitheDue ? Mono.Danger : Mono.Dim);
+
         // The kamas row, ours: the pack's coin (or the old ink disc), the number, the set progress.
         if (!DrawIconRect("icon_ui_gold", new Rectangle(w.X + 382, w.Y + 512, 32, 32), pad: 0))
         {
@@ -404,6 +411,8 @@ public partial class SliceGame
         if (LeftClicked())
         {
             var m = new Point(_mouse.X, _mouse.Y);
+            // The corner menu keeps working while a window is open (click = toggle shut).
+            if ((_scene == Scene.City || _scene == Scene.Graveyard) && ClickMenuButtons(m)) return true;
             if (_charOpen) ClickCharacterWindow(m);
             else if (_spellOpen) ClickSpellPanel(m);
             else ClickInventoryWindow(m);

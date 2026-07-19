@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GumProjectSave xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <CustomProperties />
+  <FontRanges>32-126,160-255</FontRanges>
+  <FontSpacingVertical>1</FontSpacingVertical>
+  <FontSpacingHorizontal>1</FontSpacingHorizontal>
+  <UseFontCharacterFile>false</UseFontCharacterFile>
+  <AutoSizeFontOutputs>false</AutoSizeFontOutputs>
+  <Version>2</Version>
+  <DefaultCanvasWidth>1280</DefaultCanvasWidth>
+  <DefaultCanvasHeight>760</DefaultCanvasHeight>
+  <ShowOutlines>true</ShowOutlines>
+  <ShowCanvasOutline>true</ShowCanvasOutline>
+  <ShowRuler>true</ShowRuler>
+  <ShowCheckerBackground>true</ShowCheckerBackground>
+  <TextureFilter>Point</TextureFilter>
+  <ConvertVariablesOnUnitTypeChange>false</ConvertVariablesOnUnitTypeChange>
+  <RestrictToUnitValues>true</RestrictToUnitValues>
+  <RestrictFileNamesForAndroid>false</RestrictFileNamesForAndroid>
+  <Guides />
+  <ShowLocalizationInGum>true</ShowLocalizationInGum>
+  <CurrentLanguageIndex>0</CurrentLanguageIndex>
+  <ScreenReference Name="CombatHud" />
+  <StandardElementReference Name="Text" />
+  <StandardElementReference Name="Sprite" />
+  <StandardElementReference Name="Container" />
+  <StandardElementReference Name="Circle" />
+  <StandardElementReference Name="Rectangle" />
+  <StandardElementReference Name="Polygon" />
+  <StandardElementReference Name="NineSlice" />
+  <StandardElementReference Name="Component" />
+  <StandardElementReference Name="ColoredRectangle" />
+  <SinglePixelTextureTop xsi:nil="true" />
+  <SinglePixelTextureLeft xsi:nil="true" />
+  <SinglePixelTextureRight xsi:nil="true" />
+  <SinglePixelTextureBottom xsi:nil="true" />
+</GumProjectSave>

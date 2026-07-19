@@ -219,3 +219,16 @@ LIVING" warnings; timeline cards show the fighter's plate on hover and ring its 
 the Lychgate and the open Crypt advertise their click ("CLICK TO TRADE / DIVE / DESCEND") when
 hovered. Floating damage numbers now wear their element's colour (Fire orange, Water blue, Air
 green, Earth ochre, Neutral bone; crits stay gold, heals green) — another AUDIT-129 item down.
+
+## Gum: a real UI editor on top of MonoGame
+
+The game now hosts the Gum UI runtime (Gum.MonoGame nuget; MonoGame bumped to 3.8.5 to match).
+A committed, generated project — ui/TitheHud.gumx — holds the watched-combat HUD (bottom band,
+crew rows with HP bars, round/turn header) as an editable Gum screen: open it in the visual Gum
+editor, drag things around, save, and the running game hot-reloads the change in seconds
+(verified live: recolouring the panel mid-fight). The game binds data by element name every
+frame, so layouts are free to change shape; missing file or missing names and the hand-drawn
+HUD quietly returns. `dotnet run --project DofusSlice.Game -- --emit-gum` regenerates the stock
+project via the same Gum data classes the editor uses, so the files are always schema-perfect.
+One gotcha found on the way: this Gum's "Rectangle" standard is a stroke shape — filled panels
+are "ColoredRectangle", which PopulateProjectWithDefaultStandards no longer adds by default.

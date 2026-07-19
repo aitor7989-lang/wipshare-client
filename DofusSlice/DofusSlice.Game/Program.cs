@@ -3,6 +3,14 @@ using System.IO;
 
 try
 {
+    // Regenerate the starter Gum UI project (ui/TitheHud.gumx) for the visual editor and exit.
+    if (args.Any(a => a.Equals("--emit-gum", StringComparison.OrdinalIgnoreCase)))
+    {
+        DofusSlice.Game.Ui.GumProjectEmitter.Emit(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "ui"), 1280, 760, 600);
+        return 0;
+    }
+
     // Default: the TITHE campaign loop (City → Graveyard → fights). "pack"/"boss" drop straight
     // into a one-off watched fight; "dofus" is the original piloted slice. An integer arg sets the
     // starting RNG seed.

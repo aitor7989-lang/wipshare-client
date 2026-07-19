@@ -12,13 +12,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.1.303" />
+    <PackageReference Include="Gum.MonoGame" Version="2026.7.6.1" />
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Committed default art + the (gitignored) local override folder, copied next to the exe. -->
     <None Include="assets-default\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ui\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="maps\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

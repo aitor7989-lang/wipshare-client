@@ -73,6 +73,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private ChamberSet _tiles = null!;                // legacy Chamber props (fallback tokens only)
     private UiSkin _ui = null!;                       // pixel UI panels/buttons (local-only art)
     private UiFont _dfont = null!;                    // baked dungeon font (local-only art)
+    private Ui.GumHud _gum = null!;                   // Gum-editor HUD skin (ui/TitheHud.gumx)
     private bool _pixSprites;                         // character animation packs present
     private bool Pix => _pixSprites;                  // sprites present -> full pixel dressing
     private SpriteBank _sprites = null!;
@@ -149,6 +150,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _ui = new UiSkin(_sprites);
         _dfont = new UiFont(_sprites);
         _pixSprites = _sprites.GetSheet("hero", "idle", "se") != null;
+        _gum = new Ui.GumHud(this);
 
         if (_loop)
         {
@@ -688,6 +690,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         _prevKeys = _keys; _keys = Keyboard.GetState();
+        UpdateGumHud(gameTime);
 
         if (_loop) { UpdateLoop((float)gameTime.ElapsedGameTime.TotalSeconds); base.Update(gameTime); return; }
 
@@ -903,11 +906,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Palette.Background);
 
-        if (_loop && _scene == Scene.City) { DrawCity(); base.Draw(gameTime); return; }
-        if (_loop && _scene == Scene.Graveyard) { DrawGraveyard(); base.Draw(gameTime); return; }
+        if (_loop && _scene == Scene.City) { DrawCity(); _gum.Draw(); base.Draw(gameTime); return; }
+        if (_loop && _scene == Scene.Graveyard) { DrawGraveyard(); _gum.Draw(); base.Draw(gameTime); return; }
 
         DrawCombatScene();
         if (_loop) DrawDiveCombatOverlay();
+        _gum.Draw();
         base.Draw(gameTime);
     }
 
@@ -1454,6 +1458,24 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// The 1.29 rollover: units carry no overhead UI, so hovering one shows a small plate
     /// with its name and health number next to the cursor (screen space, HUD pass).
     /// </summary>
+    /// <summary>
+    /// Pump the Gum HUD layer: visible only during watched tithe combat (the surface it skins),
+    /// with the fight state pushed into its named elements every frame. See Ui/GumHud.cs.
+    /// </summary>
+    private void UpdateGumHud(GameTime gameTime)
+    {
+        _gum.Update(gameTime);
+        bool show = _gum.Active && _tithe && !_placing
+            && (!_loop || _scene == Scene.Combat) && _engine != null!;
+        _gum.SetVisible(show);
+        if (!show) return;
+        var crew = _engine.Fighters.Where(f => f.Team == Team.Player && !f.IsSummon)
+            .Select(f => (f.Name, f.Hp, f.MaxHp, f.IsAlive)).ToList();
+        _gum.BindCombat($"ROUND {_engine.Round}",
+            $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}",
+            _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor, crew);
+    }
+
     /// <summary>Archetype id -> readable mob name for rollovers.</summary>
     private static string MobDisplayName(string archetype) =>
         archetype.Replace('_', ' ').ToUpperInvariant();
@@ -1542,9 +1564,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         string place = _loop ? (_cryptRun ? "THE CRYPT" : "THE GRAVEYARD")
             : _boss ? "THE SEXTON'S COURT" : "THE GRAVEYARD";
-        _font.Draw(_sb, $"ROUND {_engine.Round}   {place}", 16, 12, 2, Palette.Text);
-        _font.Draw(_sb, $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
-            _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
+        if (!_gum.Active)
+        {
+            _font.Draw(_sb, $"ROUND {_engine.Round}   {place}", 16, 12, 2, Palette.Text);
+            _font.Draw(_sb, $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
+                _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
+        }
         // Only advertise keys that work here: R/B restart or swap the STANDALONE fight and would
         // mislead during a campaign fight, where the dive owns the flow.
         _font.Draw(_sb, _loop ? "1/2/3 = SPEED" : "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON",
@@ -1562,8 +1587,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             ly += 12;
         }
 
-        _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-        DrawCrewRoster();
+        if (!_gum.Active)   // the Gum screen owns the band + roster when its file is present
+        {
+            _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
+            DrawCrewRoster();
+        }
         DrawHoverUnitInfo();
     }
 

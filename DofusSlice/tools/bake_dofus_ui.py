@@ -58,6 +58,29 @@ PIECES = {
     "ap_mp":         ("texture/hud/background_ap_mp.png",      None),
     "chat_input":    ("texture/hud/chat_input_background.png", (8, 8, 8, 8)),
     "scroll_thumb":  ("common/scrollbar_cursor_normal.png",    (3, 3, 3, 3)),
+    # inventory dressing
+    "lock":          ("common/lock_dark.png",                  None),
+    "help":          ("common/btn_help_normal.png",            None),
+    "help_over":     ("common/btn_help_over.png",              None),
+    "turn_r":        ("common/btn_arrow_turn_character_normal.png", None),
+    "slotsil_amulet": ("bitmap/tx_slot_collar.png",            None),
+    "slotsil_hat":   ("bitmap/tx_slot_helmet.png",             None),
+    "slotsil_cape":  ("bitmap/tx_slot_cape.png",               None),
+    "slotsil_ring":  ("bitmap/tx_slot_ring.png",               None),
+    "slotsil_belt":  ("bitmap/tx_slot_belt.png",               None),
+    "slotsil_boots": ("bitmap/tx_slot_shoe.png",               None),
+    "slotsil_weapon": ("bitmap/tx_slot_weapon.png",            None),
+    "slotsil_shield": ("bitmap/tx_slot_shield.png",            None),
+    "slotsil_pet":   ("bitmap/tx_slot_pet.png",                None),
+    "slotsil_dofus": ("bitmap/tx_slot_dofus.png",              None),
+    # NOTE: the theme's texture/windowIcon PNGs are fully transparent placeholders — the real
+    # glyphs live in texture/btnIcon (verified by bbox), so the category icons come from there.
+    "icon_cat_equip": ("texture/btnIcon/btnIcon_character.png", None),
+    "icon_cat_useful": ("texture/btnIcon/btnIcon_chest.png",    None),
+    "icon_cat_res":  ("texture/btnIcon/btnIcon_grid.png",       None),
+    "icon_cat_quest": ("texture/btnIcon/btnIcon_exclamation_mark.png", None),
+    "icon_cat_all":  ("texture/btnIcon/btnIcon_filter.png",     None),
+    "icon_gear":     ("texture/btnIcon/btnIcon_gear.png",       None),
 }
 
 # The stat icons the kit screen shows (theme charac icon name -> our stat key).
@@ -83,8 +106,9 @@ def main():
 
     if a.spells:
         n = 0
+        prefixes = ("spell_", "glyph_", "item_", "egg_", "lock")
         for fn in sorted(os.listdir(a.spells)):
-            if not fn.endswith(".png") or not (fn.startswith("spell_") or fn.startswith("glyph_")):
+            if not fn.endswith(".png") or not fn.startswith(prefixes):
                 continue
             shutil.copyfile(os.path.join(a.spells, fn), os.path.join(OUT, fn))
             manifest[fn[:-4]] = dict(zip(("w", "h"), Image.open(os.path.join(a.spells, fn)).size))
@@ -107,6 +131,14 @@ def main():
         if margins:
             manifest[name]["m"] = list(margins)
         print(f"  {name}: {rel} {w}x{h}")
+
+    # The doll-rotate arrow points right; mirror a left twin.
+    turn = os.path.join(a.theme, "common/btn_arrow_turn_character_normal.png")
+    if os.path.exists(turn):
+        img = Image.open(turn).convert("RGBA").transpose(Image.FLIP_LEFT_RIGHT)
+        img.save(os.path.join(OUT, "turn_l.png"))
+        manifest["turn_l"] = {"w": img.width, "h": img.height}
+        print("  turn_l: mirrored")
 
     # The parchment window body: the theme's block_background is a flat fill — ship a small
     # tile instead of a 1280x900 bitmap.

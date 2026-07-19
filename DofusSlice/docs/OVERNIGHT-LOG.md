@@ -335,3 +335,19 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   dofusroom.com itself is blocked by this environment's egress policy, so its mirror of the
   same icons couldn't be used directly.
 - Everything keeps the procedural fallback: no assets folder -> Emberwick chrome unchanged.
+
+## Region-by-region fidelity pass on the oldUI skin
+- The windows were WRONG: real oldUI composes a near-black translucent body under the silver
+  popup frame (bg at ~0.16 RGB), not parchment. DofusUi.Window now does exactly that, and all
+  themed window text flipped to white ink (WinInk/WinInkDim/WinGold helpers) — kit screen,
+  NPC shops and the fight report included.
+- Real ITEMS, per the user's sources (dofusroom.com itself is egress-blocked; identical icons
+  pulled from the open-source DofusFashionistaVanced set): 24 classic Dofus eggs fill the demo
+  inventory grid, and the game's 9 gear pieces got their icons (Adventurer set, Black Crow's
+  boots for the Gravewalkers, a Flute for the Piper's Whistle) — drawn in the kit screen's
+  equipped/stash rows.
+- Demo scene region fixes: equip slots wear the theme's tx_slot silhouettes; the doll got the
+  real turn-character arrows; locked slots show the padlock; category tabs use real btnIcon
+  glyphs (the theme's windowIcon PNGs are empty placeholders — bbox-verified); [+] spenders
+  sit OUTSIDE the stat rows; help chips, page pip, gold kamas coin, wider XP strip; search
+  and kamas rows tucked inside the frame rail.

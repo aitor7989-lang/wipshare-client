@@ -408,9 +408,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         bool skin = _dof.Loaded;
         if (skin) _dof.Window(_sb, r);
         else { _prim.FillRect(_sb, r, new Color(22, 24, 30)); _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing); }
-        var ink = skin ? UiInk : Palette.Text;
-        var inkDim = skin ? UiInkDim : Palette.TextDim;
-        var accent = skin ? DofusUi.InkGold : new Color(240, 208, 120);
+        var ink = skin ? WinInk : Palette.Text;
+        var inkDim = skin ? WinInkDim : Palette.TextDim;
+        var accent = skin ? WinGold : new Color(240, 208, 120);
         var mp = new Point(_mouse.X, _mouse.Y);
 
         // Crew tabs: the kit screen manages every unit's points, gear stays avatar-only.
@@ -489,8 +489,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         for (int i = 0; i < skillKeys.Count; i++)
         {
             var row = SpellRowRect(i);
-            if (skin) // parchment list row, 1.29-style: just a hairline separator underneath
-                _prim.FillRect(_sb, new Rectangle(row.X, row.Bottom - 1, row.Width, 1), UiInk * 0.25f);
+            if (skin) // themed list row, 1.29-style: just a hairline separator underneath
+                _prim.FillRect(_sb, new Rectangle(row.X, row.Bottom - 1, row.Width, 1), WinInk * 0.22f);
             else
             {
                 _prim.FillRect(_sb, row, Palette.HudPanel);
@@ -540,8 +540,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.StrokeRect(_sb, b, 1, new Color(96, 150, 96));
             }
             string id = a.Equipment[i];
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, skin ? ink : Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, skin ? ink : Palette.TextDim);
+            int ix = b.X + 8;
+            if (skin && _dof.ItemIcon(_sb, id, new Rectangle(b.X + 3, b.Y + 2, 26, 26))) ix = b.X + 34;
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", ix, b.Y + 4, 1, skin ? ink : Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), ix, b.Y + 17, 1, skin ? ink : Palette.TextDim);
         }
         if (a.Equipment.Count == 0)
             _font.Draw(_sb, "— nothing worn —", 268, KitY + 236, 1, inkDim);
@@ -556,8 +558,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.StrokeRect(_sb, b, 1, new Color(150, 140, 96));
             }
             string id = _campaign.Stash[i];
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, skin ? ink : Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, skin ? ink : Palette.TextDim);
+            int ix = b.X + 8;
+            if (skin && _dof.ItemIcon(_sb, id, new Rectangle(b.X + 3, b.Y + 2, 26, 26))) ix = b.X + 34;
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", ix, b.Y + 4, 1, skin ? ink : Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), ix, b.Y + 17, 1, skin ? ink : Palette.TextDim);
         }
         if (_campaign.Stash.Count == 0)
             _font.Draw(_sb, "— the stash is empty —", 656, KitY + 236, 1, inkDim);
@@ -575,9 +579,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             $"{s.MaxHp} HP   {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}   AGI {s.Agility}   WIS {s.Wisdom}   POW {s.Power}"
             + (s.ApBonus != 0 ? $"   +{s.ApBonus} AP" : "") + (s.MpBonus != 0 ? $"   +{s.MpBonus} MP" : "")
             + $"   ADV {set}/7",
-            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? DofusUi.InkGold : new Color(240, 208, 120));
+            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? WinGold : new Color(240, 208, 120));
         _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1,
-            _dof.Loaded ? UiInkDim : Palette.TextDim);
+            _dof.Loaded ? WinInkDim : Palette.TextDim);
     }
 
     /// <summary>The clickable services at each City building (label, affordable, effect).</summary>
@@ -1360,8 +1364,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private static readonly Color UiInkDim = new(126, 104, 86);
     private static readonly Color UiInkOnGreen = new(26, 54, 32);
 
-    /// <summary>True when a UI skin is available — text on light panels flips to dark ink.</summary>
+    /// <summary>True when a UI skin is available — window text follows the skin's body tone.</summary>
     private bool UiSkinned => _dof.Loaded || _ui.Loaded;
+
+    // The oldUI theme's windows are DARK (white ink, silver frames); the old cream pixel skin
+    // is light (dark ink). These pick the right ink for whatever body UiPanelBg just drew.
+    private Color WinInk => _dof.Loaded ? new Color(232, 230, 224) : UiInk;
+    private Color WinInkDim => _dof.Loaded ? new Color(164, 158, 148) : UiInkDim;
+    private Color WinGold => _dof.Loaded ? new Color(240, 202, 96) : new Color(146, 96, 22);
 
     private void UiPanelBg(Rectangle r)
     {
@@ -2462,7 +2472,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var r = new Rectangle(330, 296, 620, 336); // tall enough for the Temple's five services
         UiPanelBg(r);
         string[] titles = { "THE TITHE-KEEPER", "THE TEMPLE SISTER", "THE HIRING POST" };
-        _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, UiSkinned ? UiInk : Palette.Text);
+        _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, UiSkinned ? WinInk : Palette.Text);
 
         var acts = NpcActions(npc);
         for (int i = 0; i < acts.Count; i++)
@@ -2472,7 +2482,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (UiSkinned)
             {
                 UiButtonBg(b, hover, acts[i].ok ? Color.White : new Color(148, 148, 144));
-                _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1, acts[i].ok ? UiInkOnGreen : UiInkDim);
+                _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1,
+                    acts[i].ok ? (_dof.Loaded ? new Color(46, 26, 10) : UiInkOnGreen) : WinInkDim);
             }
             else
             {
@@ -2481,7 +2492,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1, acts[i].ok ? Palette.Text : Palette.TextDim);
             }
         }
-        _font.DrawCentered(_sb, "(ESC TO CLOSE)", r.Center.X, r.Bottom - 20, 1, UiSkinned ? UiInkDim : Palette.TextDim);
+        _font.DrawCentered(_sb, "(ESC TO CLOSE)", r.Center.X, r.Bottom - 20, 1, UiSkinned ? WinInkDim : Palette.TextDim);
     }
 
     private void DrawGameOver()
@@ -2791,15 +2802,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             + (_fightReport.Drops.Count > 0 ? 1 : 0) + (_fightReport.Lost.Count > 0 ? 1 : 0);
         var panel = new Rectangle(340, 150, 600, Math.Clamp(210 + rows * 20 + extras * 18 + (_levelUps.Count > 0 ? 22 : 0), 260, 460));
         UiPanelBg(panel);
-        var ink = UiSkinned ? UiInk : Palette.Text;
-        var inkDim = UiSkinned ? UiInkDim : Palette.TextDim;
+        var ink = UiSkinned ? WinInk : Palette.Text;
+        var inkDim = UiSkinned ? WinInkDim : Palette.TextDim;
 
         string title = !win ? "THE CREW FALLS"
             : bossRoom ? "THE SEXTON FALLS"
             : _cryptRun ? "ROOM CLEARED"
             : _jumpedFight ? "THE AMBUSH IS BEATEN" : "PACK CLEARED";
         _font.DrawCentered(_sb, title, panel.Center.X, panel.Y + 18, 3,
-            win ? (UiSkinned ? new Color(52, 108, 54) : Palette.HpFill) : new Color(184, 70, 60));
+            win ? (_dof.Loaded ? new Color(118, 200, 108) : UiSkinned ? new Color(52, 108, 54) : Palette.HpFill)
+                : new Color(206, 84, 70));
 
         int y = panel.Y + 60;
         if (win)

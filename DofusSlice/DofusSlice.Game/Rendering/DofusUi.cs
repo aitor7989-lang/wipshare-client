@@ -126,11 +126,22 @@ public sealed class DofusUi
 
     // ----- The themed controls ----------------------------------------------------------
 
-    /// <summary>A main window: parchment body under the grey rounded frame (the 1.29 block).</summary>
-    public void Window(SpriteBatch sb, Rectangle r)
+    /// <summary>
+    /// A main window, the way the theme itself composes one: the background at ~0.16 RGB and
+    /// high alpha (a near-black translucent body) under the complete silver popup frame with
+    /// its corner pins. Old parchment look available via <paramref name="parchment"/>.
+    /// </summary>
+    public void Window(SpriteBatch sb, Rectangle r, bool parchment = false)
     {
-        TileInto(sb, Get("panel_fill")!.Tex, new Rectangle(r.X + 3, r.Y + 3, r.Width - 6, r.Height - 6), Color.White);
-        Slice(sb, "panel_frame", r);
+        if (parchment)
+        {
+            TileInto(sb, Get("panel_fill")!.Tex, new Rectangle(r.X + 3, r.Y + 3, r.Width - 6, r.Height - 6), Color.White);
+            Slice(sb, "panel_frame", r);
+            return;
+        }
+        TileInto(sb, Get("panel_fill")!.Tex, new Rectangle(r.X + 8, r.Y + 8, r.Width - 16, r.Height - 16),
+            new Color(46, 44, 40, 240));
+        Slice(sb, "popup_frame", r);
     }
 
     /// <summary>A dark translucent sub-panel / tooltip plate (bg_small_border).</summary>
@@ -190,6 +201,15 @@ public sealed class DofusUi
     public bool SpellIcon(SpriteBatch sb, string key, Rectangle r, Color? tint = null)
     {
         var p = Get("spell_" + key);
+        if (p == null) return false;
+        sb.Draw(p.Tex, r, tint ?? Color.White);
+        return true;
+    }
+
+    /// <summary>A classic Dofus item render for one of the game's gear ids, if baked.</summary>
+    public bool ItemIcon(SpriteBatch sb, string itemId, Rectangle r, Color? tint = null)
+    {
+        var p = Get("item_" + itemId);
         if (p == null) return false;
         sb.Draw(p.Tex, r, tint ?? Color.White);
         return true;

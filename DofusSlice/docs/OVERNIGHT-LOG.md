@@ -404,3 +404,12 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - Type unified for real: ui_font_big rebaked at 18px (was 26) so headings/values FIT inside
   their pills; rows gained inner padding; the whole characteristics column re-metered inside
   wider margins (34px) with the footer pills fully inside the frame.
+
+## Demo pass 8: the margins pass (measured)
+- Measured the popup frame's VISIBLE rails from the art itself: L22 / T21 / R21 / B27 px.
+  The footer buttons had been ending 19px inside the bottom rail — the clipping the user saw.
+- Re-metered both windows against those numbers with >=10px breathing everywhere: title band
+  at +28, content margins 34px, rank folded onto the Omega line to buy vertical room, footer
+  pills end 16px above the rail zone, inventory search/kamas 27px clear, grid pitch 45.
+- Verified with 2x zoom crops of every margin-critical region (window bottoms, band corners,
+  doll, HUD plate) — all gaps confirmed visually after the render.

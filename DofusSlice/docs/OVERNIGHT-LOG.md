@@ -351,3 +351,16 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   glyphs (the theme's windowIcon PNGs are empty placeholders — bbox-verified); [+] spenders
   sit OUTSIDE the stat rows; help chips, page pip, gold kamas coin, wider XP strip; search
   and kamas rows tucked inside the frame rail.
+
+## Second fidelity pass on the demo (user's region notes)
+- Corners fixed: the ornament title strip distorts when squashed, so themed headers are now a
+  flat near-black band with a gold hairline (EwChrome.HeaderStrip too), and the X/help chips
+  sit INSIDE the frame corners.
+- Real margins: window content starts 28px inside the silver rail; tabs at native proportions
+  seated on a hairline; the left column re-metered so nothing collides.
+- The bottom HUD is flat near-black with a hairline top edge (not the brown float panel) and
+  gained the missing furniture: two chat lines + input + toolbar chips, pager arrows + page
+  number by the bar, eight glyph option chips, a framed minimap with a diamond grid, and the
+  full-width XP strip.
+- Typography: DejaVu Sans Bold (freely redistributable) baked to the ui_font atlas at 13px —
+  the rounded bold sans reads like Dofus 2's text. The demo draws everything with it.

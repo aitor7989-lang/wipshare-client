@@ -162,7 +162,8 @@ def main():
     ap.add_argument("--chars2", help="FreeCharactersAnimationsAssetPack directory")
     ap.add_argument("--tiny", help="Tiny RPG Character Asset Pack directory")
     ap.add_argument("--ui", help="Free Basic Pixel Art UI PNG directory")
-    ap.add_argument("--font", help="path to a pixel TTF (e.g. DungeonFont.ttf)")
+    ap.add_argument("--font", help="path to a TTF for the UI atlas")
+    ap.add_argument("--font-size", type=int, default=16, help="bake size in px (default 16)")
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
 
@@ -187,7 +188,7 @@ def main():
         bake_ui(a.ui)
     if a.font:
         print("font:")
-        bake_font(a.font)
+        bake_font(a.font, a.font_size)
 
 
 if __name__ == "__main__":

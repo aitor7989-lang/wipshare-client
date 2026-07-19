@@ -101,7 +101,14 @@ public sealed class EwChrome
     /// <summary>The header band gradient inside a panel's top (drawn as a plain strip).</summary>
     public void HeaderStrip(SpriteBatch sb, Rectangle r)
     {
-        if (T is { } th) { th.TitleStrip(sb, r); return; }
+        if (T != null)
+        {
+            // Themed: a flat near-black band with a gold hairline — the ornament strip art
+            // distorts when squashed below its native height, so it is never scaled here.
+            GradientV(sb, r, new Color(30, 28, 26), new Color(16, 15, 14));
+            sb.Draw(_pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), new Color(146, 116, 58));
+            return;
+        }
         GradientV(sb, r, Ew.HeaderTop, Ew.HeaderBottom);
         sb.Draw(_pixel, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.12f);
         sb.Draw(_pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Color.Black * 0.38f);

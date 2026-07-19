@@ -81,8 +81,21 @@ public sealed class Primitives
     }
 
     /// <summary>Draw the iso diamond so its centre sits at <paramref name="center"/>.</summary>
-    public void DiamondAt(SpriteBatch sb, Vector2 center, Color color) =>
+    /// <summary>Square-grid pixel mode: cell highlights render as squares instead of iso diamonds.
+    /// One switch here re-shapes every hover/range/placement highlight in the game.</summary>
+    public bool SquareMode { get; set; }
+    public int SquareSize { get; set; } = 40;
+
+    public void DiamondAt(SpriteBatch sb, Vector2 center, Color color)
+    {
+        if (SquareMode)
+        {
+            int s = SquareSize - 2; // a 1px inset so adjacent highlights read as separate cells
+            FillRect(sb, new Rectangle((int)(center.X - s / 2f), (int)(center.Y - s / 2f), s, s), color);
+            return;
+        }
         sb.Draw(Diamond, new Vector2(center.X - TileW / 2f, center.Y - TileH / 2f), color);
+    }
 
     public void DiscAt(SpriteBatch sb, Vector2 center, float radius, Color color)
     {

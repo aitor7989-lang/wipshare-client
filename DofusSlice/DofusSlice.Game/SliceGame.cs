@@ -70,6 +70,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Primitives _prim = null!;
     private PixelFont _font = null!;
     private IsoProjector _proj = null!;
+    private TileSet _tiles = null!;                   // the 8-bit tileset skin (local-only art)
+    private bool Pix => _tiles.Loaded;                // tileset present -> top-down pixel look
     private SpriteBank _sprites = null!;
     private Camera2D _camera = null!;
 
@@ -140,6 +142,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
+        _tiles = new TileSet(_sprites.Get("tileset"));
+        _prim.SquareMode = Pix;
+        _prim.SquareSize = TileSet.Cell;
 
         if (_loop)
         {
@@ -160,8 +165,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Build the iso projector, animator and clamped camera for a scene's map.</summary>
     private void SetupView(MapData map)
     {
-        _proj = IsoProjector.Centered(map.Width, map.Height, TileW, TileH,
-            new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
+        _proj = Pix
+            ? IsoProjector.TopDownCentered(map.Width, map.Height, TileSet.Cell,
+                new Vector2(ScreenW / 2f, (HudTop / 2f) - 8))
+            : IsoProjector.Centered(map.Width, map.Height, TileW, TileH,
+                new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
         _anim = new BattleAnimator(_proj);
 
         _camera = new Camera2D(ScreenW, HudTop);
@@ -325,7 +333,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var r = new Rectangle(236, 150, 800, 470);
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
         _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
-        _font.DrawCentered(_sb, "STASH & KIT — THE AVATAR", r.Center.X, r.Y + 14, 2, Palette.Text);
+        _font.DrawCentered(_sb, "STASH + KIT: THE AVATAR", r.Center.X, r.Y + 14, 2, Palette.Text);
         _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 44, 1, Palette.TextDim);
         _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 44, 1, Palette.TextDim);
 
@@ -935,6 +943,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>The flat ground: each cell's tile by kind (sprite, or a procedural fallback).</summary>
     private void DrawFloor()
     {
+        if (Pix)
+        {
+            var fam = PixFamNow();
+            DrawPixRing(_engine.Field.Width, _engine.Field.Height, fam);
+            foreach (var c in CellsByDepth()) DrawPixCell(c, _engine.Field.TileAt(c), fam);
+            return;
+        }
         foreach (var c in CellsByDepth())
         {
             var center = _proj.CellCenter(c);
@@ -1006,6 +1021,70 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.Line(_sb, bottom, left, 1f, color);
         _prim.Line(_sb, left, top, 1f, color);
     }
+
+    // ----- 8-bit tileset terrain (assets/tileset.png present) -------------------------
+
+    private enum PixFam { City, Yard, Crypt }
+
+    /// <summary>Which tile family the current scene wears: purple room, mossy yard, blue crypt.</summary>
+    private PixFam PixFamNow() => !_loop ? PixFam.Yard
+        : _scene == Scene.City ? PixFam.City
+        : _scene == Scene.Combat && _cryptRun ? PixFam.Crypt
+        : PixFam.Yard;
+
+    private static int PixHash(CellCoord c) => (c.X * 73856093 ^ c.Y * 19349663) & 0x7fffffff;
+
+    private void DrawPixCell(CellCoord c, TileKind kind, PixFam fam)
+    {
+        var center = _proj.CellCenter(c);
+        if (kind == TileKind.Void) { _tiles.Draw(_sb, Tid.Void, center); return; }
+        if (kind == TileKind.Water)
+        {
+            _tiles.Draw(_sb, Tid.Water, center);
+            if (PixHash(c) % 4 == 0) _tiles.Draw(_sb, Tid.WaterGlint, center, Color.White * 0.85f);
+            return;
+        }
+        var (baseTile, variants) = fam switch
+        {
+            PixFam.City => (Tid.CityFloor, Tid.CityVariants),
+            PixFam.Crypt => (Tid.CryptFloor, Tid.CryptVariants),
+            _ => (Tid.YardFloor, Tid.YardVariants),
+        };
+        int h = PixHash(c);
+        _tiles.Draw(_sb, h % 12 < 10 ? baseTile : variants[h % variants.Length], center);
+    }
+
+    /// <summary>A one-cell wall/void ring around the map so rooms read as enclosed (the pack's idiom).</summary>
+    private void DrawPixRing(int width, int height, PixFam fam)
+    {
+        int ring = fam switch
+        {
+            PixFam.City => Tid.CityWall,
+            PixFam.Crypt => Tid.CryptBorder,
+            _ => Tid.YardBorder,
+        };
+        for (int x = -1; x <= width; x++)
+        {
+            _tiles.Draw(_sb, ring, _proj.CellCenter(x, -1));
+            _tiles.Draw(_sb, ring, _proj.CellCenter(x, height));
+        }
+        for (int y = 0; y < height; y++)
+        {
+            _tiles.Draw(_sb, ring, _proj.CellCenter(-1, y));
+            _tiles.Draw(_sb, ring, _proj.CellCenter(width, y));
+        }
+    }
+
+    /// <summary>Sprite + idle-frame count for a unit archetype (pairs animate at 2 fps).</summary>
+    private static (int idx, int frames) PixSprite(string archetype) => archetype switch
+    {
+        "archer" => (Tid.FigA, 2), "bulwark" => (Tid.FigB, 2), "cannon" => (Tid.FigC, 2),
+        "barrow_husk" => (Tid.FigD, 2), "crypt_warden" => (Tid.FigB, 2),
+        "marrow_spitter" => (Tid.Crab, 1), "gravehound" => (Tid.Spider, 2),
+        "grave_mite" => (Tid.Mite, 1), "bone_piper" => (Tid.Bird, 2),
+        "sexton" => (Tid.FigD, 2),
+        _ => (Tid.FigA, 2),
+    };
 
     private void DrawFloorOverlays()
     {
@@ -1136,6 +1215,14 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawObstacleKind(Vector2 center, TileKind kind)
     {
+        if (Pix)
+        {
+            // A tombstone in the yard, a stone lump in the crypt, an evergreen for trees.
+            if (kind == TileKind.Tree) { _tiles.DrawFeet(_sb, Tid.Tree, center, null, 1.4f); return; }
+            if (PixFamNow() == PixFam.Crypt) { _tiles.DrawFeet(_sb, Tid.RockBlob, center, null, 1.2f); return; }
+            _tiles.DrawFeet(_sb, Tid.Tombstone, center, new Color(206, 206, 218), 1.2f);
+            return;
+        }
         if (kind == TileKind.Tree)
         {
             var tree = _sprites.Get("tile_tree");
@@ -1224,6 +1311,25 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         float baseY = center.Y;
         float s = f.Archetype == "sexton" ? 1.7f : 1f;      // the boss looms larger than its court
         int Sz(float v) => (int)MathF.Round(v * s);
+
+        if (Pix)
+        {
+            if (_placing && f == _selCrew)                  // highlight the crew member being placed
+                _prim.DiamondAt(_sb, center, new Color(245, 224, 120) * 0.35f);
+            // Team pad under the feet: the figures are black silhouettes (the pack's idiom), so
+            // the class/enemy colour lives in the ground pad and the HP bar above.
+            var pad = crew ? col : new Color(206, 66, 54);
+            _prim.DiscAt(_sb, center + new Vector2(0, TileSet.Cell * 0.30f), TileSet.Cell * 0.30f, pad * 0.8f);
+            var (idx, frames) = PixSprite(f.Archetype);
+            int frame = frames > 1 ? ((int)(_time * 2) + (f.Id.GetHashCode() & 1)) % frames : 0;
+            float sc = f.Archetype == "sexton" ? 1.8f : 1.2f;
+            var stint = flash > 0f ? Color.Lerp(Color.White, new Color(255, 90, 90), flash) : Color.White;
+            _tiles.DrawFeet(_sb, idx + frame, center, stint, sc);
+            float spriteTop = center.Y + TileSet.Cell / 2f - TileSet.Cell * sc;
+            DrawHpBar(f, center.X, spriteTop - 10);
+            DrawStatusPips(f, center.X, spriteTop - 2);
+            return;
+        }
 
         _prim.DiscAt(_sb, center + new Vector2(0, 2), Sz(12), Palette.Shadow);
         if (_placing && f == _selCrew)                      // highlight the crew member being placed
@@ -1610,6 +1716,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Draw a scene map's floor tiles (reuses the combat tile look, off a MapData).</summary>
     private void DrawPlaneTiles(MapData map)
     {
+        if (Pix)
+        {
+            var fam = PixFamNow();
+            DrawPixRing(map.Width, map.Height, fam);
+            foreach (var c in PlaneCellsByDepth(map)) DrawPixCell(c, map.Tile(c.X, c.Y), fam);
+            return;
+        }
         foreach (var c in PlaneCellsByDepth(map))
         {
             var center = _proj.CellCenter(c);
@@ -1638,9 +1751,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         DrawPlaneTiles(_cityMap);
         foreach (var cell in new[] { TitheCell, TempleCell, HireCell, LychgateCell })
             if (cell == _hover) _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CurrentRing * 0.30f);
-        DrawBuilding(TitheCell, new Color(214, 176, 84), "T", "TITHE-KEEPER");
-        DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER");
-        DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST");
+        DrawBuilding(TitheCell, new Color(214, 176, 84), "T", "TITHE-KEEPER", Tid.Chest);
+        DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER", Tid.Statue);
+        DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST", Tid.FigB);
         DrawLychgate(LychgateCell);
         _sb.End();
 
@@ -1653,9 +1766,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _sb.End();
     }
 
-    private void DrawBuilding(CellCoord c, Color col, string glyph, string label)
+    private void DrawBuilding(CellCoord c, Color col, string glyph, string label, int pixTile = -1)
     {
         var center = _proj.CellCenter(c);
+        if (Pix && pixTile >= 0)
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 10), 15, Palette.Shadow);
+            _tiles.DrawFeet(_sb, pixTile, center, null, 1.6f);
+            _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
+            return;
+        }
         var outline = new Color(16, 16, 20);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 14, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 34, 28, 36), outline);
@@ -1668,6 +1788,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawLychgate(CellCoord c)
     {
         var center = _proj.CellCenter(c);
+        if (Pix)
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 12), 18, Palette.Shadow);
+            _tiles.DrawFeet(_sb, Tid.Arch, center, new Color(226, 226, 238), 2.2f);
+            _tiles.Draw(_sb, Tid.Torch, center + new Vector2(-TileSet.Cell, -6), null, 1f);
+            _tiles.Draw(_sb, Tid.Torch, center + new Vector2(TileSet.Cell, -6), null, 1f);
+            _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 74, 1, new Color(200, 200, 220));
+            return;
+        }
         var col = new Color(120, 120, 140);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 8, 42), col);
@@ -1751,10 +1880,19 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawSurvivorToken(DiveSession.SurvivorOffer offer)
     {
         var center = _proj.CellCenter(SurvivorCell);
-        _prim.DiscAt(_sb, center + new Vector2(0, 2), 11, Palette.Shadow);
-        _prim.DiscAt(_sb, center, 9, new Color(16, 16, 20));
-        _prim.DiscAt(_sb, center, 7, new Color(120, 190, 150));
-        _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
+        if (Pix)
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 12), 12, new Color(120, 190, 150) * 0.55f);
+            _tiles.DrawFeet(_sb, Tid.FigA + (int)(_time * 2) % 2, center, null, 1f);
+            _tiles.Draw(_sb, Tid.Question, center + new Vector2(12, -TileSet.Cell), null, 0.8f);
+        }
+        else
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 2), 11, Palette.Shadow);
+            _prim.DiscAt(_sb, center, 9, new Color(16, 16, 20));
+            _prim.DiscAt(_sb, center, 7, new Color(120, 190, 150));
+            _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
+        }
         _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
             (int)center.X, (int)center.Y - 30, 1, new Color(150, 210, 170));
     }
@@ -1764,6 +1902,19 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var center = _proj.CellCenter(CryptCell);
         bool locked = (_campaign.Avatar?.Level ?? 1) < CryptLevel;
         var col = _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
+        if (Pix)
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 12), 18, Palette.Shadow);
+            _tiles.DrawFeet(_sb, Tid.Arch, center, col * 1.4f, 2.2f);
+            if (!_cryptCleared && !locked)
+                _tiles.Draw(_sb, Tid.Torch, center + new Vector2(0, -TileSet.Cell * 1.6f), null, 1f);
+            _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - 74, 1,
+                _cryptCleared ? Palette.TextDim : new Color(204, 172, 224));
+            string psub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
+            _font.DrawCentered(_sb, psub, (int)center.X, (int)center.Y - 62, 1,
+                locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
+            return;
+        }
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 36, 44), new Color(14, 14, 18));
         _prim.FillRect(_sb, new Rectangle((int)center.X - 15, (int)center.Y - 38, 30, 38), col * 0.55f);
@@ -1777,6 +1928,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawPartyToken(Vector2 center)
     {
+        if (Pix)
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 12), 14, Palette.Shadow);
+            int t = (int)(_time * 2);
+            _tiles.DrawFeet(_sb, Tid.FigA + t % 2, center + new Vector2(-11, 0), null, 1f);
+            _tiles.DrawFeet(_sb, Tid.FigB + (t + 1) % 2, center + new Vector2(11, 2), null, 1f);
+            _tiles.DrawFeet(_sb, Tid.FigC + t % 2, center + new Vector2(0, -7), null, 1f);
+            _font.DrawCentered(_sb, "CREW", (int)center.X, (int)center.Y - 44, 1, Palette.Text);
+            return;
+        }
         var col = new Color(120, 190, 120);
         var outline = new Color(16, 16, 20);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 12, Palette.Shadow);
@@ -1798,12 +1959,27 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             : size == 3 ? new Color(212, 150, 80) : new Color(200, 190, 110);
 
         if (c == _hover && afford) _prim.DiamondAt(_sb, center, Palette.CurrentRing * 0.30f);
-        _prim.DiscAt(_sb, center + new Vector2(0, 2), 13, Palette.Shadow);
-        for (int i = 0; i < Math.Min(size, 4); i++)
+        if (Pix)
         {
-            var o = new Vector2((i - 1.5f) * 7, -6 - (i % 2) * 5);
-            _prim.DiscAt(_sb, center + o, 7, new Color(16, 16, 20));
-            _prim.DiscAt(_sb, center + o, 5, col);
+            _prim.DiscAt(_sb, center + new Vector2(0, 12), 13, Palette.Shadow);
+            var (idx, fr) = PixSprite(p.Def.Comp[0]);
+            int n = Math.Min(size, 3);
+            var mobTint = afford ? Color.White : new Color(120, 120, 128);
+            for (int i = 0; i < n; i++)
+            {
+                var o = new Vector2((i - (n - 1) / 2f) * 12, (i % 2) * 6 - 2);
+                _tiles.DrawFeet(_sb, idx + (fr > 1 ? (i + (int)(_time * 2)) % fr : 0), center + o, mobTint, 1f);
+            }
+        }
+        else
+        {
+            _prim.DiscAt(_sb, center + new Vector2(0, 2), 13, Palette.Shadow);
+            for (int i = 0; i < Math.Min(size, 4); i++)
+            {
+                var o = new Vector2((i - 1.5f) * 7, -6 - (i % 2) * 5);
+                _prim.DiscAt(_sb, center + o, 7, new Color(16, 16, 20));
+                _prim.DiscAt(_sb, center + o, 5, col);
+            }
         }
         _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - 30, 1,
             afford ? Palette.Text : Palette.TextDim);

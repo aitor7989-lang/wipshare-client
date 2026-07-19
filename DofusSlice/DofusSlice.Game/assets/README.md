@@ -34,3 +34,11 @@ as one `iop.png` and grow toward a full directional set over time.
 
 > Provide your own art, or art you are licensed to use. This project ships only
 > procedural placeholders and never redistributes third-party assets.
+
+## tileset.png — the 8-bit skin
+
+Drop an 8×8-tile, 8-column tileset sheet here as `tileset.png` (e.g. Scut's "7DRL Tilemaps"
+pack) and the whole game switches to a top-down 8-bit look: tiled City / Graveyard / Crypt
+scenes, sprite crews and mobs, tombstones, the arch Lychgate. Sprite transparency is keyed on
+pure magenta (#FF00FF). Without the file the game keeps its procedural iso look — the repo
+always runs. Third-party sheets are **local only, never committed** (this folder is gitignored).

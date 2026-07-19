@@ -364,3 +364,11 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   full-width XP strip.
 - Typography: DejaVu Sans Bold (freely redistributable) baked to the ui_font atlas at 13px —
   the rounded bold sans reads like Dofus 2's text. The demo draws everything with it.
+
+## Demo pass 3 (user notes)
+- The heart, PA and PM now use the theme's OWN sprites (icon_hp_full / icon_ap_full /
+  icon_mp_full) instead of the Emberwick gems.
+- Header bands moved fully inside the silver rails — the frame's border is never covered.
+- The HUD is flat black; the chat corner and the minimap are deleted per the user's call;
+  the yellow LEVEL strip runs flush along the very bottom, full width.
+- The scene backdrop is black like the original's.

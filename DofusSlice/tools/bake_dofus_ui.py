@@ -54,6 +54,9 @@ PIECES = {
     "slot40_sel":    ("common/slot_inventory_selected.png",    (7, 7, 7, 7)),
     "spell_bg":      ("texture/hud/background_spell.png",      (7, 7, 7, 7)),
     # hud extras
+    "hud_hp":        ("texture/hud/icon_hp_full.png",          None),
+    "hud_ap":        ("texture/hud/icon_ap_full.png",          None),
+    "hud_mp":        ("texture/hud/icon_mp_full.png",          None),
     "hp_round":      ("texture/hud/background_round_hp.png",   None),
     "ap_mp":         ("texture/hud/background_ap_mp.png",      None),
     "chat_input":    ("texture/hud/chat_input_background.png", (8, 8, 8, 8)),

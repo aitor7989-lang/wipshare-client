@@ -56,11 +56,13 @@ public sealed partial class SliceGame
 
         var mp = new Point(_mouse.X, _mouse.Y);
 
-        // A hint of "game" behind the windows so the translucent bodies have depth to show.
+        // The original's backdrop is BLACK; a faint hint of ground gives the translucent
+        // bodies some depth without changing the read.
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(6, 6, 7));
         for (int i = 0; i < 10; i++)
             for (int j = 0; j < 6; j++)
                 _prim.DiamondAt(_sb, new Vector2(120 + i * 128, 80 + j * 128),
-                    new Color(155, 143, 105) * (0.08f + ((i + j) % 2) * 0.05f));
+                    new Color(155, 143, 105) * (0.05f + ((i + j) % 2) * 0.03f));
 
         DrawDemoCharacterSheet(new Rectangle(20, 30, 350, 588), mp);
         DrawDemoInventory(new Rectangle(382, 30, 648, 588), mp);
@@ -73,21 +75,21 @@ public sealed partial class SliceGame
 
     // ----- window helpers ---------------------------------------------------------------
 
-    /// <summary>Clean header: flat dark band with a gold hairline (never the squashed strip),
-    /// title in the Dofus sans, X and help chips INSIDE the frame corners.</summary>
+    /// <summary>Clean header: flat dark band with a gold hairline, seated BELOW the silver
+    /// rail so the frame's border stays fully visible; X and help chips live on the band.</summary>
     private void DemoTitle(Rectangle w, string title, Point mp, bool centered, bool help = false)
     {
-        var band = new Rectangle(w.X + 14, w.Y + 12, w.Width - 28, 24);
+        var band = new Rectangle(w.X + 22, w.Y + 20, w.Width - 44, 24);
         _ew.GradientV(_sb, band, new Color(30, 28, 26), new Color(16, 15, 14));
         _prim.FillRect(_sb, new Rectangle(band.X, band.Bottom - 1, band.Width, 1), new Color(146, 116, 58));
         if (centered) DTC(title, w.Center.X, band.Y + 5, 1, Color.White);
         else DT(title, band.X + 10, band.Y + 5, 1, Color.White);
-        int cx = band.Right - 28;
-        var close = new Rectangle(cx, band.Y + 1, 24, 21);
+        int cx = band.Right - 26;
+        var close = new Rectangle(cx, band.Y + 2, 22, 20);
         _dof.Slice(_sb, close.Contains(mp) ? "btn_close_over" : "btn_close", close);
         if (help)
         {
-            var h = new Rectangle(cx - 26, band.Y + 1, 21, 21);
+            var h = new Rectangle(cx - 24, band.Y + 2, 20, 20);
             _dof.Draw(_sb, h.Contains(mp) ? "help_over" : "help", h);
         }
     }
@@ -123,7 +125,7 @@ public sealed partial class SliceGame
 
         // Tabs at native-ish proportions, seated on a hairline.
         var tabs = new[] { "Resume", "Details" };
-        int tabY = a.Y + 44;
+        int tabY = a.Y + 50;
         for (int i = 0; i < 2; i++)
         {
             var t = new Rectangle(L + i * 92, tabY, 88, 34);
@@ -137,28 +139,28 @@ public sealed partial class SliceGame
         _prim.FillRect(_sb, new Rectangle(L, tabY + 34, W, 1), new Color(146, 116, 58) * 0.6f);
 
         // Portrait + identity.
-        var port = new Rectangle(L, a.Y + 92, 84, 84);
+        var port = new Rectangle(L, a.Y + 96, 84, 84);
         _dof.Slot(_sb, port, hover: port.Contains(mp));
         var sheet = _sprites.GetSheet("hero", "idle", "se");
         if (sheet != null)
             SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X, port.Bottom - 8), Color.White, 66f,
                 (int)(_time * 6) % sheet.FrameCount);
-        _dof.Draw(_sb, "help", new Rectangle(L - 8, a.Y + 86, 18, 18));
-        DT("Aspette", L + 98, a.Y + 96, 2, WinInk);
-        DT("Omega 191", L + 98, a.Y + 124, 1, WinInkDim);
-        DT("15 080 points", L + 98, a.Y + 142, 1, WinGold);
-        DT("Beta-Major", L, a.Y + 184, 1, WinInkDim);
+        _dof.Draw(_sb, "help", new Rectangle(L - 8, a.Y + 90, 18, 18));
+        DT("Aspette", L + 98, a.Y + 100, 2, WinInk);
+        DT("Omega 191", L + 98, a.Y + 128, 1, WinInkDim);
+        DT("15 080 points", L + 98, a.Y + 146, 1, WinGold);
+        DT("Beta-Major", L, a.Y + 186, 1, WinInkDim);
 
         // Experience / Energie candy bars.
-        DT("Experience", L, a.Y + 206, 1, WinInk);
-        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 206, W - 96, 12), 0.62f, "gauge_timer");
-        DT("Energie", L, a.Y + 224, 1, WinInk);
-        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 224, W - 96, 12), 0.55f, "gauge_timer");
+        DT("Experience", L, a.Y + 208, 1, WinInk);
+        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 208, W - 96, 12), 0.62f, "gauge_timer");
+        DT("Energie", L, a.Y + 226, 1, WinInk);
+        _dof.Gauge(_sb, new Rectangle(L + 96, a.Y + 226, W - 96, 12), 0.55f, "gauge_timer");
 
         // The three vital rows.
-        DemoRow(new Rectangle(L, a.Y + 246, W, 26), "vit", "Points de vie (PV)", "2 330", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 276, W, 26), "ap", "Points d'action (PA)", "7", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 306, W, 26), "mp", "Points de mouvement (PM)", "3", mp, big: true);
+        DemoRow(new Rectangle(L, a.Y + 248, W, 26), "vit", "Points de vie (PV)", "2 330", mp, big: true);
+        DemoRow(new Rectangle(L, a.Y + 278, W, 26), "ap", "Points d'action (PA)", "7", mp, big: true);
+        DemoRow(new Rectangle(L, a.Y + 308, W, 26), "mp", "Points de mouvement (PM)", "3", mp, big: true);
 
         // The six characteristics; the [+] spenders sit outside the rows like the original.
         (string icon, string label, string val)[] stats =
@@ -167,11 +169,11 @@ public sealed partial class SliceGame
             ("str", "Force", "166"), ("int", "Intelligence", "167"), ("wis", "Sagesse", "209"),
         };
         for (int i = 0; i < stats.Length; i++)
-            DemoRow(new Rectangle(L, a.Y + 342 + i * 29, W - 32, 25),
+            DemoRow(new Rectangle(L, a.Y + 344 + i * 29, W - 32, 25),
                 stats[i].icon, stats[i].label, stats[i].val, mp, plus: true);
 
         // Points to spend + the two footer pills.
-        var pts = new Rectangle(L, a.Y + 516, 216, 22);
+        var pts = new Rectangle(L, a.Y + 518, 216, 22);
         _dof.Panel(_sb, pts, light: true);
         DT("Points a repartir :   995", pts.X + 10, pts.Y + 4, 1, Color.White);
         var refresh = new Rectangle(pts.Right + 10, pts.Y, 22, 22);
@@ -315,39 +317,33 @@ public sealed partial class SliceGame
 
     private void DrawDemoHud(Point mp)
     {
-        // The 1.29 bar is flat near-black with a hairline top edge — not the brown float panel.
-        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, ScreenH - 628), new Color(12, 12, 13));
+        // The 1.29 bar: flat black with a hairline top edge. No chat, no minimap (user's call).
+        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, ScreenH - 628), new Color(8, 8, 9));
         _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, 1), new Color(70, 66, 60));
 
-        // Chat corner: two lines, the input, and the toolbar chips.
-        DT("Ankama : bienvenue dans le Monde des Douze !", 16, 636, 1, new Color(120, 170, 120));
-        DT("Aspette : pret pour le donjon ?", 16, 652, 1, new Color(170, 170, 170));
-        _dof.Slice(_sb, "chat_input", new Rectangle(12, 670, 300, 20));
-        DT("...", 20, 673, 1, new Color(150, 150, 150));
-        for (int i = 0; i < 4; i++)
+        // Vitals: the theme's OWN sprites — the winged heart with the PA star and PM leaf.
+        var heartC = new Point(430, 684);
+        if (_dof.Texture("hud_hp") != null)
         {
-            var z = new Rectangle(12 + i * 22, 696, 18, 18);
-            _dof.Button(_sb, z, hover: z.Contains(mp));
-            DTC(i switch { 0 => "+", 1 => "-", 2 => "e", _ => "k" }, z.Center.X, z.Y + 2, 1, new Color(46, 26, 10));
+            _dof.Draw(_sb, "hud_hp", new Rectangle(heartC.X - 50, heartC.Y - 42, 100, 84));
+            DTC("2330", heartC.X, heartC.Y - 22, 1, Color.White);
+            DTC("2330", heartC.X, heartC.Y - 4, 1, Color.White * 0.85f);
+            _dof.Draw(_sb, "hud_ap", new Rectangle(heartC.X - 78, heartC.Y + 8, 50, 48));
+            DTC("7", heartC.X - 53, heartC.Y + 22, 1, Color.White);
+            _dof.Draw(_sb, "hud_mp", new Rectangle(heartC.X + 28, heartC.Y + 8, 48, 48));
+            DTC("3", heartC.X + 52, heartC.Y + 22, 1, Color.White);
         }
-
-        // Vitals: the heart on its plate with AP / MP satellites on the ap_mp backdrop.
-        var heartC = new Vector2(430, 688);
-        if (_dof.Texture("ap_mp") != null)
-            _dof.Draw(_sb, "ap_mp", new Rectangle((int)heartC.X - 66, (int)heartC.Y + 8, 132, 50));
-        _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 92, new Color(222, 49, 60), new Color(124, 16, 24), 1f);
-        DTC("2330", (int)heartC.X, (int)heartC.Y - 22, 1, Color.White);
-        DTC("2330", (int)heartC.X, (int)heartC.Y - 4, 1, Color.White * 0.8f);
-        _ew.Badge(_sb, EwChrome.Gem.Star, heartC + new Vector2(-56, 28), 40, Ew.Ap, Ew.ApDeep);
-        DTC("7", (int)heartC.X - 56, (int)heartC.Y + 20, 1, Color.White);
-        _ew.Badge(_sb, EwChrome.Gem.Diamond, heartC + new Vector2(56, 28), 38, Ew.Mp, Ew.MpDeep);
-        DTC("3", (int)heartC.X + 56, (int)heartC.Y + 20, 1, Color.White);
+        else
+        {
+            _ew.Badge(_sb, EwChrome.Gem.Heart, heartC.ToVector2(), 92, new Color(222, 49, 60), new Color(124, 16, 24), 1f);
+            DTC("2330", heartC.X, heartC.Y - 12, 1, Color.White);
+        }
 
         // The consumable/spell bar: two rows, stack counters, pager arrows + page number.
         string[] counts = { "1958", "1949", "", "", "37", "", "", "14", "14", "21", "", "", "3", "" };
         for (int i = 0; i < 14; i++)
         {
-            var s = new Rectangle(520 + i % 7 * 46, 636 + i / 7 * 46, 42, 42);
+            var s = new Rectangle(540 + i % 7 * 46, 636 + i / 7 * 46, 42, 42);
             _dof.Slot(_sb, s, hover: s.Contains(mp));
             if (i is not (2 or 3 or 5))
                 _dof.SpellIcon(_sb, DemoSpellKeys[(i * 3 + 1) % DemoSpellKeys.Length],
@@ -355,7 +351,7 @@ public sealed partial class SliceGame
             if (counts[i].Length > 0)
                 DT(counts[i], s.X + 2, s.Y + 1, 1, Color.White);
         }
-        int px = 520 + 7 * 46 + 6;
+        int px = 540 + 7 * 46 + 6;
         var up = new Rectangle(px, 640, 20, 16);
         var dn = new Rectangle(px, 668, 20, 16);
         _dof.Button(_sb, up, hover: up.Contains(mp));
@@ -364,27 +360,17 @@ public sealed partial class SliceGame
         DTC("v", dn.Center.X, dn.Y + 1, 1, new Color(46, 26, 10));
         DTC("1", px + 10, 655, 1, Color.White);
 
-        // Right cluster: two rows of round option chips with glyphs, then the minimap.
+        // Right cluster: the two rows of round option chips (the minimap is gone).
         string[] glyphs = { "icon_cat_equip", "icon_cat_useful", "icon_cat_quest", "icon_gear",
                             "icon_cat_res", "icon_cat_all", "help", "icon_gear" };
         for (int i = 0; i < 8; i++)
         {
-            var o = new Rectangle(990 + i % 4 * 26, 640 + i / 4 * 26, 22, 22);
+            var o = new Rectangle(1128 + i % 4 * 28, 648 + i / 4 * 28, 24, 24);
             _dof.Slice(_sb, "scroll_thumb", o);
-            _dof.Draw(_sb, glyphs[i], new Rectangle(o.X + 4, o.Y + 4, 14, 14), new Color(46, 26, 10));
+            _dof.Draw(_sb, glyphs[i], new Rectangle(o.X + 5, o.Y + 5, 14, 14), new Color(46, 26, 10));
         }
-        var map = new Rectangle(1110, 634, 158, 100);
-        _dof.Panel(_sb, map);
-        for (int my = 0; my < 3; my++)
-            for (int mxx = 0; mxx < 5; mxx++)
-                _prim.DiamondAt(_sb, new Vector2(map.X + 28 + mxx * 26 + my % 2 * 13, map.Y + 30 + my * 16),
-                    new Color(155, 143, 105) * (0.35f + (mxx + my) % 3 * 0.12f));
-        _prim.StrokeRect(_sb, new Rectangle(map.X + 8, map.Y + 8, map.Width - 16, map.Height - 16), 1,
-            new Color(70, 66, 60));
-        _prim.DiscAt(_sb, new Vector2(map.Right - 20, map.Y + 18), 6, new Color(226, 118, 40));
-        DTC(">", map.Right - 20, map.Y + 12, 1, Color.White);
 
-        // The long XP strip along the very bottom, full width like the original.
-        _dof.Gauge(_sb, new Rectangle(16, 744, ScreenW - 32, 10), 0.78f, "gauge_timer");
+        // The LEVEL bar: the yellow strip flush along the very bottom, full width.
+        _dof.Gauge(_sb, new Rectangle(0, ScreenH - 10, ScreenW, 10), 0.78f, "gauge_timer");
     }
 }

@@ -1461,9 +1461,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_engine.Outcome != FightOutcome.Ongoing) return;
 
         // The AI's visible thinking: turn ring, movement path, spell range + target, drawn
-        // under the units exactly when the animator replays that beat.
+        // under the units exactly when the animator replays that beat. Range shading lands
+        // on real ground only — never on the void sea beyond a generated island's edge.
         foreach (var (cell, color) in _anim.TelegraphCells)
-            if (_engine.Field.InBounds(cell))
+            if (_engine.Field.InBounds(cell) && _engine.Field.TileAt(cell) != TileKind.Void)
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), color);
 
         // Always mark the active fighter's cell so the turn reads on the board.

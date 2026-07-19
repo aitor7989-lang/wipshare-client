@@ -1683,6 +1683,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     DrawCellLabel(min == max ? $"{min}" : $"{min}-{max}", _hover,
                         Mono.On ? Mono.Ink : new Color(255, 210, 120));
             }
+            else if (_engine.Field.InBounds(_hover) && _hover.Y >= 0
+                && _engine.Field.TileAt(_hover) != TileKind.Void)
+            {
+                // Armed but pointing somewhere the spell can't go: a red X on the cell.
+                var xc = _proj.CellCenter(_hover);
+                var xCol = Mono.On ? Mono.Danger * 0.85f : Palette.TextDim;
+                _prim.Line(_sb, xc + new Vector2(-10, -6), xc + new Vector2(10, 6), 3f, xCol);
+                _prim.Line(_sb, xc + new Vector2(-10, 6), xc + new Vector2(10, -6), 3f, xCol);
+            }
         }
 
         if (_engine.Field.InBounds(_hover) && _hover.Y >= 0)
@@ -2251,7 +2260,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _font.Draw(_sb,
                 piloting ? $"YOUR TURN — {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S"
                 : $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
-                piloting ? Palette.Text
+                piloting ? (_turnClock <= 10f ? (Mono.On ? Mono.Danger : Palette.EnemyColor) : Palette.Text)
                 : _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
         }
         // Only advertise keys that work here: R/B restart or swap the STANDALONE fight and would
@@ -2418,7 +2427,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
             _font.DrawCentered(_sb, $"END TURN  ·  {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S",
                 TitheEndTurn.Center.X, TitheEndTurn.Y + 12, 1,
-                Mono.On ? Mono.ButtonInk(etHov) : Color.White);
+                Mono.On ? (_turnClock <= 10f && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
             _font.Draw(_sb, "CLICK: MOVE   ·   SPACE: AUTO   ·   ENTER: END",
                 934, TitheEndTurn.Y - 18, 1, Ew.InkMuted);
         }

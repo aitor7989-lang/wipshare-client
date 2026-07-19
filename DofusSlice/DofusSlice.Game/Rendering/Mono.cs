@@ -26,6 +26,14 @@ public static class Mono
     public static readonly Color FloorAlt = new(16, 16, 15);
     public static readonly Color Seam = new(46, 46, 44);
 
+    // FUNCTIONAL color (designer's call): board information may speak green/blue —
+    // walk = green, cast = blue, heal = green, AP = blue — while art stays ink-on-black.
+    public static readonly Color Walk = new(110, 180, 105);
+    public static readonly Color Cast = new(110, 170, 240);
+    public static readonly Color Heal = new(96, 190, 96);
+    public static readonly Color ApInk = new(96, 150, 220);
+    public static readonly Color MpInk = new(110, 180, 105);
+
     /// <summary>A 1-bit frame: near-black fill, crisp 1px border.</summary>
     public static void Frame(SpriteBatch sb, Primitives prim, Rectangle r,
         bool emphasis = false, float fillAlpha = 0.94f)

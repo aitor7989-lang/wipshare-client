@@ -513,3 +513,17 @@ companions with their own turns. Decisions locked with the designer: pure-AI com
   dmg confirmed in the log), SPACE hand-off mid-turn, timer auto-end, campaign dive
   piloting on a generated island. (The flaky-looking "turn skips" were the harness
   dropping keys; the game-side trace exonerated the dispatcher.)
+
+## v8.1: the UX pass — function speaks color
+Designer's call: the 1-bit rule bends for GAME INFORMATION. Art and chrome stay
+ink-on-black; the board's language gets green/blue/red back.
+- Move range is muted GREEN, castable cells muted BLUE, AoE red, reach dim grey.
+- Every action floats its price at replay time: -N AP in blue over the caster, -N MP in
+  green over the walker (new CostFloat beat in the animator), damage -N in red on the
+  victim, heals +N in green.
+- END TURN's clock (and the YOUR TURN header) turn red under 10 seconds.
+- Arming a spell and pointing somewhere illegal draws a red X on the cell.
+- The avatar's turn banner now says YOUR TURN and lingers longer than enemy name plates.
+- Also shipped: docs/ROADMAP-LEADER.md — the Leader Update plan (avatar-only progression,
+  split loot, character/spell panels, the bag + in-combat draughts, drop tables + the
+  Adventurer set with 3/5/7 bonuses, and Blood Price, the face-to-face lifesteal).

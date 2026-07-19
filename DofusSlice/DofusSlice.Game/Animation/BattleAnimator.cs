@@ -78,6 +78,9 @@ public sealed class BattleAnimator
             case FighterMoved m:
                 _queue.Enqueue(new PathTelegraph(this, m.Path.ToArray(), 0.4f));
                 _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.15f, this));
+                if (m.MpSpent > 0)   // the walk's price floats over the walker (UX pass)
+                    _queue.Enqueue(new CostFloat(this, m.Fighter.Id, $"-{m.MpSpent} MP",
+                        DofusSlice.Game.Rendering.Mono.MpInk));
                 break;
             case FighterPushed p:
                 _queue.Enqueue(new MoveAnim(p.Fighter.Id, ToPoints(p.Path), 0.07f, this, "zip"));
@@ -88,6 +91,9 @@ public sealed class BattleAnimator
                 break;
             case SpellCast c:
                 _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target, 0.85f));
+                if (c.Spell.ApCost > 0)   // the cast's price floats over the caster (UX pass)
+                    _queue.Enqueue(new CostFloat(this, c.Caster.Id, $"-{c.Spell.ApCost} AP",
+                        DofusSlice.Game.Rendering.Mono.ApInk));
                 _queue.Enqueue(new CastAnim(c.Caster.Id, _proj.CellCenter(c.Target), c.Spell, this));
                 // Anything cast from range visibly TRAVELS: an arrow-streak flies caster→target
                 // before the hit lands (melee-range casts skip it — nothing to see).
@@ -118,8 +124,11 @@ public sealed class BattleAnimator
                 Sfx?.Invoke("summon", 0.7f);
                 break;
             case TurnStarted ts:
-                _queue.Enqueue(new TurnTelegraph(this, ts.Fighter.Id, ts.Fighter.Name,
-                    ts.Fighter.Team == Team.Player, 0.55f));
+                // The avatar's banner says what matters: it is YOUR turn (UX pass).
+                bool yours = ts.Fighter is { PlayerControlled: true, IsMercenary: false, IsSummon: false };
+                _queue.Enqueue(new TurnTelegraph(this, ts.Fighter.Id,
+                    yours ? "YOUR TURN" : ts.Fighter.Name,
+                    ts.Fighter.Team == Team.Player, yours ? 0.9f : 0.55f));
                 break;
         }
     }
@@ -453,8 +462,10 @@ internal sealed class HitAnim : IAnim
                 heal ? 0.7f : 0.85f);
             string text = (heal ? "+" : "-") + Math.Abs(_amount) + (_crit ? "!" : "");
             // 1.29 floats the number in the element's colour; crits go gold, heals green.
+            // UX pass (designer's call): function speaks color — heals GREEN (+20),
+            // damage RED (-20), crits bigger and red. Art stays 1-bit; numbers don't.
             var color = DofusSlice.Game.Rendering.Mono.On
-                ? (_crit ? DofusSlice.Game.Rendering.Mono.Danger : DofusSlice.Game.Rendering.Mono.Ink)
+                ? (heal ? DofusSlice.Game.Rendering.Mono.Heal : DofusSlice.Game.Rendering.Mono.Danger)
                 : heal ? new Color(120, 220, 130)
                 : _crit ? new Color(255, 210, 90)
                 : DofusSlice.Game.Rendering.EwChrome.ElementColor(_element);
@@ -734,6 +745,31 @@ internal sealed class TurnTelegraph : IAnim
 }
 
 /// <summary>The 1.29 movement read: the chosen path glows green before the walk plays.</summary>
+/// <summary>A zero-duration queued beat that floats a resource cost ("-4 AP", "-3 MP")
+/// over a unit exactly when its action replays — not when the engine resolved it.</summary>
+internal sealed class CostFloat : IAnim
+{
+    private readonly BattleAnimator _a;
+    private readonly string _id, _text;
+    private readonly Color _color;
+    private bool _fired;
+
+    public CostFloat(BattleAnimator a, string id, string text, Color color)
+    { _a = a; _id = id; _text = text; _color = color; }
+
+    public bool Done => _fired;
+
+    public void Update(float dt)
+    {
+        if (_fired) return;
+        _fired = true;
+        var pos = _a.Projector.CellCenter(_a.DisplayCellOf(_id));
+        _a.AddOverlay(new FloatingText(pos + new Vector2(18, -46), _text, _color, 2));
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
 internal sealed class PathTelegraph : IAnim
 {
     private readonly BattleAnimator _a;

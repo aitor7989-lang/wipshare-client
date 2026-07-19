@@ -371,14 +371,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, KitY + 76, 20, 18);
     private static Rectangle AutoSpendRect => new(896, KitY + 44, 124, 18); // on the POINTS line, clear of the WIS row
 
-    private CampaignUnit? EquipShownUnit =>
-        _campaign.Crew.Count == 0 ? null : _campaign.Crew[Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1)];
+    // The Leader Update: the kit screen manages ONLY the avatar. Companions are their own
+    // people — they appear as a read-only roster, never as an editable tab.
+    private CampaignUnit? EquipShownUnit => _campaign.Avatar;
 
     private void ClickEquipPanel(Point m)
     {
-        for (int i = 0; i < _campaign.Crew.Count; i++)
-            if (EquipTabRect(i).Contains(m)) { _equipUnit = i; _sfx.Play("click"); return; }
-
         var u = EquipShownUnit;
         if (u == null) return;
 
@@ -417,22 +415,29 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var accent = skin ? WinGold : (Mono.On ? Mono.Ink : new Color(240, 208, 120));
         var mp = new Point(_mouse.X, _mouse.Y);
 
-        // Crew tabs: the kit screen manages every unit's points, gear stays avatar-only.
-        for (int i = 0; i < _campaign.Crew.Count; i++)
+        // The Leader Update: this screen is YOURS alone. One title plate, no crew tabs —
+        // companions ride along as a read-only roster at the bottom of the window.
+        var tt = EquipTabRect(0);
+        if (Mono.On) Mono.Button(_sb, _prim, tt, hover: true);
+        else if (skin) _dof.Tab(_sb, new Rectangle(tt.X, tt.Y - 8, tt.Width, tt.Height + 8), true, false);
+        else { _prim.FillRect(_sb, tt, Palette.HudPanelLight); _prim.StrokeRect(_sb, tt, 1, Palette.CurrentRing); }
+        _font.DrawCentered(_sb, $"{Trunc(a.Name.ToUpperInvariant(), 10)} — LEADER", tt.Center.X, tt.Y + 7, 1,
+            Mono.On ? Mono.ButtonInk(true) : skin ? Color.White : Palette.Text);
+
+        int cy0 = r.Bottom - 118;
+        var mercs = _campaign.Crew.Where(c => !c.IsAvatar).ToList();
+        if (mercs.Count > 0)
         {
-            var t = EquipTabRect(i);
-            bool sel = i == Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1);
-            if (Mono.On) // 1-bit: the selected tab INVERTS, like every other active control
-                Mono.Button(_sb, _prim, t, hover: sel);
-            else if (skin) _dof.Tab(_sb, new Rectangle(t.X, t.Y - 8, t.Width, t.Height + 8), sel, t.Contains(mp));
-            else
+            _font.Draw(_sb, "COMPANIONS  (they manage themselves)", 260, cy0, 1, inkDim);
+            for (int i = 0; i < mercs.Count; i++)
             {
-                _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
-                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
+                var c = mercs[i];
+                string kitLine = string.Join(" / ", TitheContent.UnitSkillKeys(c).Take(3)
+                    .Select(k => TitheContent.UnitSkill(c, k).Name.ToUpperInvariant()));
+                _font.Draw(_sb, $"{c.Name.ToUpperInvariant()}  L{c.Level}  ·  {kitLine}"
+                    + $"  ·  {TitheContent.StatsOf(c).MaxHp} HP{(c.Wounded ? "  ·  WOUNDED" : "")}",
+                    272, cy0 + 14 + i * 14, 1, c.Wounded ? (Mono.On ? Mono.Danger : inkDim) : ink);
             }
-            _font.DrawCentered(_sb, Trunc(_campaign.Crew[i].Name.ToUpperInvariant(), 12), t.Center.X, t.Y + 7, 1,
-                Mono.On ? Mono.ButtonInk(sel)
-                : skin ? (sel ? Color.White : ink) : (sel ? Palette.Text : Palette.TextDim));
         }
 
         // Level + XP bar + banked points.
@@ -3182,9 +3187,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         int y = panel.Y + 60;
         if (win)
         {
-            _font.DrawCentered(_sb, $"+{r.Gold} GOLD      +{r.Xp} XP POOL", panel.Center.X, y, 2, ink); y += 34;
+            _font.DrawCentered(_sb, r.Shares.Count > 1
+                    ? $"+{r.Gold} GOLD — SPLIT {r.Shares.Count} WAYS      +{r.Xp} XP POOL"
+                    : $"+{r.Gold} GOLD      +{r.Xp} XP POOL",
+                panel.Center.X, y, 2, ink); y += 34;
 
-            // Per-unit XP shares with live XP bars — the Dofus end-of-fight window.
+            // Per-unit rows, the Dofus end-of-fight window: XP won, their gold cut, level bar.
             var res = _dive?.LastResolution ?? _aftermath;
             if (res != null)
                 foreach (var ur in res.Units)
@@ -3195,6 +3203,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                         panel.X + 170, y, 1,
                         ur.Died ? (Mono.On ? Mono.Danger : new Color(184, 70, 60))
                         : ur.Wounded ? (Mono.On ? Mono.Danger : new Color(190, 140, 40)) : inkDim);
+                    var cut = r.Shares.FirstOrDefault(s => s.Name == ur.Name);
+                    if (cut.Gold > 0)
+                        _font.Draw(_sb, $"+{cut.Gold}G", panel.X + 244, y, 1, ink);
                     if (cu != null)
                     {
                         int need = CampaignUnit.XpForNextLevel(cu.Level);

@@ -24,7 +24,11 @@ public sealed class DiveSession
 
     public sealed record FightReport(string PackId, FightOutcome Outcome, int Gold, int Xp,
                                      IReadOnlyList<string> Drops, IReadOnlyList<string> Gear,
-                                     IReadOnlyList<string> Lost, IReadOnlyList<string> Wounded);
+                                     IReadOnlyList<string> Lost, IReadOnlyList<string> Wounded)
+    {
+        /// <summary>The party's pay: each living member's gold cut (the leader banks only theirs).</summary>
+        public IReadOnlyList<(string Name, int Gold)> Shares { get; init; } = Array.Empty<(string, int)>();
+    }
 
     public sealed record DiveReport(int PacksCleared, int Gold, int Xp, IReadOnlyList<string> Essences,
                                     IReadOnlyList<string> Gear, IReadOnlyList<string> Lost,
@@ -209,8 +213,18 @@ public sealed class DiveSession
             pack.Cleared = true;
             int gold = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
                 .Sum(TitheContent.MobGoldOf); // grade-aware: deep packs pay their risk premium
-            _campaign.Gold += gold;
-            GoldGained += gold;
+
+            // The party works for SHARES: gold splits evenly across living members; the
+            // mercs' cuts leave with them (their pay), the leader banks only their own —
+            // plus the remainder, the leader holds the purse. A dead member's share is lost.
+            var living = res.Units.Where(u => !u.Died).ToList();
+            int share = living.Count > 0 ? gold / living.Count : 0;
+            var shares = living.Select(u => (u.Name, share)).ToList();
+            var avatarUnit = _campaign.Avatar;
+            bool avatarPaid = avatarUnit != null && living.Any(u => u.Id == avatarUnit.Id);
+            int banked = avatarPaid ? share + (living.Count > 0 ? gold % living.Count : gold) : 0;
+            _campaign.Gold += banked;
+            GoldGained += banked;
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;
 
@@ -226,7 +240,12 @@ public sealed class DiveSession
             {
                 var cu = _campaign.Crew.FirstOrDefault(x => x.Id == u.Id);
                 if (cu == null) continue;
-                cu.GainXp(u.XpGained); // spell + stat points bank; the PLAYER spends them (kit screen)
+                cu.GainXp(u.XpGained); // the AVATAR banks points for the player to spend...
+                if (!cu.IsAvatar)      // ...companions manage themselves, silently
+                {
+                    TitheContent.AutoSpendStats(cu);
+                    TitheContent.AutoSpendSpellPoints(cu);
+                }
                 if (u.Died)
                 {
                     // Downed MERCS die for good. A downed AVATAR is dragged out: wounded,
@@ -242,7 +261,8 @@ public sealed class DiveSession
             CheckBetrayal(); // a heavy haul under a low bell is when a Grasping merc walks
             if (avatarDown) Eject("you are carried out cold — the dive ends");
             else if (Clock <= 0) Eject("the bell — clock expired");
-            return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded);
+            return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded)
+                { Shares = shares };
         }
 
         // A fight lost outright. Dead mercenaries are gone for good; the AVATAR is dragged

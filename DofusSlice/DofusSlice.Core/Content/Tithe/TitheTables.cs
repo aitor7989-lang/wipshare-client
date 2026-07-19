@@ -25,7 +25,7 @@ public static class TitheTables
       { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 26, "ap": 6, "mp": 4,
         "vitality": 14, "strength": 6, "intelligence": 4, "chance": 4, "agility": 20, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
         "growth": { "vitality": 1, "agility": 4 },
-        "skills": ["piercing_shot", "crippling_arrow", "blink"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
+        "skills": ["piercing_shot", "crippling_arrow", "deadeye"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
       { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 48, "ap": 6, "mp": 3,
         "vitality": 52, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
         "growth": { "vitality": 3, "strength": 2 },
@@ -123,7 +123,10 @@ public static class TitheTables
       { "key": "blood_pact", "name": "Blood Pact", "ap": 1, "min": 0, "max": 0, "los": false, "castsPerTurn": 1,
         "effects": [ { "kind": "self_damage", "min": 10 }, { "kind": "grant_ap", "min": 3 } ] },
       { "key": "blink", "name": "Blink", "ap": 2, "min": 1, "max": 2, "los": false, "cooldown": 30, "targetsGround": true,
-        "effects": [ { "kind": "teleport" } ] }
+        "effects": [ { "kind": "teleport" } ] },
+      { "key": "deadeye", "name": "Deadeye", "ap": 5, "min": 5, "max": 8, "los": true, "cooldown": 1,
+        "ranks": [ { "max": 9 }, { "cooldown": 0 } ],
+        "effects": [ { "kind": "damage", "element": "air", "min": 16, "max": 22 } ] }
     ]
     """;
 

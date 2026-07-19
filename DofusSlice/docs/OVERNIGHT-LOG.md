@@ -527,3 +527,16 @@ ink-on-black; the board's language gets green/blue/red back.
 - Also shipped: docs/ROADMAP-LEADER.md — the Leader Update plan (avatar-only progression,
   split loot, character/spell panels, the bag + in-combat draughts, drop tables + the
   Adventurer set with 3/5/7 bonuses, and Blood Price, the face-to-face lifesteal).
+
+## v8.2: the Leader Update, part 1 — your progression, their shares
+- The kit screen is YOURS: one "YOU — LEADER" plate, no crew tabs. Companions appear as a
+  read-only roster ("they manage themselves") and auto-spend their points silently on
+  level-up. Only the avatar banks stat/spell points for the player.
+- Loot SPLITS: gold divides evenly across living party members — mercs' cuts leave as
+  their pay, the leader banks their own share plus the remainder; a dead member's share
+  is lost with them. The fight report shows it Dofus-style: "+36 GOLD — SPLIT 3 WAYS"
+  and per-member rows with +XP, +gold cut, and the live level bar.
+- The archer lost Blink (mobility budget already spent) and gained DEADEYE: 5 AP,
+  range 5-8, 16-22 air — the max-distance sniper identity as an active.
+- Observed in QA: the handed-over avatar turn chained BLOOD PACT (+3 AP for 10 HP) into
+  RUIN BOLT for a 41-damage kill — the three-spell kits are already producing combos.

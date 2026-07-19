@@ -144,6 +144,10 @@ public static class TitheContent
     /// <summary>Build a unit's skill at its current bought rank (the kit screen's view).</summary>
     public static SpellDef UnitSkill(CampaignUnit u, string key) => BuildSkill(key, u.RankOf(key));
 
+    /// <summary>The class's base AP/MP (the character sheet shows base + gear bonuses).</summary>
+    public static (int Ap, int Mp) ClassApMp(string classId) =>
+        (Classes[classId].Ap, Classes[classId].Mp);
+
     /// <summary>Preview a skill one rank up (so the spend button can show what changes).</summary>
     public static SpellDef SkillAtRank(string key, int rank) => BuildSkill(key, rank);
 

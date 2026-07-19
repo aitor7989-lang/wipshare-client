@@ -193,6 +193,23 @@ public sealed class Campaign
         return true;
     }
 
+    /// <summary>Eat one Hard Bread NOW (the leader's bag): mends the most-hurt crew member.
+    /// Returns a report line, or null when there is no bread or nobody is hurt.</summary>
+    public string? EatBread()
+    {
+        if (Bread <= 0) return null;
+        var hurt = Crew
+            .Where(u => (u.CurrentHp ?? int.MaxValue) < TitheContent.UnitMaxHp(u))
+            .OrderBy(u => (float)(u.CurrentHp ?? int.MaxValue) / TitheContent.UnitMaxHp(u))
+            .FirstOrDefault();
+        if (hurt == null) return null;
+        Bread--;
+        int max = TitheContent.UnitMaxHp(hurt);
+        int before = hurt.CurrentHp ?? max;
+        hurt.CurrentHp = Math.Min(max, before + TitheContent.Prices.BreadHeal);
+        return $"{hurt.Name} eats hard bread (+{hurt.CurrentHp.Value - before} HP)";
+    }
+
     /// <summary>Temple surgery (Bible §6.5): strip an essence out of a unit's slot. Very expensive
     /// and the essence is DESTROYED (the Bible leans destroyed, not refunded). Frees the slot.</summary>
     public bool RemoveEssence(CampaignUnit u, string essence)

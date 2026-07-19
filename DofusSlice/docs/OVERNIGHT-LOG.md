@@ -540,3 +540,17 @@ ink-on-black; the board's language gets green/blue/red back.
   range 5-8, 16-22 air — the max-distance sniper identity as an active.
 - Observed in QA: the handed-over avatar turn chained BLOOD PACT (+3 AP for 10 HP) into
   RUIN BOLT for a 41-damage kill — the three-spell kits are already producing combos.
+
+## v8.3: the Leader's windows — the F10 demo structure, reborn in ink
+The designer's call: reuse the Dofus-recreation test's layout wholesale, in the new UI.
+- C = CHARACTERISTICS: portrait slot with your sprite, name/class/level + XP bar, the
+  PV/PA/PM rows, six characteristic rows with [+] spenders and AUTO-SPEND, the effective
+  power/initiative line, and the Adventurer set count. Same skeleton as the demo's left
+  window, pure mono chrome.
+- I = INVENTORY: the equipment doll (amulet/weapon/ring left, hat/cape/belt/boots right)
+  with YOUR CHARACTER standing in the middle of their gear; the consumable strip where
+  BREAD is clickable food (mends the most-hurt member, new Campaign.EatBread), draughts
+  stack for the coming in-combat use, and held ESSENCES teach you their skill on click;
+  the 5x8 stash grid (click to equip, hover for item cards); the gold row with the ink
+  coin and the set progress. Same skeleton as the demo's right window.
+- Both open anywhere in the city or mid-dive (the bell keeps ticking), close on C/I/ESC/X.

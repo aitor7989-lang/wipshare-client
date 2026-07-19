@@ -326,6 +326,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (Pressed(Keys.R)) { _diveRng = new SystemRng(++_seed); _campaign = Campaign.NewGame("cannon"); EnterCity(); }
             return;
         }
+        if (UpdateLeaderPanels()) return;   // C = character sheet, I = the bag
         if (Pressed(Keys.Escape)) { _openNpc = -1; _equipOpen = false; return; }
         if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; _openNpc = -1; return; } // stash & kit
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
@@ -784,7 +785,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive.Ended) { EnterCity(); return; }
         if (_yardMsgTimer > 0f) _yardMsgTimer -= dt;
 
-        // The kit screen works mid-dive too — inventory, stats and spell ranks, anywhere.
+        // The Leader's windows work mid-dive too — the bell keeps ticking above them.
+        if (UpdateLeaderPanels()) return;
         if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; return; }
         if (_equipOpen)
         {
@@ -2764,12 +2766,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   E: STASH & KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   C: CHARACTER   ·   I: BAG   ·   E: KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
             _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignHud();
         if (_openNpc >= 0 && !_equipOpen) DrawNpcPanel(_openNpc);
         if (_equipOpen) DrawEquipPanel();
+        if (_charOpen) DrawCharacterWindow();
+        if (_invOpen) DrawInventoryWindow();
         if (_campaign.Over) DrawGameOver();
         _sb.End();
     }
@@ -2881,12 +2885,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   E: KIT   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   C: CHARACTER   ·   I: BAG   ·   E: KIT   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
             _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 96)));
         if (_equipOpen) DrawEquipPanel();
+        if (_charOpen) DrawCharacterWindow();
+        if (_invOpen) DrawInventoryWindow();
         _sb.End();
     }
 

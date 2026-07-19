@@ -113,7 +113,8 @@ public sealed class BattleAnimator
                 _displayPos[s.Fighter.Id] = _proj.CellCenter(s.Fighter.Pos);
                 _facing[s.Fighter.Id] = Facing4.Se;
                 _overlays.Add(new ImpactFlash(_proj.CellCenter(s.Fighter.Pos) + new Vector2(0, -16),
-                    new Color(150, 220, 180)));
+                    DofusSlice.Game.Rendering.Mono.On
+                        ? DofusSlice.Game.Rendering.Mono.Ink : new Color(150, 220, 180)));
                 Sfx?.Invoke("summon", 0.7f);
                 break;
             case TurnStarted ts:

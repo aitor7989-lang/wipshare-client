@@ -421,14 +421,17 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             var t = EquipTabRect(i);
             bool sel = i == Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1);
-            if (skin) _dof.Tab(_sb, new Rectangle(t.X, t.Y - 8, t.Width, t.Height + 8), sel, t.Contains(mp));
+            if (Mono.On) // 1-bit: the selected tab INVERTS, like every other active control
+                Mono.Button(_sb, _prim, t, hover: sel);
+            else if (skin) _dof.Tab(_sb, new Rectangle(t.X, t.Y - 8, t.Width, t.Height + 8), sel, t.Contains(mp));
             else
             {
                 _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
-                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : (Mono.On ? Mono.Faint : new Color(60, 64, 72)));
+                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
             }
             _font.DrawCentered(_sb, Trunc(_campaign.Crew[i].Name.ToUpperInvariant(), 12), t.Center.X, t.Y + 7, 1,
-                skin ? (sel ? Color.White : ink) : (sel ? Palette.Text : Palette.TextDim));
+                Mono.On ? Mono.ButtonInk(sel)
+                : skin ? (sel ? Color.White : ink) : (sel ? Palette.Text : Palette.TextDim));
         }
 
         // Level + XP bar + banked points.
@@ -1019,7 +1022,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         UpdateAmbient();
 
         // F10: the UI-limits debug scene (the Dofus screenshot rebuilt from the oldUI theme).
-        if (Pressed(Keys.F10)) _uiDemo = !_uiDemo;
+        // It needs the theme layer, which sleeps under Mono — the key is inert there.
+        if (Pressed(Keys.F10) && _dof.Loaded) _uiDemo = !_uiDemo;
         if (_uiDemo)
         {
             _time += (float)gameTime.ElapsedGameTime.TotalSeconds;
@@ -1365,11 +1369,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _ => (new Color(129, 132, 122), new Color(117, 121, 113)),
     };
 
-    /// <summary>An iso water tile drawn in our own style: a blue diamond with drifting ripples.</summary>
+    /// <summary>An iso water tile drawn in our own style: a blue diamond with drifting ripples
+    /// (mono: black water, dim ripples — a hole that moves).</summary>
     private void DrawWater(CellCoord c, Vector2 center)
     {
-        _prim.DiamondAt(_sb, center, new Color(46, 96, 156));
-        _prim.DiamondAt(_sb, center + new Vector2(0, 2), new Color(38, 82, 138, 160));
+        _prim.DiamondAt(_sb, center, Mono.On ? new Color(5, 5, 5) : new Color(46, 96, 156));
+        _prim.DiamondAt(_sb, center + new Vector2(0, 2),
+            Mono.On ? new Color(10, 10, 10, 160) : new Color(38, 82, 138, 160));
 
         // A couple of highlight strokes that drift over time, offset per cell so it's not uniform.
         float phase = _time * 1.6f + (c.X * 0.9f + c.Y * 1.3f);
@@ -1380,7 +1386,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             float oy = -3f + i * 5f + MathF.Cos(t * 0.7f) * 1.5f;
             var a = center + new Vector2(ox - 7, oy);
             var b = center + new Vector2(ox + 7, oy);
-            _prim.Line(_sb, a, b, 1.5f, new Color(150, 200, 240, 150));
+            _prim.Line(_sb, a, b, Mono.On ? 2f : 1.5f,
+                Mono.On ? Mono.Dim * 0.5f : new Color(150, 200, 240, 150));
         }
     }
 
@@ -2029,7 +2036,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_gumShowing && _engine.Outcome == FightOutcome.Ongoing)
             _gum.BindCombat($"ROUND {_engine.Round}",
                 $"{_engine.Current.Name.ToUpperInvariant()}'S TURN",
-                _engine.Current.Team == Team.Player ? new Color(120, 200, 120) : new Color(214, 110, 96),
+                Mono.On ? (_engine.Current.Team == Team.Player ? Mono.Ink : Mono.Danger)
+                    : _engine.Current.Team == Team.Player ? new Color(120, 200, 120) : new Color(214, 110, 96),
                 _engine.Fighters.Where(f => f.Team == Team.Player && !f.IsSummon)
                     .Select(f => (f.Name, f.Hp, f.MaxHp, f.IsAlive)).ToList());
     }
@@ -2383,7 +2391,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 ? (_aftermath?.Units.FirstOrDefault(u => u.Id == f.Id) is { Died: true } ? "DEAD" : "WOUNDED")
                 : $"{f.Hp}/{f.MaxHp}";
             _font.Draw(_sb, fate, x + 24 + bw + 8, y + 8, 1,
-                !f.IsAlive ? new Color(214, 96, 88) : Palette.TextDim);
+                !f.IsAlive ? (Mono.On ? Mono.Danger : new Color(214, 96, 88)) : Palette.TextDim);
             y += 34;
         }
     }
@@ -2532,7 +2540,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             // TITHE aftermath: the win is rarely free. Show each crew member's fate and XP.
             _font.DrawCentered(_sb, win ? "THE PACK FALLS" : "THE CREW FALLS", ScreenW / 2, 150, 6,
-                win ? Palette.HpFill : Palette.HeroColor);
+                win ? Palette.HpFill : Mono.On ? Mono.Danger : Palette.HeroColor);
             _font.DrawCentered(_sb, win ? "you are dragged back toward the Lychgate" : "CAMPAIGN OVER",
                 ScreenW / 2, 210, 2, Palette.TextDim);
 
@@ -2546,7 +2554,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     string fate = u.Died ? (u.Mercenary ? "DEAD (mercenary lost)" : "DEAD (avatar fell)")
                         : u.Wounded ? "WOUNDED  (-1 PA / -1 PM)"
                         : "unhurt";
-                    var col = u.Died ? new Color(214, 96, 88)
+                    var col = Mono.On
+                        ? (u.Died || u.Wounded ? Mono.Danger : Mono.Ink)
+                        : u.Died ? new Color(214, 96, 88)
                         : u.Wounded ? new Color(230, 200, 70) : Palette.HpFill;
                     _font.DrawCentered(_sb, $"{u.Name.ToUpperInvariant()}   +{u.XpGained} XP   {fate}",
                         ScreenW / 2, y, 2, col);
@@ -2556,7 +2566,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     ? "ESSENCES DROPPED: " + string.Join(", ", _aftermath.Drops).ToUpperInvariant()
                     : "NO ESSENCES DROPPED";
                 _font.DrawCentered(_sb, loot, ScreenW / 2, y + 8, 1,
-                    _aftermath.Drops.Count > 0 ? new Color(200, 170, 240) : Palette.TextDim);
+                    _aftermath.Drops.Count > 0 ? (Mono.On ? Mono.Ink : new Color(200, 170, 240)) : Palette.TextDim);
                 y += 30;
             }
             _font.DrawCentered(_sb, "PRESS R TO DIVE AGAIN   ·   B: FACE THE SEXTON", ScreenW / 2, y + 20, 1, Palette.Text);
@@ -2780,8 +2790,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, center, 7, new Color(120, 190, 150));
             _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
         }
-        _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
-            (int)center.X, (int)center.Y - (Mono.On ? 34 : 30), WT, Mono.On ? Mono.Ink : new Color(150, 210, 170));
+        if (Mono.On)
+        {
+            // Two short lines — one wide line at world scale collides with pack labels.
+            _font.DrawCentered(_sb, "SURVIVOR", (int)center.X, (int)center.Y - 52, 2, Mono.Ink);
+            _font.DrawCentered(_sb, $"{offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}G)",
+                (int)center.X, (int)center.Y - 34, 2, Mono.Dim);
+        }
+        else
+            _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
+                (int)center.X, (int)center.Y - 30, 1, new Color(150, 210, 170));
     }
 
     private void DrawCrypt()
@@ -2944,7 +2962,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 6, col);
             _font.DrawCentered(_sb, TitheGlyph(u.ClassId), x + 8, y + 2, 1, Color.White);
             int xpNeed = CampaignUnit.XpForNextLevel(u.Level);
-            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24, 120, 4), new Color(38, 40, 48));
+            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24, 120, 4),
+                Mono.On ? Mono.Faint * 0.7f : new Color(38, 40, 48));
             _prim.FillRect(_sb, new Rectangle(x + 24, y + 24,
                 (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
             if (u.StatPoints > 0)
@@ -3044,7 +3063,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     if (cu != null)
                     {
                         int need = CampaignUnit.XpForNextLevel(cu.Level);
-                        _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2, 180, 8), new Color(60, 56, 50));
+                        _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2, 180, 8),
+                            Mono.On ? Mono.Faint * 0.7f : new Color(60, 56, 50));
                         _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2,
                             (int)(180 * Math.Clamp(need <= 0 ? 1f : (float)cu.Xp / need, 0f, 1f)), 8),
                             (Mono.On ? Mono.Dim : new Color(120, 170, 230)));

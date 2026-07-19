@@ -475,3 +475,20 @@ Karagol's 1-bit UI pack, both local-only in gitignored assets/ like every kit be
   the numbers punched dark into the white shapes, AP/MP captions, and one HP bar under the
   heart. The kit icons' diagonal shine slash read "broken" at HUD size, so the three
   shapes are now pixelled in bake_onebit.py on the same 1-bit grid — solid and symmetric.
+
+## v7.2: hardening + polish audit
+Swept the whole build for cracks after the 1-bit conversion; every screen visited live
+under Xvfb, plus one run with NO assets folder at all.
+- Art-free boot PROVEN: with assets/ removed the game runs the full placement/combat loop
+  on procedural fallbacks — the public repo's no-art promise still holds.
+- Last colorful stragglers mono'd: standalone end overlay (defeat title, per-unit fates,
+  essence line), crew roster fate text, Gum editor turn color, summon impact flash, water
+  tiles (black water, dim ripples), and both XP track fills.
+- F10 (theme demo scene) is inert while the theme layer sleeps under Mono — no half-drawn
+  debug screen.
+- Kit crew tabs now speak the language: the SELECTED tab inverts like every active control.
+- The survivor's one-line pitch collided with pack labels at world text scale — now two
+  short lines (SURVIVOR / class-level-price).
+- Flows exercised: temple + hiring panels (bought two mercs, gold math right), kit tabs
+  across three crew members, NEAR->MID yard gate transit, pack rollovers, hire-button
+  inversion on hover. Building/gate cells confirmed clickable at their computed centers.

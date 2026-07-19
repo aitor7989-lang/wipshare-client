@@ -317,3 +317,21 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - THE YARD IS THREE MAPS: near/mid/deep, connected by glowing edge gates; packs sort by reach,
   the survivor wanders the mid yard, the Crypt waits in the deep one.
 - Obstacles got art: stacked-canopy trees and rubble boulders on the raised blocks.
+
+## The Dofus oldUI Remake skin, everywhere
+- New local-only theme layer: tools/bake_dofus_ui.py copies the aspette/dofus_themes
+  "oldUI Remake" chrome (using the theme's own scale9Grid margins) plus classic spell
+  tiles + stat icons into assets/dofusui/ (gitignored, never committed). Rendering/DofusUi.cs
+  loads the manifest and draws parchment windows, orange pill buttons, tab domes, segmented
+  candy gauges, dark rounded slots and the silver title strip.
+- ONE hook reskins everything: EwChrome.Theme routes Panel/Well/Pill/HeaderStrip through the
+  theme, so the combat band, fight log, timeline cards, placement band and spell cards
+  re-dress at once; UiPanelBg/UiButtonBg cover the fight report, NPC windows and every
+  button; the kit screen wears the full parchment treatment with stat icons, tab domes,
+  spell tiles and hairline list rows; crew HP + XP + the bell are candy gauges.
+- Spell icons: 18 classic Dofus tiles mapped by theme (Knell for Sexton's Toll, Lamentations
+  for Wraith Wail, Carrion for Ghoul Rend...) drawn in the combat kit wells (with AP chip),
+  kit screen rows and spell cards. Sourced from the open-source DofusFashionistaVanced set;
+  dofusroom.com itself is blocked by this environment's egress policy, so its mirror of the
+  same icons couldn't be used directly.
+- Everything keeps the procedural fallback: no assets folder -> Emberwick chrome unchanged.

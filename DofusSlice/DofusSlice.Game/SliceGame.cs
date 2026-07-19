@@ -84,6 +84,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private IsoProjector _proj = null!;
     private ChamberSet _tiles = null!;                // legacy Chamber props (fallback tokens only)
     private UiSkin _ui = null!;                       // pixel UI panels/buttons (local-only art)
+    private DofusUi _dof = null!;                     // Dofus oldUI theme (local-only art)
     private UiFont _dfont = null!;                    // baked dungeon font (local-only art)
     private Ui.GumHud _gum = null!;                   // Gum-editor HUD skin (ui/TitheHud.gumx)
     private Audio.SoundBank _sfx = null!;             // synthesized chiptune SFX (no asset files)
@@ -167,7 +168,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _pixSprites = _sprites.GetSheet("hero", "idle", "se") != null;
         _gum = new Ui.GumHud(this);
         _sfx = new Audio.SoundBank();
-        _ew = new EwChrome(GraphicsDevice, _prim.Pixel);
+        _dof = new DofusUi(GraphicsDevice);
+        _ew = new EwChrome(GraphicsDevice, _prim.Pixel) { Theme = _dof };
 
         if (_loop)
         {
@@ -401,8 +403,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var a = EquipShownUnit;
         if (a == null) return;
         var r = new Rectangle(236, KitY, 800, KitH);
-        _prim.FillRect(_sb, r, new Color(22, 24, 30));
-        _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
+        bool skin = _dof.Loaded;
+        if (skin) _dof.Window(_sb, r);
+        else { _prim.FillRect(_sb, r, new Color(22, 24, 30)); _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing); }
+        var ink = skin ? UiInk : Palette.Text;
+        var inkDim = skin ? UiInkDim : Palette.TextDim;
+        var accent = skin ? DofusUi.InkGold : new Color(240, 208, 120);
         var mp = new Point(_mouse.X, _mouse.Y);
 
         // Crew tabs: the kit screen manages every unit's points, gear stays avatar-only.
@@ -410,20 +416,30 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             var t = EquipTabRect(i);
             bool sel = i == Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1);
-            _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
-            _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
+            if (skin) _dof.Tab(_sb, new Rectangle(t.X, t.Y - 8, t.Width, t.Height + 8), sel, t.Contains(mp));
+            else
+            {
+                _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
+                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
+            }
             _font.DrawCentered(_sb, Trunc(_campaign.Crew[i].Name.ToUpperInvariant(), 12), t.Center.X, t.Y + 7, 1,
-                sel ? Palette.Text : Palette.TextDim);
+                skin ? (sel ? Color.White : ink) : (sel ? Palette.Text : Palette.TextDim));
         }
 
         // Level + XP bar + banked points.
         int need = CampaignUnit.XpForNextLevel(a.Level);
-        _font.Draw(_sb, $"LVL {a.Level}", 260, r.Y + 48, 2, Palette.Text);
-        _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, 260, 10), Palette.HpBack);
-        _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), new Color(120, 170, 230));
-        _font.Draw(_sb, $"{a.Xp} / {need} XP", 610, r.Y + 48, 1, Palette.TextDim);
+        _font.Draw(_sb, $"LVL {a.Level}", 260, r.Y + 48, 2, ink);
+        if (skin)
+            _dof.Gauge(_sb, new Rectangle(340, r.Y + 48, 260, 13),
+                Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f), "gauge_blue");
+        else
+        {
+            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, 260, 10), Palette.HpBack);
+            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), new Color(120, 170, 230));
+        }
+        _font.Draw(_sb, $"{a.Xp} / {need} XP", 610, r.Y + 48, 1, inkDim);
         _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
-            820, r.Y + 48, 1, a.StatPoints > 0 ? new Color(240, 208, 120) : Palette.TextDim);
+            820, r.Y + 48, 1, a.StatPoints > 0 ? accent : inkDim);
 
         // The six characteristics with [+] spend buttons (1.29's manual allocation).
         for (int i = 0; i < StatRows.Length; i++)
@@ -439,85 +455,110 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 "agi" => TitheContent.StatsOf(a).Agility,
                 _ => TitheContent.StatsOf(a).Wisdom,
             };
-            _font.Draw(_sb, key == "vit" ? $"HP {shown}" : $"{label} {shown}", x, r.Y + 80, 1, Palette.Text);
+            int lx = x;
+            if (skin && _dof.StatIcon(_sb, key, new Rectangle(x, r.Y + 74, 18, 18))) lx = x + 21;
+            _font.Draw(_sb, key == "vit" ? $"HP {shown}" : $"{label} {shown}", lx, r.Y + 80, 1, ink);
             if (a.StatPoints > 0)
             {
                 var b = StatPlusRect(i);
-                _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1, Color.White);
+                if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
+                else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
+                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1, skin ? new Color(46, 26, 10) : Color.White);
             }
         }
         if (a.StatPoints > 0)
         {
-            _prim.FillRect(_sb, AutoSpendRect, AutoSpendRect.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-            _prim.StrokeRect(_sb, AutoSpendRect, 1, new Color(96, 150, 96));
-            _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1, Palette.Text);
+            if (skin) _dof.Button(_sb, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
+            else
+            {
+                _prim.FillRect(_sb, AutoSpendRect, AutoSpendRect.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+                _prim.StrokeRect(_sb, AutoSpendRect, 1, new Color(96, 150, 96));
+            }
+            _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1,
+                skin ? new Color(46, 26, 10) : Palette.Text);
         }
 
         // SPELLS: the unit's kit — the class signature plus taught essences — with the 1.29
         // rank-ups, spent by the PLAYER (a rank changes economics or shape, never just damage).
-        _font.Draw(_sb, "SPELLS", 260, r.Y + 106, 1, Palette.TextDim);
+        _font.Draw(_sb, "SPELLS", 260, r.Y + 106, 1, inkDim);
         _font.Draw(_sb, a.SpellPoints > 0 ? $"SPELL POINTS: {a.SpellPoints}" : "no spell points banked",
-            330, r.Y + 106, 1, a.SpellPoints > 0 ? new Color(240, 208, 120) : Palette.TextDim);
+            330, r.Y + 106, 1, a.SpellPoints > 0 ? accent : inkDim);
         var skillKeys = TitheContent.UnitSkillKeys(a).Take(3).ToList();
         for (int i = 0; i < skillKeys.Count; i++)
         {
             var row = SpellRowRect(i);
-            _prim.FillRect(_sb, row, Palette.HudPanel);
-            _prim.StrokeRect(_sb, row, 1, new Color(60, 64, 72));
+            if (skin) // parchment list row, 1.29-style: just a hairline separator underneath
+                _prim.FillRect(_sb, new Rectangle(row.X, row.Bottom - 1, row.Width, 1), UiInk * 0.25f);
+            else
+            {
+                _prim.FillRect(_sb, row, Palette.HudPanel);
+                _prim.StrokeRect(_sb, row, 1, new Color(60, 64, 72));
+            }
             var sp = TitheContent.UnitSkill(a, skillKeys[i]);
             int rank = a.RankOf(skillKeys[i]), maxR = TitheContent.MaxRank(skillKeys[i]);
             var dmgFx = sp.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
-            var col = dmgFx != null ? EwChrome.ElementColor(dmgFx.Element) : Palette.Text;
-            _font.Draw(_sb, $"{sp.Name.ToUpperInvariant()}   RANK {rank}/{maxR}", row.X + 8, row.Y + 4, 1, col);
+            var col = dmgFx != null ? EwChrome.ElementColor(dmgFx.Element) : ink;
+            int tx = row.X + 8;
+            if (skin && _dof.SpellIcon(_sb, skillKeys[i], new Rectangle(row.X + 2, row.Y + 1, 26, 26)))
+                tx = row.X + 34;
+            _font.Draw(_sb, $"{sp.Name.ToUpperInvariant()}   RANK {rank}/{maxR}", tx, row.Y + 4, 1, col);
             string info = string.Join("  ·  ", sp.Effects.Select(e => EffectLine(e).text))
                 + $"  ·  AP {sp.ApCost}  ·  RANGE {sp.MinRange}-{sp.MaxRange}"
                 + (sp.Cooldown > 0 ? $"  ·  CD {sp.Cooldown}" : "");
-            _font.Draw(_sb, Trunc(info, 84), row.X + 8, row.Y + 16, 1, Palette.TextDim);
+            _font.Draw(_sb, Trunc(info, 84), tx, row.Y + 16, 1, skin ? ink : Palette.TextDim);
             if (a.SpellPoints > 0 && rank < maxR)
             {
                 var b = RankUpRect(i);
-                _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1, Color.White);
+                if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
+                else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
+                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1, skin ? new Color(46, 26, 10) : Color.White);
             }
             else if (rank >= maxR)
-                _font.Draw(_sb, "MAX", row.Right - 36, row.Y + 9, 1, Palette.TextDim);
+                _font.Draw(_sb, "MAX", row.Right - 36, row.Y + 9, 1, inkDim);
         }
 
         if (!a.IsAvatar)
         {
             _font.DrawCentered(_sb, "MERCENARIES KEEP THEIR HIRE KIT — ONLY THE AVATAR RE-GEARS",
-                r.Center.X, r.Y + 250, 1, Palette.TextDim);
+                r.Center.X, r.Y + 250, 1, inkDim);
             DrawEquipFooter(a, r);
             return;
         }
 
-        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 212, 1, Palette.TextDim);
-        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 212, 1, Palette.TextDim);
+        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 212, 1, inkDim);
+        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 212, 1, inkDim);
 
         for (int i = 0; i < a.Equipment.Count; i++)
         {
             var b = EquipRowRect(i);
-            _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-            _prim.StrokeRect(_sb, b, 1, new Color(96, 150, 96));
+            if (skin) _dof.Panel(_sb, b, light: b.Contains(mp));
+            else
+            {
+                _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+                _prim.StrokeRect(_sb, b, 1, new Color(96, 150, 96));
+            }
             string id = a.Equipment[i];
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, skin ? ink : Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, skin ? ink : Palette.TextDim);
         }
         if (a.Equipment.Count == 0)
-            _font.Draw(_sb, "— nothing worn —", 268, KitY + 236, 1, Palette.TextDim);
+            _font.Draw(_sb, "— nothing worn —", 268, KitY + 236, 1, inkDim);
 
         for (int i = 0; i < _campaign.Stash.Count; i++)
         {
             var b = StashRowRect(i);
-            _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-            _prim.StrokeRect(_sb, b, 1, new Color(150, 140, 96));
+            if (skin) _dof.Panel(_sb, b, light: b.Contains(mp));
+            else
+            {
+                _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+                _prim.StrokeRect(_sb, b, 1, new Color(150, 140, 96));
+            }
             string id = _campaign.Stash[i];
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
+            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", b.X + 8, b.Y + 4, 1, skin ? ink : Palette.Text);
+            _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, skin ? ink : Palette.TextDim);
         }
         if (_campaign.Stash.Count == 0)
-            _font.Draw(_sb, "— the stash is empty —", 656, KitY + 236, 1, Palette.TextDim);
+            _font.Draw(_sb, "— the stash is empty —", 656, KitY + 236, 1, inkDim);
 
         DrawEquipFooter(a, r);
     }
@@ -532,8 +573,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             $"{s.MaxHp} HP   {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}   AGI {s.Agility}   WIS {s.Wisdom}   POW {s.Power}"
             + (s.ApBonus != 0 ? $"   +{s.ApBonus} AP" : "") + (s.MpBonus != 0 ? $"   +{s.MpBonus} MP" : "")
             + $"   ADV {set}/7",
-            r.Center.X, r.Bottom - 44, 1, new Color(240, 208, 120));
-        _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1, Palette.TextDim);
+            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? DofusUi.InkGold : new Color(240, 208, 120));
+        _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1,
+            _dof.Loaded ? UiInkDim : Palette.TextDim);
     }
 
     /// <summary>The clickable services at each City building (label, affordable, effect).</summary>
@@ -1305,11 +1347,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private static readonly Color UiInkDim = new(126, 104, 86);
     private static readonly Color UiInkOnGreen = new(26, 54, 32);
 
-    /// <summary>True when the pixel UI panels are available — text on them flips to dark ink.</summary>
-    private bool UiSkinned => _ui.Loaded;
+    /// <summary>True when a UI skin is available — text on light panels flips to dark ink.</summary>
+    private bool UiSkinned => _dof.Loaded || _ui.Loaded;
 
     private void UiPanelBg(Rectangle r)
     {
+        if (_dof.Loaded) { _dof.Window(_sb, r); return; }              // the 1.29 parchment block
         if (_ui.Panel != null) { _ui.Panel.Draw(_sb, r, Color.White); return; }
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
         _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
@@ -1317,6 +1360,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void UiButtonBg(Rectangle r, bool down, Color? tint = null)
     {
+        if (_dof.Loaded) // the orange pill; a non-white tint means "greyed out" -> disabled art
+        { _dof.Button(_sb, r, pressed: down, disabled: tint.HasValue && tint != Color.White); return; }
         var slice = down ? _ui.ButtonDown ?? _ui.Button : _ui.Button;
         if (slice != null) { slice.Draw(_sb, r, tint ?? Color.White); return; }
         _prim.FillRect(_sb, r, down ? Palette.HudPanelLight : Palette.HudPanel);
@@ -1861,8 +1906,17 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         int w = lines.Max(l => _font.Measure(l.text, 1)) + 16;
         int h = 8 + lines.Count * 13;
         var r = new Rectangle(Math.Min(x, ScreenW - w - 4), Math.Max(4, Math.Min(y, HudTop - h - 4)), w, h);
-        _prim.FillRect(_sb, r, new Color(12, 13, 17, 235));
-        _prim.StrokeRect(_sb, r, 1, f.Team == Team.Player ? new Color(214, 60, 40) : new Color(84, 108, 214));
+        if (_dof.Loaded)
+        {
+            _dof.Panel(_sb, r);
+            _prim.StrokeRect(_sb, r, 1,
+                (f.Team == Team.Player ? new Color(214, 60, 40) : new Color(84, 108, 214)) * 0.7f);
+        }
+        else
+        {
+            _prim.FillRect(_sb, r, new Color(12, 13, 17, 235));
+            _prim.StrokeRect(_sb, r, 1, f.Team == Team.Player ? new Color(214, 60, 40) : new Color(84, 108, 214));
+        }
         for (int i = 0; i < lines.Count; i++)
             _font.Draw(_sb, lines[i].text, r.X + 8, r.Y + 5 + i * 13, 1, lines[i].color);
     }
@@ -1976,17 +2030,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _font.DrawCentered(_sb, cur.Name.ToUpperInvariant(), ScreenW / 2, HudTop + 12, 1,
             cur.Team == Team.Player ? Ew.AccentBright : Ew.Danger);
 
-        // Crew HP wells, left column.
+        // Crew HP wells, left column (Dofus theme: the segmented red candy gauge).
         _font.Draw(_sb, "YOUR CREW", 20, HudTop + 14, 1, Ew.InkSoft);
         int y = HudTop + 32;
         foreach (var f in _engine.Fighters.Where(x => x.Team == Team.Player && !x.IsSummon))
         {
             _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 12), 20, y + 3, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
             var well = new Rectangle(150, y, 190, 18);
-            _ew.Well(_sb, well);
-            int fill = (int)(184 * Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f));
-            if (fill > 0 && f.IsAlive)
-                _ew.GradientV(_sb, new Rectangle(well.X + 3, well.Y + 3, fill, 12), Ew.Hp, Ew.HpDeep);
+            float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f);
+            if (_dof.Loaded)
+                _dof.Gauge(_sb, well, f.IsAlive ? frac : 0f);
+            else
+            {
+                _ew.Well(_sb, well);
+                int fill = (int)(184 * frac);
+                if (fill > 0 && f.IsAlive)
+                    _ew.GradientV(_sb, new Rectangle(well.X + 3, well.Y + 3, fill, 12), Ew.Hp, Ew.HpDeep);
+            }
             _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 348, y + 3, 1,
                 f.IsAlive ? Ew.InkSoft : Ew.Danger);
             y += 26;
@@ -2006,10 +2066,21 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (hov) { tip = spell; tipX = well.X; }
             _ew.Well(_sb, well);
             if (hov) _prim.StrokeRect(_sb, well, 1, Ew.AccentBright);
-            var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
-            var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
-            _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
-            _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1, Ew.InkSoft);
+            // The classic Dofus spell tile when the icon set is baked; the letter otherwise.
+            string? skey = TitheContent.SkillKeyById(spell.Id);
+            if (_dof.Loaded && skey != null
+                && _dof.SpellIcon(_sb, skey, new Rectangle(well.X + 3, well.Y + 3, 40, 40)))
+            {
+                _prim.FillRect(_sb, new Rectangle(well.Right - 14, well.Bottom - 14, 11, 11), new Color(10, 10, 12, 200));
+                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Right - 9, well.Bottom - 12, 1, Color.White);
+            }
+            else
+            {
+                var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
+                var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
+                _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
+                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1, Ew.InkSoft);
+            }
             sx += 52;
         }
         if (tip != null) DrawSpellCard(tip, Math.Min(tipX, ScreenW - 300), HudTop - 6);
@@ -2061,14 +2132,19 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (spell.MaxCastsPerTurn != int.MaxValue)
             lines.Add(($"{spell.MaxCastsPerTurn}x PER TURN", Ew.InkSoft));
 
-        int w = Math.Max(_font.Measure(spell.Name.ToUpperInvariant(), 1) + 26,
+        int w = Math.Max(_font.Measure(spell.Name.ToUpperInvariant(), 1) + 50,
             lines.Max(l => _font.Measure(l.t, 1)) + 26);
         w = Math.Max(w, 200);
         int h = 34 + lines.Count * 13;
         var r = new Rectangle(x, bottomY - h, w, h);
         _ew.Panel(_sb, r, sunken: false, radius: 8);
         _ew.HeaderStrip(_sb, new Rectangle(r.X + 2, r.Y + 2, r.Width - 4, 20));
-        _font.Draw(_sb, spell.Name.ToUpperInvariant(), r.X + 12, r.Y + 8, 1, Ew.Gold);
+        string? cardKey = TitheContent.SkillKeyById(spell.Id);
+        int nx = r.X + 12;
+        if (_dof.Loaded && cardKey != null
+            && _dof.SpellIcon(_sb, cardKey, new Rectangle(r.X + 6, r.Y + 3, 18, 18)))
+            nx = r.X + 28;
+        _font.Draw(_sb, spell.Name.ToUpperInvariant(), nx, r.Y + 8, 1, Ew.Gold);
         int ly = r.Y + 28;
         foreach (var (t, c) in lines) { _font.Draw(_sb, t, r.X + 12, ly, 1, c); ly += 13; }
     }
@@ -2574,8 +2650,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             int w = groups.Max(t => _font.Measure(t, 1)) + 16;
             var box = new Rectangle((int)center.X - w / 2, (int)center.Y - 46 - groups.Count * 13,
                 w, 8 + groups.Count * 13);
-            _prim.FillRect(_sb, box, new Color(12, 13, 17, 235));
-            _prim.StrokeRect(_sb, box, 1, new Color(84, 108, 214));
+            if (_dof.Loaded) _dof.Panel(_sb, box);
+            else
+            {
+                _prim.FillRect(_sb, box, new Color(12, 13, 17, 235));
+                _prim.StrokeRect(_sb, box, 1, new Color(84, 108, 214));
+            }
             for (int i = 0; i < groups.Count; i++)
                 _font.Draw(_sb, groups[i], box.X + 8, box.Y + 5 + i * 13, 1,
                     i < p.Def.Comp.GroupBy(a => a).Count() ? Palette.Text : new Color(214, 150, 96));
@@ -2590,10 +2670,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive == null) return;
         float frac = Math.Clamp(_dive.Clock / Math.Max(1, TitheContent.Graveyard.ClockSeconds), 0f, 1f);
         int bx = cx - w / 2;
-        _prim.FillRect(_sb, new Rectangle(bx, y, w, h), Palette.HpBack);
-        var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
-        _prim.FillRect(_sb, new Rectangle(bx, y, (int)(w * frac), h), col);
-        _prim.StrokeRect(_sb, new Rectangle(bx, y, w, h), 1, new Color(80, 86, 98));
+        if (_dof.Loaded)
+            _dof.Gauge(_sb, new Rectangle(bx, y, w, h), frac, "gauge_timer");
+        else
+        {
+            _prim.FillRect(_sb, new Rectangle(bx, y, w, h), Palette.HpBack);
+            var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
+            _prim.FillRect(_sb, new Rectangle(bx, y, (int)(w * frac), h), col);
+            _prim.StrokeRect(_sb, new Rectangle(bx, y, w, h), 1, new Color(80, 86, 98));
+        }
         _font.DrawCentered(_sb, $"THE BELL — {(int)MathF.Ceiling(Math.Max(0, _dive.Clock))}S", cx, y + h + 6, 1, Palette.Text);
     }
 
@@ -2605,7 +2690,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             : $"THE GRAVEYARD — {_yardDepth switch { 0 => "NEAR YARD", 1 => "MID YARD", _ => "DEEP YARD" }}",
             16, 12, Palette.Text);
 
-        _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
+        if (_dof.Loaded) _dof.Slice(_sb, "float_bg", new Rectangle(-8, HudTop, ScreenW + 16, ScreenH - HudTop + 14));
+        else _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
         _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
         _font.Draw(_sb, $"BREAD {_campaign.Bread}    DRAUGHTS {_campaign.Draughts}    ESSENCES {_campaign.Essences.Count}",
             16, HudTop + 42, 1, Palette.TextDim);
@@ -2732,7 +2818,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
             foreach (var (name, level) in _levelUps)
             {
-                _font.DrawCentered(_sb, $"* {name.ToUpperInvariant()} REACHES LEVEL {level}! +5 POINTS +1 SPELL *",
+                _font.DrawCentered(_sb,
+                    $"* {(name == "You" ? "YOU REACH" : name.ToUpperInvariant() + " REACHES")} LEVEL {level}! +5 POINTS +1 SPELL *",
                     panel.Center.X, y, 1, new Color(190, 140, 20)); y += 18;
             }
             if (_levelUps.Count > 0)

@@ -69,6 +69,11 @@ public sealed class EwChrome
     private readonly Texture2D _pixel;
     private readonly Dictionary<string, Texture2D> _cache = new();
 
+    /// <summary>When the Dofus oldUI theme is loaded, every Emberwick surface re-dresses in it —
+    /// one hook reskins the combat band, log, timeline cards, tooltips and pills at once.</summary>
+    public DofusUi? Theme { get; set; }
+    private DofusUi? T => Theme is { Loaded: true } t ? t : null;
+
     public EwChrome(GraphicsDevice gd, Texture2D pixel)
     {
         _gd = gd;
@@ -80,17 +85,23 @@ public sealed class EwChrome
     /// <summary>A rounded slate panel with outline, gradient fill and top bevel highlight.</summary>
     public void Panel(SpriteBatch sb, Rectangle r, bool sunken = false, int radius = 12)
     {
+        if (T is { } th) { th.Panel(sb, r, light: !sunken); return; }
         var tex = RoundedTex(Math.Max(8, Math.Min(r.Width, 64)), Math.Max(8, Math.Min(r.Height, 64)),
             radius, sunken);
         NineSlice(sb, tex, r, radius + 3);
     }
 
     /// <summary>A slot well: sunken, tighter radius (the design's item slots).</summary>
-    public void Well(SpriteBatch sb, Rectangle r) => Panel(sb, r, sunken: true, radius: 8);
+    public void Well(SpriteBatch sb, Rectangle r)
+    {
+        if (T is { } th) { th.Slot(sb, r); return; }
+        Panel(sb, r, sunken: true, radius: 8);
+    }
 
     /// <summary>The header band gradient inside a panel's top (drawn as a plain strip).</summary>
     public void HeaderStrip(SpriteBatch sb, Rectangle r)
     {
+        if (T is { } th) { th.TitleStrip(sb, r); return; }
         GradientV(sb, r, Ew.HeaderTop, Ew.HeaderBottom);
         sb.Draw(_pixel, new Rectangle(r.X, r.Y, r.Width, 1), Color.White * 0.12f);
         sb.Draw(_pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Color.Black * 0.38f);
@@ -99,6 +110,7 @@ public sealed class EwChrome
     /// <summary>An amber (or gold) pill button, design's "Pick challenges" CTA.</summary>
     public void Pill(SpriteBatch sb, Rectangle r, bool gold = false, bool pressed = false)
     {
+        if (T is { } th) { th.Button(sb, r, pressed: pressed); return; }
         var top = gold ? Ew.GoldTop : Ew.AccentTop;
         var bottom = gold ? Ew.GoldBottom : Ew.AccentBottom;
         if (pressed) { top = bottom; }

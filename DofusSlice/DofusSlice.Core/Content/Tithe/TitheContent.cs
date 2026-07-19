@@ -132,6 +132,10 @@ public static class TitheContent
     public static int MaxRank(string key) =>
         SkillRows.TryGetValue(key, out var s) ? 1 + (s.Ranks?.Length ?? 0) : 1;
 
+    /// <summary>Reverse lookup: the data key of a built skill (icons and UI want the key).</summary>
+    public static string? SkillKeyById(int id) =>
+        SkillIds.FirstOrDefault(kv => kv.Value == id).Key;
+
     /// <summary>A unit's spell keys in kit order: the class signature, then taught essences.</summary>
     public static IEnumerable<string> UnitSkillKeys(CampaignUnit u) =>
         Classes[u.ClassId].Skills

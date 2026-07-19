@@ -7,7 +7,9 @@
   * 1-bit UI pack by Batuhan Karagol — heart/shield/star vitals icons for the HUD.
 
 Tiles are re-inked to pure white-on-transparent (the engine tints with Mono.Ink /
-Mono.Danger) and upscaled 2x nearest (16 -> 32px; the renderer doubles again -> 64px).
+Mono.Danger) and kept at NATIVE 16px (the renderer doubles -> 32px on screen, and the
+half-res world pass makes each art pixel exactly one chunky screen block). UI icons are
+normalized into identical 24x24 boxes and saved at 2x (48px) for integer HUD scaling.
 
 Usage:
   python3 tools/bake_onebit.py --hexany <dir with Tilesheets/> --batuhan <dir> \
@@ -34,11 +36,50 @@ CREATURES = {
     "sexton":  ("creatures", 0, 7),    # hooded monk — the gravedigger boss
     "onebit_rock": ("general", 2, 2),  # rubble pile prop for obstacle tops
 }
-# Batuhan sheet crop boxes (x0, y0, x1, y1) at native 1x, trimmed to alpha afterwards.
-BATUHAN = {
-    "onebit_heart":  (12, 14, 29, 31),
-    "onebit_shield": (13, 40, 30, 58),
-    "onebit_star":   (13, 117, 34, 138),
+# Vitals icons: the Batuhan sheet's heart/shield carry a diagonal shine slash that reads
+# "broken" at HUD size, so the three vitals shapes are pixelled here in the same language —
+# solid, symmetric, on the same 1-bit grid. (The kit still drives the buttons/frames style.)
+PIXEL_ICONS = {
+    "onebit_heart": [
+        "..###...###..",
+        ".#####.#####.",
+        "#############",
+        "#############",
+        "#############",
+        ".###########.",
+        "..#########..",
+        "...#######...",
+        "....#####....",
+        ".....###.....",
+        "......#......",
+    ],
+    "onebit_star": [
+        "......#......",
+        ".....###.....",
+        ".....###.....",
+        "....#####....",
+        "#############",
+        ".###########.",
+        "..#########..",
+        "...#######...",
+        "...#######...",
+        "..####.####..",
+        "..###...###..",
+        ".##.......##.",
+    ],
+    "onebit_shield": [
+        "#############",
+        "#############",
+        "#############",
+        "#############",
+        ".###########.",
+        ".###########.",
+        "..#########..",
+        "...#######...",
+        "....#####....",
+        ".....###.....",
+        "......#......",
+    ],
 }
 
 
@@ -79,17 +120,20 @@ def main() -> None:
     sheets = {n: load_sheet(args.hexany, n) for n in ("creatures", "general", "items")}
 
     for name, (sheet, c, r) in CREATURES.items():
-        bake(tile(sheets[sheet], c, r), args.out / f"{name}.png")
+        bake(tile(sheets[sheet], c, r), args.out / f"{name}.png", scale=1)
         print(f"  {name}.png  <- {sheet} ({c},{r})")
 
-    ui = Image.open(args.batuhan / "1-bit_UI_byBatuhanK.png").convert("RGBA")
-    for name, box in BATUHAN.items():
-        crop = ui.crop(box)
-        bb = crop.getbbox()
-        if bb:
-            crop = crop.crop(bb)
-        bake(crop, args.out / f"{name}.png", scale=2)
-        print(f"  {name}.png <- batuhan {box} -> {crop.width}x{crop.height}")
+    for name, rows in PIXEL_ICONS.items():
+        w, h = len(rows[0]), len(rows)
+        icon = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        ox, oy = (16 - w) // 2, (16 - h) // 2
+        px = icon.load()
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if ch == "#":
+                    px[ox + x, oy + y] = (255, 255, 255, 255)
+        bake(icon, args.out / f"{name}.png", scale=3)   # 48x48, integer HUD pixels
+        print(f"  {name}.png <- pixelled {w}x{h} in 16-box -> 48x48")
 
     print("done.")
 

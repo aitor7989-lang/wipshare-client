@@ -1265,10 +1265,43 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         base.Draw(gameTime);
     }
 
+    // ----- The low-res world (the ONE-BIT "fat pixel" pass) --------------------------
+    // Under Mono the whole world pass renders into a half-resolution target and is blown
+    // back up with point sampling, so the board, sprites, halos and floats all sit on one
+    // chunky 2px grid while the HUD stays crisp. World coordinates are unchanged (the
+    // scale-down and scale-up cancel), so picking and layout code never notice.
+
+    private RenderTarget2D? _worldRt;
+    private const int WorldPx = 2;
+
+    private void BeginWorld()
+    {
+        if (Mono.On)
+        {
+            _worldRt ??= new RenderTarget2D(GraphicsDevice, ScreenW / WorldPx, ScreenH / WorldPx);
+            GraphicsDevice.SetRenderTarget(_worldRt);
+            GraphicsDevice.Clear(Mono.Bg);
+            _sb.Begin(samplerState: SamplerState.PointClamp,
+                transformMatrix: _camera.View * Matrix.CreateScale(1f / WorldPx));
+            return;
+        }
+        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+    }
+
+    private void EndWorld()
+    {
+        _sb.End();
+        if (!Mono.On || _worldRt == null) return;
+        GraphicsDevice.SetRenderTarget(null);
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        _sb.Draw(_worldRt, new Rectangle(0, 0, ScreenW, ScreenH), Color.White);
+        _sb.End();
+    }
+
     private void DrawCombatScene()
     {
         // World pass — everything on the map moves/zooms/shakes with the camera.
-        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+        BeginWorld();
         DrawFloor();
         if (_placing) DrawPlacementCells(); else DrawFloorOverlays();
         if (_timelineHover is { IsAlive: true } tlf)   // timeline card hover -> ring its cell
@@ -1276,7 +1309,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 Mono.On ? Mono.Ink : new Color(240, 220, 120));
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
         _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
-        _sb.End();
+        EndWorld();
 
         // HUD pass — screen space, unaffected by the camera.
         _sb.Begin(samplerState: SamplerState.PointClamp);
@@ -1412,16 +1445,20 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void UiTitle(string text, int x, int y, Color color) =>
         _font.Draw(_sb, text, x, y, 3, color);
 
+    /// <summary>World-pass text scale: the half-res mono world needs scale 2 minimum.</summary>
+    private static int WT => Mono.On ? 2 : 1;
+
     private void DrawTileOutline(Vector2 center, Color color)
     {
         var top = center + new Vector2(0, -TileH / 2f);
         var right = center + new Vector2(TileW / 2f, 0);
         var bottom = center + new Vector2(0, TileH / 2f);
         var left = center + new Vector2(-TileW / 2f, 0);
-        _prim.Line(_sb, top, right, 1f, color);
-        _prim.Line(_sb, right, bottom, 1f, color);
-        _prim.Line(_sb, bottom, left, 1f, color);
-        _prim.Line(_sb, left, top, 1f, color);
+        float w = Mono.On ? WorldPx : 1f;   // half-res world: 1px lines land on sub-pixels
+        _prim.Line(_sb, top, right, w, color);
+        _prim.Line(_sb, right, bottom, w, color);
+        _prim.Line(_sb, bottom, left, w, color);
+        _prim.Line(_sb, left, top, w, color);
     }
 
     // ----- 8-bit tileset terrain (assets/tileset.png present) -------------------------
@@ -1699,8 +1736,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var sheet = _sprites.GetSheet(kind == TileKind.Tree ? "onebit_tree" : "onebit_rock", "idle", "se");
         if (sheet != null)
         {
-            // Dim, not ink — props must never outshine the cast.
-            float hpx = sheet.FrameHeight * ChamberSet.PxScale * 0.75f;
+            // Dim, not ink — props must never outshine the cast. Integer scale keeps the grid.
+            float hpx = sheet.FrameHeight * ChamberSet.PxScale;
             SpriteDraw.Feet(_sb, sheet, blockTop + new Vector2(0, 2), Mono.Dim, hpx, 0);
             return;
         }
@@ -2160,24 +2197,41 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var cur = _engine.Current;
 
         // Vitals cluster, Dofus-style bottom centre: heart = HP, star = AP, shield = MP.
-        // Under the 1-bit reset the Batuhan kit icons replace the glossy gems (fallback: gems in ink).
-        var heartC = new Vector2(ScreenW / 2f, HudTop + 82);
-        var apC = new Vector2(ScreenW / 2f - 92, HudTop + 96);
-        var mpC = new Vector2(ScreenW / 2f + 92, HudTop + 96);
         float hpFrac = cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp;
-        if (!(Mono.On && DrawUiSprite("onebit_heart", heartC, 66, Mono.Ink)))
+        if (Mono.On)
+        {
+            // 1-bit vitals: three UNIFORM 48px kit icons (baked into identical boxes, drawn at
+            // native size so their pixels stay square), dark numbers punched into the white
+            // shapes, one HP bar under the heart. Symmetric, no glosses, nothing off-grid.
+            var heartC = new Vector2(ScreenW / 2f, HudTop + 66);
+            var apC = new Vector2(ScreenW / 2f - 96, HudTop + 72);
+            var mpC = new Vector2(ScreenW / 2f + 96, HudTop + 72);
+            if (!DrawUiSprite("onebit_heart", heartC, 48, Mono.Ink))
+                _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 64, Ew.Hp, Ew.HpDeep, hpFrac);
+            if (!DrawUiSprite("onebit_star", apC, 48, Mono.Ink))
+                _ew.Badge(_sb, EwChrome.Gem.Star, apC, 48, Ew.Ap, Ew.ApDeep);
+            if (!DrawUiSprite("onebit_shield", mpC, 48, Mono.Ink))
+                _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 48, Ew.Mp, Ew.MpDeep);
+            _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 9, 2, Mono.Panel);
+            _font.DrawCentered(_sb, cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, Mono.Panel);
+            _font.DrawCentered(_sb, cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 8, 2, Mono.Panel);
+            _font.DrawCentered(_sb, "AP", (int)apC.X, (int)apC.Y + 28, 1, Mono.Dim);
+            _font.DrawCentered(_sb, "MP", (int)mpC.X, (int)mpC.Y + 28, 1, Mono.Dim);
+            var hpBar = new Rectangle(ScreenW / 2 - 60, HudTop + 96, 120, 8);
+            Mono.Bar(_sb, _prim, hpBar, hpFrac, hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
+            _font.DrawCentered(_sb, $"{cur.Hp} / {cur.MaxHp}", ScreenW / 2, hpBar.Bottom + 6, 1, Mono.Dim);
+        }
+        else
+        {
+            var heartC = new Vector2(ScreenW / 2f, HudTop + 82);
             _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 104, Ew.Hp, Ew.HpDeep, hpFrac);
-        var onIcon = Mono.On ? Mono.Panel : Color.White;   // ink numbers sit ON solid white icons
-        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, onIcon);
-        _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1,
-            Mono.On ? Mono.Panel : Ew.Ink * 0.85f);
-        if (Mono.On) Mono.Bar(_sb, _prim, new Rectangle((int)heartC.X - 52, HudTop + 122, 104, 6), hpFrac);
-        if (!(Mono.On && DrawUiSprite("onebit_star", apC, 46, Mono.Ink)))
-            _ew.Badge(_sb, EwChrome.Gem.Star, apC, 62, Ew.Ap, Ew.ApDeep);
-        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, onIcon);
-        if (!(Mono.On && DrawUiSprite("onebit_shield", mpC, 44, Mono.Ink)))
-            _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 58, Ew.Mp, Ew.MpDeep);
-        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, onIcon);
+            _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, Color.White);
+            _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1, Ew.Ink * 0.85f);
+            _ew.Badge(_sb, EwChrome.Gem.Star, new Vector2(ScreenW / 2f - 92, HudTop + 96), 62, Ew.Ap, Ew.ApDeep);
+            _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, Color.White);
+            _ew.Badge(_sb, EwChrome.Gem.Diamond, new Vector2(ScreenW / 2f + 92, HudTop + 96), 58, Ew.Mp, Ew.MpDeep);
+            _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, Color.White);
+        }
         _font.DrawCentered(_sb, cur.Name.ToUpperInvariant(), ScreenW / 2, HudTop + 12, 1,
             cur.Team == Team.Player ? Ew.AccentBright : Ew.Danger);
 
@@ -2549,7 +2603,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawCity()
     {
-        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+        BeginWorld();
         DrawPlaneTiles(_cityMap);
         foreach (var cell in new[] { TitheCell, TempleCell, HireCell, LychgateCell })
             if (cell == _hover) _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CurrentRing * 0.30f);
@@ -2557,7 +2611,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER", "crown");
         DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST", "barrel");
         DrawLychgate(LychgateCell);
-        _sb.End();
+        EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
         _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   E: STASH & KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
@@ -2580,9 +2634,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 32), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 7), Mono.On ? new Color(34, 34, 33) : col * 1.25f);
         _font.DrawCentered(_sb, glyph, (int)center.X, (int)center.Y - 22, 2, Color.White);
-        _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
+        _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - (Mono.On ? 52 : 48), WT, Palette.Text);
         if (c == _hover)
-            _font.DrawCentered(_sb, "CLICK TO TRADE", (int)center.X, (int)center.Y - 60, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
+            _font.DrawCentered(_sb, "CLICK TO TRADE", (int)center.X, (int)center.Y - (Mono.On ? 72 : 60), WT, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawLychgate(CellCoord c)
@@ -2594,10 +2648,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle((int)center.X + 10, (int)center.Y - 42, 8, 42), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 20, (int)center.Y - 48, 40, 8), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 10, (int)center.Y - 40, 20, 40), new Color(8, 8, 12));
-        _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 62, 1,
+        _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - (Mono.On ? 66 : 62), WT,
             Mono.On ? Mono.Ink : new Color(200, 200, 220));
         if (c == _hover)
-            _font.DrawCentered(_sb, "CLICK TO DIVE", (int)center.X, (int)center.Y - 74, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
+            _font.DrawCentered(_sb, "CLICK TO DIVE", (int)center.X, (int)center.Y - (Mono.On ? 86 : 74), WT, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawNpcPanel(int npc)
@@ -2643,7 +2697,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawGraveyard()
     {
-        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: _camera.View);
+        BeginWorld();
         DrawPlaneTiles(_graveMap);
 
         // Path preview + hover highlight.
@@ -2674,7 +2728,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawCrypt(); // after the packs so its label is never buried under a huddle
         if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
-        _sb.End();
+        EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
         _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   E: KIT   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
@@ -2700,7 +2754,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 36, 28, 36), new Color(14, 14, 18));
             _prim.FillRect(_sb, new Rectangle((int)center.X - 11, (int)center.Y - 32, 22, 30), glow * 0.5f);
             _prim.FillRect(_sb, new Rectangle((int)center.X - 6, (int)center.Y - 26, 12, 24), new Color(8, 8, 12));
-            _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, glow);
+            _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - (Mono.On ? 52 : 48), WT, glow);
         }
         Gate(_gateDeeper, $"DEEPER >  ({_yardDepth + 2}/3)", deeper: true);
         Gate(_gateBack, $"< BACK  ({_yardDepth}/3)", deeper: false);
@@ -2727,7 +2781,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
         }
         _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
-            (int)center.X, (int)center.Y - 30, 1, Mono.On ? Mono.Ink : new Color(150, 210, 170));
+            (int)center.X, (int)center.Y - (Mono.On ? 34 : 30), WT, Mono.On ? Mono.Ink : new Color(150, 210, 170));
     }
 
     private void DrawCrypt()
@@ -2742,14 +2796,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 36, 44), new Color(14, 14, 18));
         _prim.FillRect(_sb, new Rectangle((int)center.X - 15, (int)center.Y - 38, 30, 38), col * 0.55f);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 9, (int)center.Y - 32, 18, 32), new Color(6, 6, 10));
-        _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - 56, 1,
+        _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - (Mono.On ? 62 : 56), WT,
             _cryptCleared ? Palette.TextDim : Mono.On ? Mono.Ink : new Color(204, 172, 224));
         string sub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
-        _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, 1,
+        _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, WT,
             Mono.On ? (locked ? Mono.Dim : Mono.Danger)
             : locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
         if (_cryptCell == _hover && !locked && !_cryptCleared)
-            _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - 68, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
+            _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - (Mono.On ? 82 : 68), WT, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawPartyToken(Vector2 center)
@@ -2762,7 +2816,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             for (int i = Math.Min(party.Count, 3) - 1; i >= 0; i--)
                 DrawPixActorIdle(PixActor(party[i].ClassId).sprite, center + offsets[i],
                     i == 0 ? Color.White : new Color(222, 226, 234));
-            _font.DrawCentered(_sb, party.Count > 1 ? "CREW" : "YOU", (int)center.X, (int)center.Y - 52, 1, Palette.Text);
+            _font.DrawCentered(_sb, party.Count > 1 ? "CREW" : "YOU",
+                (int)center.X, (int)center.Y - (Mono.On ? 46 : 52), WT, Palette.Text);
             return;
         }
         var col = new Color(120, 190, 120);
@@ -2806,7 +2861,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.DiscAt(_sb, center + o, 5, col);
             }
         }
-        _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - 30, 1,
+        _font.DrawCentered(_sb, afford ? $"x{size}" : "TOO FAR", (int)center.X, (int)center.Y - (Mono.On ? 36 : 30), WT,
             afford ? Palette.Text : Palette.TextDim);
 
         if (c == _hover)
@@ -2815,10 +2870,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             var groups = p.Def.Comp.GroupBy(a => a).Select(g => $"{g.Count()}x {MobDisplayName(g.Key)}").ToList();
             if (p.Def.Grade > 1) groups.Add($"GRADE +{p.Def.Grade - 1} (STRONGER)");
             if (p.Def.Hunts) groups.Add("HUNTS THE LIVING");
-            int w = groups.Max(t => _font.Measure(t, 1)) + 16;
-            var box = new Rectangle((int)center.X - w / 2, (int)center.Y - 46 - groups.Count * 13,
-                w, 8 + groups.Count * 13);
-            if (Mono.On) Mono.Frame(_sb, _prim, box);
+            int lp = Mono.On ? 17 : 13;   // line pitch follows the world text scale
+            int w = groups.Max(t => _font.Measure(t, WT)) + 16;
+            var box = new Rectangle((int)center.X - w / 2, (int)center.Y - 52 - groups.Count * lp,
+                w, 8 + groups.Count * lp);
+            if (Mono.On)
+            {
+                _prim.FillRect(_sb, box, Mono.Panel * 0.94f);
+                _prim.StrokeRect(_sb, box, WorldPx, Mono.Dim);   // 2px: survives the half-res pass
+            }
             else if (_dof.Loaded) _dof.Panel(_sb, box);
             else
             {
@@ -2826,7 +2886,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _prim.StrokeRect(_sb, box, 1, new Color(84, 108, 214));
             }
             for (int i = 0; i < groups.Count; i++)
-                _font.Draw(_sb, groups[i], box.X + 8, box.Y + 5 + i * 13, 1,
+                _font.Draw(_sb, groups[i], box.X + 8, box.Y + 5 + i * lp, WT,
                     i < p.Def.Comp.GroupBy(a => a).Count() ? Palette.Text
                     : Mono.On ? Mono.Danger : new Color(214, 150, 96));
         }

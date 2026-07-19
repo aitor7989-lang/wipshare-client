@@ -462,3 +462,16 @@ Karagol's 1-bit UI pack, both local-only in gitignored assets/ like every kit be
   NPC shop, kit (points + RANK UP), graveyard, pack hover, fight report, sexton court.
   Fixed en route: SPEED label under the timeline cards, AUTO-SPEND off the WIS row,
   mono unit rollover plate, and "THE SEXTON" truncating to seven letters on its card.
+
+## v7.1: fat pixels, small tokens, honest vitals
+- The mono world now renders through a HALF-RES target blown back up with point sampling
+  (BeginWorld/EndWorld) — board, sprites, halos, floats and telegraphs all share one chunky
+  2px grid while the HUD stays crisp. World coordinates are untouched, so picking never
+  noticed. World-pass text rides a WT=2 scale (half-res kills scale-1 glyphs); banners,
+  pack tooltips and every overworld label moved with it.
+- Sprites rebaked at NATIVE 16px and drawn at 32px — the cast is half its former size and
+  each art pixel is exactly one screen block. The Sexton still looms at 64px.
+- The bottom band vitals were rebuilt: three UNIFORM 48px icons (heart/star/shield) with
+  the numbers punched dark into the white shapes, AP/MP captions, and one HP bar under the
+  heart. The kit icons' diagonal shine slash read "broken" at HUD size, so the three
+  shapes are now pixelled in bake_onebit.py on the same 1-bit grid — solid and symmetric.

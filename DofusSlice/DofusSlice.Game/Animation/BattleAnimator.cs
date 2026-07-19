@@ -623,13 +623,15 @@ internal sealed class ProjectileOverlay : Overlay
     public override void Draw(SpriteBatch sb, Primitives prim, PixelFont font)
     {
         float p = Math.Clamp(_t / _dur, 0f, 1f);
+        // The half-res mono world would shrink the shot to a speck — double it there.
+        float m = DofusSlice.Game.Rendering.Mono.On ? 2f : 1f;
         for (int i = 3; i >= 1; i--)                       // trail, dimmer and smaller behind
         {
             float tp = Math.Clamp(p - i * 0.06f, 0f, 1f);
-            prim.DiscAt(sb, At(tp), 3.5f - i * 0.8f, _color * (0.5f - i * 0.12f));
+            prim.DiscAt(sb, At(tp), (3.5f - i * 0.8f) * m, _color * (0.5f - i * 0.12f));
         }
-        prim.DiscAt(sb, At(p), 4f, Color.White * 0.9f);    // the bright head
-        prim.DiscAt(sb, At(p), 2.5f, _color);
+        prim.DiscAt(sb, At(p), 4f * m, Color.White * 0.9f);    // the bright head
+        prim.DiscAt(sb, At(p), 2.5f * m, _color);
     }
 }
 
@@ -823,10 +825,12 @@ internal sealed class BannerOverlay : Overlay
     public override void Draw(SpriteBatch sb, Primitives prim, PixelFont font)
     {
         float a = Math.Min(1f, Math.Min(_t / 0.1f, (_dur - _t) / 0.15f));
-        int w = font.Measure(_text, 1) + 12;
-        var r = new Rectangle((int)(_pos.X - w / 2f), (int)_pos.Y - 4, w, 16);
+        // Mono renders the world at half res — scale-1 text would land on sub-pixels there.
+        int ts = DofusSlice.Game.Rendering.Mono.On ? 2 : 1;
+        int w = font.Measure(_text, ts) + 12;
+        var r = new Rectangle((int)(_pos.X - w / 2f), (int)_pos.Y - 4, w, 6 + 10 * ts);
         prim.FillRect(sb, r, new Color(10, 11, 14) * (0.85f * a));
-        prim.StrokeRect(sb, r, 1, _color * a);
-        font.DrawCentered(sb, _text, (int)_pos.X, r.Y + 5, 1, Color.White * a);
+        prim.StrokeRect(sb, r, ts, _color * a);
+        font.DrawCentered(sb, _text, (int)_pos.X, r.Y + 5, ts, Color.White * a);
     }
 }

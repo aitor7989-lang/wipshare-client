@@ -54,8 +54,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
     private int _cryptRoom;
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
-    private string _cryptMsg = "";
-    private float _cryptMsgTimer;
+    private string _yardMsg = "";
+    private float _yardMsgTimer;
     private static readonly CellCoord PartyStart = new(1, 6), CryptCell = new(13, 11);
     private const int CryptLevel = 3;
     private const int ScreenW = 1280;
@@ -438,7 +438,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyWorld = _proj.CellCenter(PartyStart);
         _partyPath.Clear();
         _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
-        _cryptRoom = 0; _cryptMsg = ""; _cryptMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
+        _cryptRoom = 0; _yardMsg = ""; _yardMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
         _hireOnArrive = false;
     }
 
@@ -460,10 +460,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive == null) { EnterCity(); return; }
         _dive.Tick(dt);
         if (_dive.Ended) { EnterCity(); return; }
-        if (_cryptMsgTimer > 0f) _cryptMsgTimer -= dt;
+        if (_yardMsgTimer > 0f) _yardMsgTimer -= dt;
 
         MovePartyAlongPath(dt);
-        if (_dive.ConsumeDeparture() is { } dep) { _cryptMsg = dep; _cryptMsgTimer = 4f; } // the Grasping exit
+        if (_dive.ConsumeDeparture() is { } dep) { _yardMsg = dep; _yardMsgTimer = 4f; } // the Grasping exit
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
         // Number keys walk the party to packs in reach order (a quick shortcut).
@@ -565,19 +565,19 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _hireOnArrive = false;
             var offer = _dive!.Survivor;
             if (offer != null)
-                _cryptMsg = _dive.HireSurvivor()
+                _yardMsg = _dive.HireSurvivor()
                     ? $"The {offer.ClassId}-survivor falls in with the crew ({offer.Price}g). Their eyes are hard to read."
                     : _campaign.Crew.Count >= 3 ? "The crew is full — the survivor watches you pass."
                     : "You cannot afford the survivor's price.";
-            _cryptMsgTimer = 3f;
+            _yardMsgTimer = 3f;
         }
     }
 
     private void TryEnterCrypt()
     {
-        if (_cryptCleared) { _cryptMsg = "The altar is spent — the Sexton is dead."; _cryptMsgTimer = 2.5f; return; }
+        if (_cryptCleared) { _yardMsg = "The altar is spent — the Sexton is dead."; _yardMsgTimer = 2.5f; return; }
         int lvl = _campaign.Avatar?.Level ?? 1;
-        if (lvl < CryptLevel) { _cryptMsg = $"The crew is too green — reach level {CryptLevel} to enter the Crypt."; _cryptMsgTimer = 3f; return; }
+        if (lvl < CryptLevel) { _yardMsg = $"The crew is too green — reach level {CryptLevel} to enter the Crypt."; _yardMsgTimer = 3f; return; }
 
         _cryptRooms = TitheContent.CryptRooms();
         _cryptRun = true;
@@ -597,6 +597,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void BeginCombat(DiveSession.PackState pack, bool jumped = false)
     {
         _engine = _dive!.BeginFight(pack, chargeTravel: false, jumped: jumped); // the walk was the travel cost
+        _dive.InFight = true; // the bell keeps draining, but nobody walks out of a battle line
         _map = _graveMap;
         _pendingPack = pack;
         _combatResolved = false;
@@ -1357,10 +1358,15 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawTitheHud()
     {
-        _font.Draw(_sb, $"ROUND {_engine.Round}   {(_boss ? "THE SEXTON'S COURT" : "THE GRAVEYARD")}", 16, 12, 2, Palette.Text);
+        string place = _loop ? (_cryptRun ? "THE CRYPT" : "THE GRAVEYARD")
+            : _boss ? "THE SEXTON'S COURT" : "THE GRAVEYARD";
+        _font.Draw(_sb, $"ROUND {_engine.Round}   {place}", 16, 12, 2, Palette.Text);
         _font.Draw(_sb, $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
             _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
-        _font.Draw(_sb, "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON", 16, HudTop - 22, 1, Palette.TextDim);
+        // Only advertise keys that work here: R/B restart or swap the STANDALONE fight and would
+        // mislead during a campaign fight, where the dive owns the flow.
+        _font.Draw(_sb, _loop ? "1/2/3 = SPEED" : "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON",
+            16, HudTop - 22, 1, Palette.TextDim);
 
         // Playback speed, top-centre where the piloted mode shows the turn clock.
         _font.DrawCentered(_sb, $"> SPEED {_speed:0}X", ScreenW / 2, 16, 2, Palette.Text);
@@ -1736,8 +1742,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   REACH THE CRYPT AT LEVEL {CryptLevel}", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
-        if (_cryptMsgTimer > 0f)
-            _font.DrawCentered(_sb, _cryptMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
+        if (_yardMsgTimer > 0f)
+            _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
         _sb.End();
     }
 
@@ -1893,7 +1899,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         bool bossRoom = _cryptRun && _cryptRooms[_cryptRoom].Boss;
         string title = !win ? "THE CREW FALLS"
             : bossRoom ? "THE SEXTON FALLS"
-            : _cryptRun ? "ROOM CLEARED" : "PACK CLEARED";
+            : _cryptRun ? "ROOM CLEARED"
+            : _jumpedFight ? "THE AMBUSH IS BEATEN" : "PACK CLEARED";
         _font.DrawCentered(_sb, title, ScreenW / 2, 175, 5, win ? Palette.HpFill : Palette.HeroColor);
 
         int y = 265;

@@ -45,7 +45,7 @@ public static class CampaignSim
                 ? $"The avatar fell. Campaign over after {dive} dives."
                 : $"Survived {dive} dives.");
             Console.WriteLine($"Gold {campaign.Gold}, tithes paid {campaign.TithesPaid}, debt {campaign.TitheDebt}.");
-            Console.WriteLine($"Crew: {string.Join(", ", campaign.Crew.Select(u => $"{u.Name}({u.ClassId} L{u.Level}{(u.Wounded ? " wounded" : "")}))"))}");
+            Console.WriteLine($"Crew: {string.Join(", ", campaign.Crew.Select(u => $"{u.Name}({u.ClassId} L{u.Level}{(u.Wounded ? " wounded" : "")})"))}");
             Console.WriteLine($"Essences held: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
             if (campaign.Avatar is { } av)
             {

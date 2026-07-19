@@ -119,6 +119,17 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       finds they are. Verified dropping AND worn in campaign runs (a seed-11
       avatar broke the panoply for Gravewalkers — the classic dilemma, live).
       Still open for 9: a second full set, more bestiary vs Chafer numbers.
+- [x] **Polish pass** (user-requested). Fixed: mid-fight Grasping exit (a merc
+      could "slip away" while their fighter still stood on the grid — new
+      DiveSession.InFight gate; the fold remains the betrayal moment); stale
+      "R = NEW FIGHT · B = SEXTON" hints shown during campaign fights where
+      neither key works (now standalone-only, and the combat title says THE
+      CRYPT inside the crypt); ambush fights report "THE AMBUSH IS BEATEN"
+      instead of the generic pack title; crew-summary double-paren typo;
+      `_cryptMsg` renamed `_yardMsg` (it carries survivor/betrayal toasts too).
+      Checked-clean: no TODO markers, 0 compiler warnings ×3 projects, README
+      progression table verified against live output, Wisdom-XP claim verified
+      implemented (TitheResolution), HUD crew rows fit the 760px window.
 
 ## Progress journal (newest last)
 

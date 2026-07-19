@@ -50,6 +50,11 @@ public sealed class DiveSession
 
     /// <summary>A betrayal note ("X slips away with Ng"), set when a Grasping merc departs.</summary>
     public string? Departure { get; private set; }
+
+    /// <summary>The visual game raises this while a fight is on the grid: the clock keeps running
+    /// (Bible §3.1.3) but nobody walks out of a battle line — the Grasping exit waits for the
+    /// fight to fold. Headless flows never set it (their checks already sit between fights).</summary>
+    public bool InFight { get; set; }
     public string? ConsumeDeparture() { var d = Departure; Departure = null; return d; }
 
     // The Grasping calculus (Bible §6.12), placeholders for M5: leave when the haul crosses
@@ -99,7 +104,7 @@ public sealed class DiveSession
     /// </summary>
     private void CheckBetrayal()
     {
-        if (Ended || GoldGained < GraspThreshold || Clock > GraspClock) return;
+        if (Ended || InFight || GoldGained < GraspThreshold || Clock > GraspClock) return;
         var traitor = _campaign.Crew.FirstOrDefault(u => !u.IsAvatar && u.Temperament == Temperament.Grasping);
         if (traitor == null) return;
         int cut = GoldGained * GraspSharePct / 100;
@@ -187,6 +192,7 @@ public sealed class DiveSession
     /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>
     public FightReport ApplyResult(PackState pack, CombatEngine engine)
     {
+        InFight = false; // folding results IS the fight ending — the exit may fire again now
         var res = TitheResolution.Resolve(engine);
         var lost = new List<string>();
         var wounded = new List<string>();

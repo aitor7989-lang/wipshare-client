@@ -366,6 +366,7 @@ public static class TitheTables
       "clockSeconds": 240,
       "cryptReach": 150,
       "packs": [
+        { "id": "straggler",  "comp": ["barrow_husk"],                                                   "reach": 12, "hunts": false, "grade": 1 },
         { "id": "husks-near", "comp": ["barrow_husk", "barrow_husk"],                                    "reach": 18, "hunts": false, "grade": 1 },
         { "id": "bonewash",   "comp": ["barrow_husk", "marrow_spitter"],                                 "reach": 28, "hunts": false, "grade": 1 },
         { "id": "warden-way", "comp": ["crypt_warden", "grave_mite", "grave_mite"],                      "reach": 36, "hunts": false, "grade": 2 },

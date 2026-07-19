@@ -721,3 +721,17 @@ The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
   layer over Equip/Unequip, which the progression sim already proves; a live drag
   needs a gear drop, so it rides on that proof.
 ALL FOUR PASSES OF docs/ROADMAP-POLISH.md ARE DONE (18 items + 3.4b).
+
+## v9.2: hardening — the straggler, and the ding SEEN live
+- THE STRAGGLER: a new near-yard pack (one barrow husk, reach 12, grade 1) gives a
+  solo one-spell level-1 an honest first kill — answers the v9.0 balance watch.
+  Data-only change in TitheTables; sims stay green (effects 18/18, survey clean).
+- THE LEVEL-UP MOMENT, VERIFIED LIVE at last: solo dive, straggler kill, ding to 2 —
+  blackout, rays, the blue star wearing "2", LIFE FULLY RESTORED in green, and
+  FLASHFIRE unveiled with its torch glyph in fire orange. One SPACE advances. The
+  next fight's band showed the new spell in its well, HP full from the ding, the
+  green "-3 MP" float and YOUR TURN banner — the ladder + full-heal loop closed.
+- Grammar caught on the celebration ("YOU REACHES LEVEL 2"): the avatar's name
+  "You" now conjugates — YOU REACH / {NAME} REACHES.
+- Still luck-gated in live QA (mechanisms sim-proven): a live essence ground-drop
+  and a live gear drag — both thin layers over verified Core calls.

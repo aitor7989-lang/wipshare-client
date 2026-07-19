@@ -3087,7 +3087,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         OutlinedCentered($"{c.level}", (int)ctr.X, (int)ctr.Y - 12, 3, Mono.Ink);
 
         _font.DrawCentered(_sb, "LEVEL UP!", ScreenW / 2, 386, 5, Mono.Ink);
-        _font.DrawCentered(_sb, $"{a.Name.ToUpperInvariant()} REACHES LEVEL {c.level}",
+        _font.DrawCentered(_sb, a.Name.Equals("You", StringComparison.OrdinalIgnoreCase)
+                ? $"YOU REACH LEVEL {c.level}"
+                : $"{a.Name.ToUpperInvariant()} REACHES LEVEL {c.level}",
             ScreenW / 2, 442, 2, Mono.Dim);
         _font.DrawCentered(_sb, "LIFE FULLY RESTORED", ScreenW / 2, 470, 2, Mono.Heal);
 

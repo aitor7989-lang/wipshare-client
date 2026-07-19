@@ -223,8 +223,12 @@ public static class TitheTables
     // Equipment (Bible §5, §6.10). Dofus 1.29 slot list: weapon, hat, cape, amulet, ring (×2),
     // belt, boots. The Graveyard's one starter panoply — the Adventurer set — following the
     // Adventurer-set pattern: modest stats per piece, a meaningful full-set bonus (see SetsJson).
-    // Only Strength/Vitality/Agility/Wisdom are live in the prototype (elements deferred). Values
-    // are honest placeholders for the §9 mining / M5 tuning pass.
+    // Values are honest placeholders for the §9 mining / M5 tuning pass.
+    // The two set-less rows are the behavior-rule UNIQUES (Bible §5: "a +1 PM boot equivalent
+    // stays the canonical screaming find"): Gravewalkers (+1 MP) and the Piper's Whistle (+1 AP).
+    // They surface rarely through the same gear-drop channel (a successful roll is a unique
+    // ~15% of the time) and compete with set pieces for their slot — breaking the panoply for
+    // the unique is the classic Dofus dilemma, and it's the player's to make.
     public const string ItemsJson = """
     [
       { "id": "adv_blade",  "name": "Adventurer Blade",  "slot": "weapon", "set": "adventurer", "strength": 6, "intelligence": 6, "power": 3 },
@@ -233,7 +237,10 @@ public static class TitheTables
       { "id": "adv_amulet", "name": "Adventurer Amulet", "slot": "amulet", "set": "adventurer", "vitality": 10, "intelligence": 5, "wisdom": 3 },
       { "id": "adv_ring",   "name": "Adventurer Ring",   "slot": "ring",   "set": "adventurer", "strength": 4, "intelligence": 4, "vitality": 6 },
       { "id": "adv_belt",   "name": "Adventurer Belt",   "slot": "belt",   "set": "adventurer", "vitality": 8, "strength": 3, "power": 2 },
-      { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "chance": 4, "vitality": 6 }
+      { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "chance": 4, "vitality": 6 },
+
+      { "id": "gravewalkers",  "name": "Gravewalkers",     "slot": "boots",  "agility": 4, "mp": 1 },
+      { "id": "pipers_whistle","name": "Piper's Whistle",  "slot": "amulet", "wisdom": 4, "ap": 1 }
     ]
     """;
 

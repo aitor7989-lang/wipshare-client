@@ -233,7 +233,8 @@ public sealed class Campaign
     {
         var it = TitheContent.Item(itemId);
         return it == null ? 0
-            : it.Vitality + (it.Strength + it.Intelligence + it.Chance + it.Agility) * 2 + it.Wisdom + it.Power * 3;
+            : it.Vitality + (it.Strength + it.Intelligence + it.Chance + it.Agility) * 2 + it.Wisdom + it.Power * 3
+            + (it.Ap + it.Mp) * 45; // behavior-rule bonuses outrank stat sticks (the +1 MP idiom)
     }
 
     /// <summary>Equip a stashed piece on a unit, filling a free slot or displacing a weaker one back

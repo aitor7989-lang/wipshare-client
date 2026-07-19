@@ -205,7 +205,7 @@ public sealed class DiveSession
             // Fold each gear roll into a concrete unowned set piece; the avatar auto-equips upgrades.
             foreach (var setId in res.GearDrops)
             {
-                var piece = TitheContent.RandomUnownedPiece(setId, _campaign.OwnsGear, _rng);
+                var piece = TitheContent.RandomUnownedGear(setId, _campaign.OwnsGear, _rng);
                 if (piece != null && _campaign.AddGear(piece)) gearGot.Add(TitheContent.ItemName(piece));
             }
 

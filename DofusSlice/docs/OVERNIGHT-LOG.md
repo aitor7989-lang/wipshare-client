@@ -112,8 +112,13 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       that scales depth with level before touching the data.
 - [ ] **8. Balance pass (M5).** Give cautious play real risk; make the Crypt a fair
       big bet; tune income-per-dive. Fix the bimodal survive-forever / wipe-fast.
-- [ ] **9. Content & uniques.** Second set, the canonical +1 MP boots screaming
-      find, more bestiary tuned toward Chafer-family numbers.
+- [x] **9-partial. The behavior-rule uniques.** DONE: Gravewalkers (+1 MP boots)
+      and the Piper's Whistle (+1 AP amulet) — set-less rows in ItemsJson; ~15%
+      of successful gear rolls resolve to an unowned unique (RandomUnownedGear);
+      GearWeight values AP/MP at 45 so auto-equip treats them as the screaming
+      finds they are. Verified dropping AND worn in campaign runs (a seed-11
+      avatar broke the panoply for Gravewalkers — the classic dilemma, live).
+      Still open for 9: a second full set, more bestiary vs Chafer numbers.
 
 ## Progress journal (newest last)
 

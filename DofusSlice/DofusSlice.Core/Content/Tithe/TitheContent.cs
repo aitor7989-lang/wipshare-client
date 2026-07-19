@@ -313,6 +313,23 @@ public static class TitheContent
         return pool.Count == 0 ? null : pool[rng.Roll(1, pool.Count) - 1];
     }
 
+    /// <summary>The set-less behavior-rule uniques (the +1 MP boots idiom).</summary>
+    public static IReadOnlyList<string> UniqueIds() =>
+        Items.Values.Where(i => i.Set == null).Select(i => i.Id).ToList();
+
+    /// <summary>
+    /// Resolve a successful gear roll into a concrete unowned piece: usually the named set, but
+    /// ~15% of finds are a UNIQUE — the screaming kind. Null when everything is owned already.
+    /// </summary>
+    public static string? RandomUnownedGear(string setId, Func<string, bool> owned, IRng rng)
+    {
+        var uniques = UniqueIds().Where(id => !owned(id)).ToList();
+        if (uniques.Count > 0 && rng.Roll(1, 100) <= 15)
+            return uniques[rng.Roll(1, uniques.Count) - 1];
+        return RandomUnownedPiece(setId, owned, rng) ??
+               (uniques.Count > 0 ? uniques[rng.Roll(1, uniques.Count) - 1] : null);
+    }
+
     /// <summary>All item ids belonging to a set (the drop pool for that panoply).</summary>
     public static IReadOnlyList<string> SetPieceIds(string setId) =>
         Items.Values.Where(i => i.Set == setId).Select(i => i.Id).ToList();

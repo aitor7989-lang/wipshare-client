@@ -1396,9 +1396,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             foreach (var cell in _moveRange.Keys)
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.MoveRange);
 
-            // Hover preview: MP cost to reach the hovered cell.
+            // Hover preview: the EXACT route you'd walk (green footsteps) + its MP cost.
             if (_moveRange.TryGetValue(_hover, out int cost))
-                DrawCellLabel($"{cost} MP", _hover, Mono.On ? Mono.Ink : Palette.MpPip);
+            {
+                var route = DofusSlice.Core.Grid.Pathfinding.FindPath(_engine.Field, hero!.Pos, _hover,
+                    c => c != hero.Pos && _engine.FighterAt(c) != null);
+                if (route != null)
+                    foreach (var step in route.Skip(1))
+                        _prim.DiscAt(_sb, _proj.CellCenter(step), 5, Mono.On ? Mono.Walk : Palette.MpPip);
+                DrawCellLabel($"{cost} MP", _hover, Mono.On ? Mono.Mp : Palette.MpPip);
+            }
         }
 
         if (playerTurn && _selectedSpell >= 0)
@@ -1689,9 +1696,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (_placing && f == _selCrew)                  // highlight the crew member being placed
                 _prim.DiamondAt(_sb, center, (Mono.On ? Mono.Ink : new Color(245, 224, 120)) * 0.35f);
             // 1.29 rule: no UI above heads. The only marker is the team halo at the feet —
-            // red for the crew, blue for the dead — brighter while it is this unit's turn.
-            var halo = Mono.On ? (crew ? Mono.Ink : Mono.Danger)
-                : crew ? new Color(214, 40, 22) : new Color(64, 92, 208);
+            // BLUE for your side, red for the dead — brighter while it is this unit's turn.
+            var halo = Mono.On ? (crew ? Mono.Ally : Mono.Danger)
+                : crew ? new Color(64, 92, 208) : new Color(214, 40, 22);
             bool active = !_placing && _engine.Outcome == FightOutcome.Ongoing && f == _engine.Current;
             _prim.HaloAt(_sb, center + new Vector2(0, 2), halo * (active ? 1f : 0.62f));
             var pose = _anim.PoseFor(f);
@@ -1787,7 +1794,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     }
 
     private static Color StatusColor(StatusKind k) => Mono.On
-        ? k == StatusKind.Poison ? Mono.Danger : Mono.Ink
+        ? k switch
+        {
+            StatusKind.Poison => new Color(120, 200, 90),      // poison speaks sickly green
+            StatusKind.Shield => Mono.Ap,
+            StatusKind.DamageBuff => new Color(232, 116, 60),
+            StatusKind.MpDrain => new Color(170, 120, 210),
+            StatusKind.Regen => Mono.Heal,
+            _ => Mono.Ink,
+        }
         : k switch
     {
         StatusKind.DamageBuff => new Color(240, 160, 60),
@@ -1795,6 +1810,20 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         StatusKind.Poison => new Color(120, 200, 90),
         StatusKind.MpDrain => new Color(170, 120, 210),
         _ => Color.White,
+    };
+
+    /// <summary>One readable letter per status for the turn-order chips.</summary>
+    private static string StatusGlyph(StatusKind k) => k switch
+    {
+        StatusKind.Poison => "P",
+        StatusKind.Shield => "S",
+        StatusKind.DamageBuff => "+",
+        StatusKind.MpDrain => "M",
+        StatusKind.Regen => "R",
+        StatusKind.Rooted => "X",
+        StatusKind.Stabilized => "A",
+        StatusKind.Reflect => "F",
+        _ => "?",
     };
 
     private static int FrameIndex(Pose pose, SpriteSheet sheet)
@@ -1816,7 +1845,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     /// <summary>A UI icon as a GAUGE: hollow (faint) sprite with its bottom fraction filled
     /// in ink — the heart that empties as you bleed. False when the art isn't baked.</summary>
-    private bool DrawUiSpriteFilled(string name, Vector2 center, float targetH, float frac)
+    private bool DrawUiSpriteFilled(string name, Vector2 center, float targetH, float frac,
+        Color? fill = null)
     {
         var sheet = _sprites.GetSheet(name, "idle", "se");
         if (sheet == null) return false;
@@ -1827,7 +1857,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (cut < sheet.FrameHeight)
         {
             var src = new Rectangle(0, cut, sheet.FrameWidth, sheet.FrameHeight - cut);
-            _sb.Draw(sheet.Texture, top + new Vector2(0, cut * scale), src, Mono.Ink,
+            _sb.Draw(sheet.Texture, top + new Vector2(0, cut * scale), src, fill ?? Mono.Ink,
                 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
         return true;
@@ -1865,6 +1895,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         return key != null && DrawIconRect("icon_spell_" + key, r, tint, pad);
     }
 
+    /// <summary>A spell's ink: its damage element's color, heal green, or plain ink.</summary>
+    private static Color SpellInk(SpellDef s)
+    {
+        var dmg = s.Effects.FirstOrDefault(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal);
+        if (dmg != null) return Mono.Element(dmg.Element);
+        return s.Effects.Any(e => e.Kind == EffectKind.Heal) ? Mono.Heal : Mono.Ink;
+    }
+
     /// <summary>Draw a sprite anchored at its feet (bottom-centre) on the cell centre.</summary>
     private void DrawSpriteFeet(Texture2D tex, Vector2 feet, Color tint, float targetHeight)
     {
@@ -1882,7 +1920,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle(x, (int)y, barW, 5), Palette.HpBack);
         int fill = (int)MathF.Round(barW * Math.Clamp(dhp / f.MaxHp, 0f, 1f));
         _prim.FillRect(_sb, new Rectangle(x, (int)y, fill, 5),
-            f.Team == Team.Player ? Palette.HpFill : Mono.On ? Mono.Danger : new Color(214, 96, 88));
+            Mono.On ? Mono.Hp : f.Team == Team.Player ? Palette.HpFill : new Color(214, 96, 88));
         _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)centerX, (int)y - 10, 1, Palette.Text);
     }
 
@@ -2067,10 +2105,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawHoverUnitInfo();
     }
 
-    /// <summary>The Emberwick combat chat: slate card, turn headers, element-tinted lines.</summary>
+    /// <summary>The Emberwick combat chat, BOTTOM-LEFT like the Dofus chat box — tucked
+    /// above the band, clear of the turn order that owns the top-right.</summary>
     private void DrawEmberwickLog()
     {
-        var panel = new Rectangle(930, 84, 344, 250);
+        var panel = new Rectangle(8, HudTop - 232, 344, 208);
         _ew.Panel(_sb, panel, sunken: true, radius: 10);
         _ew.HeaderStrip(_sb, new Rectangle(panel.X + 2, panel.Y + 2, panel.Width - 4, 22));
         _font.DrawCentered(_sb, "THE FIGHT", panel.Center.X, panel.Y + 9, 1, Ew.Ink);
@@ -2121,18 +2160,19 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var mpC = new Vector2(512, HudTop + 68);
         // The heart IS the health bar: it drains as you bleed. Numbers wear a dark
         // outline so they read on the white fill and the hollow dark alike.
-        if (!DrawUiSpriteFilled("onebit_heart", heartC, 48, hpFrac))
+        // The vitals law: the heart fills RED, the AP star is BLUE, the MP shield is GREEN.
+        if (!DrawUiSpriteFilled("onebit_heart", heartC, 48, hpFrac, Mono.Hp))
             _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 56, Ew.Hp, Ew.HpDeep, hpFrac);
-        if (!DrawUiSprite("onebit_star", apC, 38, Mono.Ink))
+        if (!DrawUiSprite("onebit_star", apC, 38, Mono.Ap))
             _ew.Badge(_sb, EwChrome.Gem.Star, apC, 40, Ew.Ap, Ew.ApDeep);
-        if (!DrawUiSprite("onebit_shield", mpC, 38, Mono.Ink))
+        if (!DrawUiSprite("onebit_shield", mpC, 38, Mono.Mp))
             _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 40, Ew.Mp, Ew.MpDeep);
         OutlinedCentered(cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 8, 2,
             hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
         OutlinedCentered(cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, Mono.Ink);
         OutlinedCentered(cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 6, 2, Mono.Ink);
-        _font.DrawCentered(_sb, "AP", (int)apC.X - 34, (int)apC.Y + 6, 1, Ew.InkSoft);
-        _font.DrawCentered(_sb, "MP", (int)mpC.X + 34, (int)mpC.Y + 6, 1, Ew.InkSoft);
+        _font.DrawCentered(_sb, "AP", (int)apC.X - 34, (int)apC.Y + 6, 1, Mono.On ? Mono.Ap : Ew.InkSoft);
+        _font.DrawCentered(_sb, "MP", (int)mpC.X + 34, (int)mpC.Y + 6, 1, Mono.On ? Mono.Mp : Ew.InkSoft);
 
         // The spell grid (demo geometry: 7 columns, two rows — row two waits for pages).
         SpellDef? tip = null; int tipX = 0;
@@ -2153,9 +2193,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 var spell = spells[i];
                 if (hov) { tip = spell; tipX = slotR.X; }
                 bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
-                // The pack's spell glyph fills the well; the AP price sits outlined in the
-                // corner so it reads on the white fill. No glyph baked -> the old letter.
-                if (DrawSpellIcon(spell, slotR, canPay ? Mono.Ink : Mono.Faint))
+                // The pack's spell glyph fills the well IN ITS ELEMENT'S COLOR; the AP price
+                // sits outlined in the corner. No glyph baked -> the old letter.
+                if (DrawSpellIcon(spell, slotR, canPay ? SpellInk(spell) : Mono.Faint))
                     OutlinedCentered($"{spell.ApCost}", slotR.Right - 8, slotR.Bottom - 13, 1,
                         canPay ? Mono.Ink : Mono.Danger);
                 else
@@ -2188,8 +2228,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f);
             _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 13), 1080, ty, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
             var tb = new Rectangle(1080, ty + 11, 120, 6);
-            Mono.Bar(_sb, _prim, tb, f.IsAlive ? frac : 0f,
-                !f.IsAlive || frac > 0.3f ? Mono.Ink : Mono.Danger);
+            Mono.Bar(_sb, _prim, tb, f.IsAlive ? frac : 0f, Mono.Hp); // HP bars are RED, the law
             _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 1206, ty + 7, 1,
                 f.IsAlive ? Ew.InkSoft : Ew.Danger);
             ty += 26;
@@ -2238,16 +2277,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         EffectKind.Damage => ($"{e.Element.ToString().ToUpperInvariant()} DAMAGE {e.Min}-{e.Max}",
             EwChrome.ElementColor(e.Element)),
-        EffectKind.Heal => ($"HEALS {e.Min}-{e.Max} HP", Ew.Gale),
+        EffectKind.Heal => ($"HEALS {e.Min}-{e.Max} HP", Mono.On ? Mono.Heal : Ew.Gale),
         EffectKind.Push => ($"PUSHES {e.Min} CELL{(e.Min > 1 ? "S" : "")}", Ew.InkSoft),
         EffectKind.Pull => ($"PULLS {e.Min} CELL{(e.Min > 1 ? "S" : "")}", Ew.InkSoft),
         EffectKind.Swap => ("SWAPS PLACES WITH THE TARGET", Ew.Moon),
         EffectKind.Teleport => ("TELEPORTS TO THE CELL", Ew.Moon),
         EffectKind.Lifesteal => ($"{e.Element.ToString().ToUpperInvariant()} STEALS {e.Min}-{e.Max} HP",
             EwChrome.ElementColor(e.Element)),
-        EffectKind.StealAp => ($"STEALS {e.Min} AP", Ew.Ap),
-        EffectKind.StealMp => ($"STEALS {e.Min} MP", Ew.Mp),
-        EffectKind.GrantAp => ($"GRANTS +{e.Min} AP", Ew.Ap),
+        EffectKind.StealAp => ($"STEALS {e.Min} AP", Mono.On ? Mono.Ap : Ew.Ap),
+        EffectKind.StealMp => ($"STEALS {e.Min} MP", Mono.On ? Mono.Mp : Ew.Mp),
+        EffectKind.GrantAp => ($"GRANTS +{e.Min} AP", Mono.On ? Mono.Ap : Ew.Ap),
         EffectKind.Summon => ("SUMMONS AN ALLY", Ew.Gale),
         EffectKind.SelfHpCost => ($"COSTS {e.Min} OF YOUR OWN HP", Ew.Danger),
         EffectKind.ApplyStatus => (e.Status switch
@@ -2292,9 +2331,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             && _dof.SpellIcon(_sb, cardKey, new Rectangle(r.X + 6, r.Y + 3, 18, 18)))
             nx = r.X + 28;
         else if (cardKey != null
-            && DrawIconRect("icon_spell_" + cardKey, new Rectangle(r.X + 8, r.Y + 4, 16, 16), pad: 0))
+            && DrawIconRect("icon_spell_" + cardKey, new Rectangle(r.X + 8, r.Y + 4, 16, 16),
+                SpellInk(spell), pad: 0))
             nx = r.X + 30;
-        _font.Draw(_sb, spell.Name.ToUpperInvariant(), nx, r.Y + 8, 1, Ew.Gold);
+        _font.Draw(_sb, spell.Name.ToUpperInvariant(), nx, r.Y + 8, 1,
+            Mono.On ? SpellInk(spell) : Ew.Gold);
         int ly = r.Y + 28;
         foreach (var (t, c) in lines) { _font.Draw(_sb, t, r.X + 12, ly, 1, c); ly += 13; }
     }
@@ -2362,30 +2403,63 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
             // Treat a unit whose death hasn't replayed yet as alive — no spoilers on the card.
             bool shownAlive = f.IsAlive || _anim.StillShown(f.Id);
-            var token = shownAlive
-                ? (_tithe ? TitheTokenColor(f.Archetype)
-                          : f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name))
-                : new Color(58, 60, 66);
-            var mid = new Vector2(r.X + 17, r.Y + cardH / 2f);
-            _prim.DiscAt(_sb, mid, 11, new Color(18, 18, 22));
-            _prim.DiscAt(_sb, mid, 9, token);
+
+            // The card wears the TEAM color: your side blue, theirs red, the dead faint.
+            if (Mono.On)
+                _prim.StrokeRect(_sb, r, current ? 2 : 1, !shownAlive ? Mono.Faint
+                    : f.Team == Team.Player ? Mono.Ally : Mono.Danger);
+
+            // The fighter's HEAD on the card, Dofus-style (token disc when no art is baked).
+            var headSheet = _tithe ? _sprites.GetSheet(PixActor(f.Archetype).sprite, "idle", "se") : null;
+            if (headSheet != null)
+            {
+                var tint = !shownAlive ? Mono.Faint : f.Archetype == "sexton" ? Mono.Danger : Mono.Ink;
+                int fw = headSheet.FrameWidth, fh = headSheet.FrameHeight;
+                int srcH = Math.Max(1, fh * 3 / 4);                     // the head + shoulders crop
+                _sb.Draw(headSheet.Texture, new Rectangle(r.X + 3, r.Y + 6, 32, srcH * 2),
+                    new Rectangle(0, 0, fw, srcH), tint);
+            }
+            else
+            {
+                var token = shownAlive
+                    ? (_tithe ? TitheTokenColor(f.Archetype)
+                              : f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name))
+                    : new Color(58, 60, 66);
+                var mid = new Vector2(r.X + 17, r.Y + cardH / 2f);
+                _prim.DiscAt(_sb, mid, 11, new Color(18, 18, 22));
+                _prim.DiscAt(_sb, mid, 9, token);
+            }
 
             // "The Sexton" must never truncate to something unfortunate — drop the article first.
             string cardName = f.Name.ToUpperInvariant();
             if (cardName.StartsWith("THE ")) cardName = cardName[4..];
-            _font.Draw(_sb, Trunc(cardName, 7), r.X + 32, r.Y + 9, 1,
+            _font.Draw(_sb, Trunc(cardName, 6), r.X + 40, r.Y + 9, 1,
                 shownAlive ? Ew.Ink : Ew.InkMuted);
             _font.Draw(_sb, shownAlive ? $"{(int)MathF.Max(1, _anim.DisplayHp(f))} HP" : "DEAD",
-                r.X + 32, r.Y + 25, 1,
-                shownAlive ? (f.Team == Team.Player ? Ew.AccentBright : Ew.Danger) : Ew.InkMuted);
+                r.X + 40, r.Y + 25, 1,
+                shownAlive ? (Mono.On ? Mono.Hp : f.Team == Team.Player ? Ew.AccentBright : Ew.Danger)
+                    : Ew.InkMuted);
 
             if (current)
                 _prim.FillRect(_sb, new Rectangle(r.X, r.Bottom + 2, cardW, 3), Palette.CurrentRing);
 
+            // Status chips UNDER the card: poison, shield, buffs — for both sides.
+            if (shownAlive && f.Statuses.Count > 0)
+            {
+                int sx = r.X;
+                foreach (var st in f.Statuses.Take(7))
+                {
+                    var chip = new Rectangle(sx, r.Bottom + 7, 12, 12);
+                    _prim.FillRect(_sb, chip, StatusColor(st.Kind));
+                    _font.DrawCentered(_sb, StatusGlyph(st.Kind), chip.Center.X, chip.Y + 3, 1, Mono.Bg);
+                    sx += 14;
+                }
+            }
+
             if (r.Contains(new Point(_mouse.X, _mouse.Y)))
             {
                 hoveredCard = f;
-                if (f.IsAlive) DrawUnitPlate(f, r.X, r.Bottom + 8);
+                if (f.IsAlive) DrawUnitPlate(f, r.X, r.Bottom + 22);
             }
         }
         _timelineHover = hoveredCard; // world pass reads this next frame to ring the cell

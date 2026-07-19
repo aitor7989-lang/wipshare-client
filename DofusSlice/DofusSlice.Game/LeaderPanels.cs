@@ -93,9 +93,9 @@ public partial class SliceGame
         // PV / PA / PM rows — the demo's pill rows, in ink.
         var (bAp, bMp) = TitheContent.ClassApMp(a.ClassId);
         int cur = Math.Clamp(a.CurrentHp ?? s.MaxHp, 0, s.MaxHp);
-        DrawSheetRow(new Rectangle(L, w.Y + 132, W, 26), "HP", $"{cur} / {s.MaxHp}", mp, "icon_stat_vit");
-        DrawSheetRow(new Rectangle(L, w.Y + 162, W, 26), "ACTION POINTS (AP)", $"{bAp + s.ApBonus}", mp, "icon_stat_ap");
-        DrawSheetRow(new Rectangle(L, w.Y + 192, W, 26), "MOVEMENT POINTS (MP)", $"{bMp + s.MpBonus}", mp, "icon_stat_mp");
+        DrawSheetRow(new Rectangle(L, w.Y + 132, W, 26), "HP", $"{cur} / {s.MaxHp}", mp, "icon_stat_vit", Mono.Hp);
+        DrawSheetRow(new Rectangle(L, w.Y + 162, W, 26), "ACTION POINTS (AP)", $"{bAp + s.ApBonus}", mp, "icon_stat_ap", Mono.Ap);
+        DrawSheetRow(new Rectangle(L, w.Y + 192, W, 26), "MOVEMENT POINTS (MP)", $"{bMp + s.MpBonus}", mp, "icon_stat_mp", Mono.Mp);
         _prim.FillRect(_sb, new Rectangle(L, w.Y + 228, W, 1), Mono.Faint);
 
         // The six characteristics with [+] spenders OUTSIDE the rows (demo layout).
@@ -108,7 +108,8 @@ public partial class SliceGame
                 "cha" => s.Chance, "agi" => s.Agility, _ => s.Wisdom,
             };
             var row = new Rectangle(L, w.Y + 240 + i * 30, W - 32, 26);
-            DrawSheetRow(row, StatLabel(key, label), $"{shown}", mp, $"icon_stat_{key}");
+            DrawSheetRow(row, StatLabel(key, label), $"{shown}", mp, $"icon_stat_{key}",
+                key == "vit" ? Mono.Hp : null);
             if (a.StatPoints > 0)
             {
                 var b = CharPlusRect(i);
@@ -157,12 +158,13 @@ public partial class SliceGame
         "cha" => "CHANCE", "agi" => "AGILITY", _ => "WISDOM",
     };
 
-    private void DrawSheetRow(Rectangle r, string label, string value, Point mp, string? icon = null)
+    private void DrawSheetRow(Rectangle r, string label, string value, Point mp, string? icon = null,
+        Color? iconTint = null)
     {
         _prim.FillRect(_sb, r, Mono.Panel);
         _prim.StrokeRect(_sb, r, 1, Mono.Faint);
         int lx = r.X + 10;
-        if (icon != null && DrawIconRect(icon, new Rectangle(r.X + 8, r.Center.Y - 8, 16, 16), pad: 0))
+        if (icon != null && DrawIconRect(icon, new Rectangle(r.X + 8, r.Center.Y - 8, 16, 16), iconTint, pad: 0))
             lx = r.X + 30;
         _font.Draw(_sb, label, lx, r.Y + 9, 1, Mono.Ink);
         _font.Draw(_sb, value, r.Right - 16 - _font.Measure(value, 1), r.Y + 9, 1, Mono.Ink);
@@ -441,7 +443,7 @@ public partial class SliceGame
             // The spell's glyph well, like the combat bar's slots (letter when not baked).
             var well = new Rectangle(row.X + 8, row.Y + 10, 46, 46);
             Mono.Slot(_sb, _prim, well);
-            if (DrawSpellIcon(sp, well))
+            if (DrawSpellIcon(sp, well, SpellInk(sp)))
                 OutlinedCentered($"{sp.ApCost}", well.Right - 9, well.Bottom - 14, 1, Mono.Ink);
             else
             {

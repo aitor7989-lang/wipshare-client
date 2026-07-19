@@ -34,6 +34,24 @@ public static class Mono
     public static readonly Color ApInk = new(96, 150, 220);
     public static readonly Color MpInk = new(110, 180, 105);
 
+    // The vitals law, everywhere in the UI: HP is RED, AP is BLUE, MP is GREEN.
+    public static readonly Color Hp = new(214, 68, 56);
+    public static readonly Color Ap = ApInk;
+    public static readonly Color Mp = MpInk;
+    // Your side is BLUE, the enemy's is red (Danger) — halos, turn order, team marks.
+    public static readonly Color Ally = new(96, 150, 220);
+
+    /// <summary>The elements keep their Dofus voice even in mono: fire orange, water blue,
+    /// air green, earth ochre. Neutral (and anything else) stays plain ink.</summary>
+    public static Color Element(DofusSlice.Core.Combat.Element e) => e switch
+    {
+        DofusSlice.Core.Combat.Element.Fire => new Color(232, 116, 60),
+        DofusSlice.Core.Combat.Element.Water => new Color(86, 160, 232),
+        DofusSlice.Core.Combat.Element.Air => new Color(120, 196, 104),
+        DofusSlice.Core.Combat.Element.Earth => new Color(198, 158, 80),
+        _ => Ink,
+    };
+
     /// <summary>A 1-bit frame: near-black fill, crisp 1px border.</summary>
     public static void Frame(SpriteBatch sb, Primitives prim, Rectangle r,
         bool emphasis = false, float fillAlpha = 0.94f)

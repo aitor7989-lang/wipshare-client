@@ -631,3 +631,28 @@ and the outline stays dark, so glyphs read on panels and on white fills alike.
   clock label rings with the pack's bell (Danger-tinted under 25% clock).
 - QA: city HUD, C/S/I windows, graveyard clock, live fight band + hover card all
   screenshot-verified; vitals numbers still outlined-readable over the art.
+
+## v8.8: PASS 1 "READ THE FIGHT" — the color language (ROADMAP-POLISH.md begins)
+The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
+(with 3.4b added later: level-up deserves a wow moment). Pass 1 ships here:
+- THE VITALS LAW: HP is RED, AP is BLUE, MP is GREEN — Mono.Hp/Ap/Mp. The band's
+  heart fills red, the star and shield tint blue/green, team HP bars and world HP
+  bars go red, the character sheet's HP/AP/MP rows tint their icons, effect lines
+  (HEALS/STEALS AP/…) speak their color.
+- ELEMENTS SPEAK: Mono.Element() (fire orange, water blue, air green, earth ochre)
+  now feeds EwChrome.ElementColor under mono — spell glyphs in the combat wells,
+  spell book and card headers wear their element; damage floats and log lines
+  inherit it through the same switch.
+- TEAMS: ally halos are BLUE (Mono.Ally), enemies red — in the world and as the
+  turn-order card borders.
+- TURN ORDER: each card wears the fighter's sprite HEAD (head+shoulders crop, 2x),
+  red HP number, and STATUS CHIPS underneath (P poison green, S shield blue,
+  + damage buff orange, M mp-drain violet, R regen green...).
+- The fight log lives BOTTOM-LEFT now (8, HudTop-232), Dofus-chat style, clear of
+  the turn order.
+- PATH PREVIEW: hovering a reachable cell draws the exact A* route as green
+  footstep dots plus the MP cost in green (Pathfinding.FindPath, same blocker rule
+  as the real move).
+- QA (live fight): blue-ringed cannon vs red-ringed barrows, heads + team borders
+  on the timeline, red heart/blue star/green shield, fire-orange Ruin Bolt glyph,
+  footsteps + "3 MP" verified on screenshot.

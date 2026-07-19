@@ -355,9 +355,9 @@ public sealed class EwChrome
         return tex;
     }
 
-    /// <summary>Element → element color (floats, log lines, spell chips). The 1-bit reset
-    /// collapses the elemental rainbow to plain ink — damage is damage.</summary>
-    public static Color ElementColor(DofusSlice.Core.Combat.Element e) => Mono.On ? Mono.Ink : e switch
+    /// <summary>Element → element color (floats, log lines, spell chips). Mono keeps the
+    /// elemental voice via the functional palette — spells wear their element.</summary>
+    public static Color ElementColor(DofusSlice.Core.Combat.Element e) => Mono.On ? Mono.Element(e) : e switch
     {
         DofusSlice.Core.Combat.Element.Fire => Ew.Ember,
         DofusSlice.Core.Combat.Element.Water => Ew.Brook,

@@ -7,17 +7,17 @@ Tick boxes as they land; log each pass in OVERNIGHT-LOG.md.
 ## PASS 1 — "READ THE FIGHT" (color language + combat readability)
 
 The vitals color code, applied EVERYWHERE (bars, numbers, floats, icons, rows):
-- [ ] 1.1 HP = RED, AP = BLUE, MP = GREEN — one rule across combat band, character
+- [x] 1.1 HP = RED, AP = BLUE, MP = GREEN — one rule across combat band, character
       sheet, team column, floats, hover cards. (AP/MP floats already match; extend.)
-- [ ] 1.2 Spell glyphs tinted by their ELEMENT (fire/earth/air/water each get a
+- [x] 1.2 Spell glyphs tinted by their ELEMENT (fire/earth/air/water each get a
       functional color) — combat wells, spell book, spell cards.
-- [ ] 1.3 Ally circles BLUE, enemies stay red — under the units in the world AND
+- [x] 1.3 Ally circles BLUE, enemies stay red — under the units in the world AND
       on the turn order.
-- [ ] 1.4 Turn order wears the fighters' HEADS (sprite portraits), with STATUS
+- [x] 1.4 Turn order wears the fighters' HEADS (sprite portraits), with STATUS
       icons (poison, shield, buffs…) underneath each card — allies and enemies.
-- [ ] 1.5 The fight log moves to the BOTTOM-LEFT, Dofus-style (out of the way of
+- [x] 1.5 The fight log moves to the BOTTOM-LEFT, Dofus-style (out of the way of
       the turn order).
-- [ ] 1.6 PATH PREVIEW: hovering a walkable cell while piloting shows the route
+- [x] 1.6 PATH PREVIEW: hovering a walkable cell while piloting shows the route
       your avatar will take before you click.
 
 ## PASS 2 — "ONE BAR, EVERYWHERE" (HUD unification + declutter)
@@ -45,6 +45,9 @@ The vitals color code, applied EVERYWHERE (bars, numbers, floats, icons, rows):
 - [ ] 3.3 Spell progression rework: START WITH ONE spell, gain a NEW one every
       level (kits become a ladder, not a bundle).
 - [ ] 3.4 LEVEL UP = FULL HEAL. Your life refills the moment you ding.
+- [ ] 3.4b LEVEL UP deserves a MOMENT, not a line in the loot UI: a Dofus-style
+      celebration — its own popup/flash ("LEVEL 4!", the new spell unveiled, the
+      full-heal shown), sound, a beat of wow before play resumes.
 - [ ] 3.5 REMOVE the AUTO-SPEND ALL button — points are spent by hand, always.
 - [ ] 3.6 MOB RESPAWN: cleared packs return to the yard after a timer.
 

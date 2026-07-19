@@ -182,7 +182,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         // One projection for both skins: the classic 2:1 diamond grid, Dofus-style.
         _proj = IsoProjector.Centered(map.Width, map.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
-        _anim = new BattleAnimator(_proj) { Sfx = (name, vol) => _sfx.Play(name, vol) };
+        _anim = new BattleAnimator(_proj)
+        {
+            Sfx = (name, vol) => _sfx.Play(name, vol),
+            // Corpses reuse the exact sheet + pixel height the fighter was drawn with.
+            CorpseSpriteOf = f =>
+            {
+                var (sprite, _, scl) = PixActor(f.Archetype);
+                var sheet = _sprites.GetSheet(sprite, "die", "se");
+                float h = sheet != null ? sheet.FrameHeight * ChamberSet.PxScale * scl : 64f;
+                return (sprite, h);
+            },
+        };
 
         _camera = new Camera2D(ScreenW, HudTop);
         var corners = new[]
@@ -1204,9 +1215,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// </summary>
     private static (string sprite, Color tint, int scale) PixActor(string archetype) => archetype switch
     {
+        // archer = the pack's bowman (Soldier's Attack03 IS a bow shot); bulwark = the
+        // sword-and-shield hero (a tank's silhouette); cannon = the hero re-forged in
+        // ember reds so the two never read as the same person.
         "archer" => ("archer", Color.White, 1),
-        "bulwark" => ("soldier", Color.White, 1),
-        "cannon" => ("hero", Color.White, 1),
+        "bulwark" => ("hero", Color.White, 1),
+        "cannon" => ("cannon", Color.White, 1),
         "barrow_husk" => ("orc", new Color(212, 186, 158), 1),
         "gravehound" => ("slime", new Color(206, 128, 108), 1),
         "marrow_spitter" => ("slime", new Color(196, 146, 192), 1),
@@ -1344,7 +1358,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 items.Add((_proj.CellCenter(cell).Y, 0, () => DrawObstacle(cell)));
             }
 
-        foreach (var f in _engine.Fighters.Where(x => x.IsAlive))
+        // The engine kills instantly; the replay doesn't. Anyone whose death hasn't replayed
+        // yet (StillShown) keeps standing until the killing blow actually lands on screen.
+        foreach (var f in _engine.Fighters.Where(x => x.IsAlive || _anim.StillShown(x.Id)))
         {
             var fighter = f;
             items.Add((_anim.CenterFor(fighter).Y, 1, () => DrawFighter(fighter)));
@@ -1847,7 +1863,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawTurnTimeline()
     {
         Fighter? hoveredCard = null;
-        var order = _engine.Fighters.Where(f => f.IsAlive).ToList(); // the dead leave the order, 1.29-style
+        // The dead leave the order 1.29-style — but not until their death has replayed.
+        var order = _engine.Fighters.Where(f => f.IsAlive || _anim.StillShown(f.Id)).ToList();
         const int cardW = 96, cardH = 46, gap = 8;
         int totalW = order.Count * cardW + (order.Count - 1) * gap;
         int x0 = ScreenW - 20 - totalW;
@@ -1865,7 +1882,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _ew.Panel(_sb, r, sunken: !current, radius: 8);
             if (current) _prim.FillRect(_sb, new Rectangle(r.X + 4, r.Bottom - 4, r.Width - 8, 3), Ew.Accent);
 
-            var token = f.IsAlive
+            // Treat a unit whose death hasn't replayed yet as alive — no spoilers on the card.
+            bool shownAlive = f.IsAlive || _anim.StillShown(f.Id);
+            var token = shownAlive
                 ? (_tithe ? TitheTokenColor(f.Archetype)
                           : f.PlayerControlled ? Palette.HeroColor : Palette.CreatureColor(f.Name))
                 : new Color(58, 60, 66);
@@ -1874,9 +1893,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, mid, 9, token);
 
             _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 7), r.X + 32, r.Y + 9, 1,
-                f.IsAlive ? Ew.Ink : Ew.InkMuted);
-            _font.Draw(_sb, f.IsAlive ? $"{f.Hp} HP" : "DEAD", r.X + 32, r.Y + 25, 1,
-                f.IsAlive ? (f.Team == Team.Player ? Ew.AccentBright : Ew.Danger) : Ew.InkMuted);
+                shownAlive ? Ew.Ink : Ew.InkMuted);
+            _font.Draw(_sb, shownAlive ? $"{(int)MathF.Max(1, _anim.DisplayHp(f))} HP" : "DEAD",
+                r.X + 32, r.Y + 25, 1,
+                shownAlive ? (f.Team == Team.Player ? Ew.AccentBright : Ew.Danger) : Ew.InkMuted);
 
             if (current)
                 _prim.FillRect(_sb, new Rectangle(r.X, r.Bottom + 2, cardW, 3), Palette.CurrentRing);

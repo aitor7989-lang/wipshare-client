@@ -42,8 +42,8 @@ TINY_STATES = {"idle": "Idle", "walk": "Walk", "cast": "Attack01", "hurt": "Hurt
 
 
 def recolor_ranger(img):
-    """Hue the hero's steel armour toward ranger green (low-saturation pixels only), so the
-    archer stops wearing the sword-and-board guy's exact skin."""
+    """Hue steel armour toward ranger green (low-saturation pixels only), so the archer
+    reads as its own person at a glance."""
     px = img.load()
     for y in range(img.height):
         for x in range(img.width):
@@ -54,6 +54,22 @@ def recolor_ranger(img):
             sat = 0 if mx == 0 else (mx - mn) / mx
             if sat < 0.28:  # armour greys -> mossy green leathers
                 px[x, y] = (int(r * 0.62), int(g * 0.88), int(b * 0.5), a)
+    return img
+
+
+def recolor_fire(img):
+    """Hue steel armour toward ember reds (low-saturation pixels only) — the Fire Cannon
+    wears the hero's silhouette re-forged in fire, never the same skin."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            mx, mn = max(r, g, b), min(r, g, b)
+            sat = 0 if mx == 0 else (mx - mn) / mx
+            if sat < 0.28:  # armour greys -> smoldering reds
+                px[x, y] = (min(255, int(r * 1.02)), int(g * 0.62), int(b * 0.46), a)
     return img
 
 
@@ -154,13 +170,18 @@ def main():
         print("characters (FreeCharactersAnimations):")
         for name, (tpl, frame) in CHARS2.items():
             bake_character(name, a.chars2, tpl, CHARS2_STATES, frame)
-        # The archer: the hero re-dressed in ranger greens (distinct silhouette colourway).
-        bake_character("archer", a.chars2, CHARS2["hero"][0], CHARS2_STATES,
-                       CHARS2["hero"][1], recolor=recolor_ranger)
+        # The Fire Cannon: the hero re-forged in ember reds (sword-and-shield stays bulwark).
+        bake_character("cannon", a.chars2, CHARS2["hero"][0], CHARS2_STATES,
+                       CHARS2["hero"][1], recolor=recolor_fire)
     if a.tiny:
         print("characters (Tiny RPG):")
         for name, (tpl, frame) in TINY.items():
             bake_character(name, a.tiny, tpl, TINY_STATES, frame)
+        # The archer: the Tiny Soldier whose Attack03 is a genuine BOW shot (the pack even
+        # ships the arrow projectile), tinted ranger green so it owns its silhouette.
+        archer_states = dict(TINY_STATES, cast="Attack03")
+        bake_character("archer", a.tiny, TINY["soldier"][0], archer_states,
+                       TINY["soldier"][1], recolor=recolor_ranger)
     if a.ui:
         print("ui:")
         bake_ui(a.ui)

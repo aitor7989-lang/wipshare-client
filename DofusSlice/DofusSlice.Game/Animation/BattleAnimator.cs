@@ -23,6 +23,7 @@ public sealed class BattleAnimator
     private readonly Dictionary<string, float> _displayHp = new();
     private readonly Dictionary<string, Vector2> _displayPos = new();
     private readonly List<(CellCoord cell, Color color)> _telegraphCells = new();
+    private readonly HashSet<string> _pendingDeaths = new();
 
     /// <summary>Cells the current telegraph wants highlighted this frame (movement green,
     /// spell-range blue, target red) — the game draws them under the units, 1.29-style.</summary>
@@ -43,6 +44,10 @@ public sealed class BattleAnimator
     /// The game wires it to the SoundBank; null means silence, never a crash.</summary>
     public Action<string, float>? Sfx { get; set; }
 
+    /// <summary>Optional resolver so corpses use the same sheet AND pixel height the renderer
+    /// drew the fighter with (tithe mode maps archetypes, not fighter names). Null = defaults.</summary>
+    public Func<Fighter, (string sprite, float heightPx)>? CorpseSpriteOf { get; set; }
+
     /// <summary>True while a blocking animation or death fade is still playing.</summary>
     public bool IsBusy => _queue.Count > 0 || _corpses.Any(c => !c.Done);
 
@@ -57,6 +62,7 @@ public sealed class BattleAnimator
         _facing.Clear();
         _pendingShake = 0f;
         _displayPos.Clear();
+        _pendingDeaths.Clear();
         foreach (var f in fighters)
         {
             _displayHp[f.Id] = f.Hp;
@@ -90,9 +96,13 @@ public sealed class BattleAnimator
                 _queue.Enqueue(new HitAnim(h.Target.Id, _proj.CellCenter(h.At), -h.Amount, this));
                 break;
             case FighterDied dd:
-                _corpses.Add(new Corpse(_proj.CellCenter(dd.At), ColorOf(dd.Fighter),
-                    SpriteName(dd.Fighter), LastFacing(dd.Fighter.Id)));
-                Sfx?.Invoke("death", 0.8f);
+                // Death replays IN SEQUENCE: the unit stays on the board (StillShown) until
+                // the killing blow's animations have played, then the corpse takes over.
+                _pendingDeaths.Add(dd.Fighter.Id);
+                var (corpseSprite, corpseH) = CorpseSpriteOf?.Invoke(dd.Fighter)
+                    ?? (SpriteName(dd.Fighter), 64f);
+                _queue.Enqueue(new DeathAnim(this, dd.Fighter.Id, _proj.CellCenter(dd.At),
+                    ColorOf(dd.Fighter), corpseSprite, corpseH));
                 break;
             case FighterSummoned s:
                 _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
@@ -189,6 +199,12 @@ public sealed class BattleAnimator
         _poses.TryGetValue(f.Id, out var p) ? p : new Pose(AnimState.Idle, Facing4.Se, 0f);
 
     public Facing4 LastFacing(string id) => _facing.TryGetValue(id, out var d) ? d : Facing4.Se;
+
+    /// <summary>True while a fighter the engine already killed is still awaiting its death
+    /// replay — the renderer keeps drawing it so nobody vanishes mid-exchange.</summary>
+    public bool StillShown(string id) => _pendingDeaths.Contains(id);
+    internal void ReleaseDeath(string id) => _pendingDeaths.Remove(id);
+    internal void SpawnCorpse(Corpse c) => _corpses.Add(c);
 
     // ----- Queries used by the renderer ---------------------------------------------
 
@@ -472,6 +488,40 @@ internal sealed class TeleportAnim : IAnim
     public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
 }
 
+/// <summary>
+/// The queued death beat: only when this replays does the fallen unit leave the board and
+/// hand over to its corpse fade — never before the blow that killed it has landed.
+/// </summary>
+internal sealed class DeathAnim : IAnim
+{
+    private const float Dur = 0.4f;
+    private readonly BattleAnimator _a;
+    private readonly string _id;
+    private readonly Vector2 _at;
+    private readonly Color _color;
+    private readonly string _sprite;
+    private readonly float _heightPx;
+    private float _t;
+
+    public DeathAnim(BattleAnimator a, string id, Vector2 at, Color color, string sprite, float heightPx)
+    { _a = a; _id = id; _at = at; _color = color; _sprite = sprite; _heightPx = heightPx; }
+
+    public bool Done => _t >= Dur;
+
+    public void Update(float dt)
+    {
+        if (_t == 0f)
+        {
+            _a.ReleaseDeath(_id);
+            _a.SpawnCorpse(new Corpse(_at, _color, _sprite, _a.LastFacing(_id), _heightPx));
+            _a.Sfx?.Invoke("death", 0.8f);
+        }
+        _t += dt;
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
 // ---- Non-blocking overlays ----------------------------------------------------------
 
 internal abstract class Overlay
@@ -525,16 +575,17 @@ internal sealed class ImpactFlash : Overlay
 /// <summary>A fallen fighter: holds a beat at full, then shrinks and fades away.</summary>
 internal sealed class Corpse
 {
-    private const float Hold = 0.25f, Fade = 0.4f;
+    private const float Hold = 0.85f, Fade = 0.55f; // long enough for a 10-frame die strip
     private readonly Vector2 _center;
     private readonly Color _color;
     private readonly string _name;
     private readonly Facing4 _facing;
+    private readonly float _heightPx;
     private float _t;
 
-    public Corpse(Vector2 center, Color color, string name, Facing4 facing)
+    public Corpse(Vector2 center, Color color, string name, Facing4 facing, float heightPx = 64f)
     {
-        _center = center; _color = color; _name = name; _facing = facing;
+        _center = center; _color = color; _name = name; _facing = facing; _heightPx = heightPx;
     }
 
     public bool Done => _t >= Hold + Fade;
@@ -549,7 +600,7 @@ internal sealed class Corpse
         if (sheet != null && sheet.FrameCount > 1)
         {
             int frame = Math.Min((int)(_t * 10f), sheet.FrameCount - 1);
-            SpriteDraw.Feet(sb, sheet, _center + new Vector2(0, 4), Color.White * alpha, 64f, frame);
+            SpriteDraw.Feet(sb, sheet, _center + new Vector2(0, 4), Color.White * alpha, _heightPx, frame);
             return;
         }
 

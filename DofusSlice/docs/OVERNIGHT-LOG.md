@@ -281,3 +281,15 @@ turn order wears slate cards with the amber active underline; the combat log bec
 design's turn-chat (header strip, element-tinted lines); FIGHT! is the gold pill. Element
 colors everywhere (floats, impacts, log) now come from the Emberwick tokens (ember/brook/
 gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for other screens.
+
+## Death replays in sequence + the archer finally gets a bow
+- Playtest: "the enemy disappears before the attacker finishes the action." Root cause:
+  `FighterDied` spawned the corpse fade at event time while the killing cast/hit were still
+  queued, and the renderer only drew engine-alive fighters. Now death is a queued `DeathAnim`:
+  the fallen unit keeps rendering (`BattleAnimator.StillShown`) — board, halo, turn-order
+  card, no spoilers — until the blow lands on screen, then the corpse takes over and plays
+  the character's actual die strip at the correct pixel height (`CorpseSpriteOf` hook).
+- Playtest: "this is not an archer cus he has a sword." The Tiny RPG Soldier's Attack03 is a
+  genuine bow shot (the pack even ships the arrow projectile), so the bake now builds the
+  archer from it in ranger greens; the bulwark takes the sword-and-shield hero, and the
+  cannon wears the hero re-forged in ember reds (`recolor_fire`). Three distinct silhouettes.

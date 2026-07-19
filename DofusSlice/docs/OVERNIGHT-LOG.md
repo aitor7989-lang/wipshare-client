@@ -195,3 +195,15 @@ archetype, mirrored facings, class pads intact. One density rule everywhere: 2 s
 texel, integer scales only (the "props feel scaled" fix). The UI wears the pixel pack: cream
 9-slice panels and cards, the green button, and the blackletter dungeon font on titles baked
 to a bitmap atlas. All of it stays local-only; the repo still runs procedural-clean.
+
+## Tactical mode (the goal was 1.29's chessboard)
+
+Matched to the two reference screenshots (Astrub + Minotoror tactical mode), palette sampled
+from the pixels: the field is now flat two-tone tan diamonds with hairline seams floating in
+black; void cells are holes; obstacles are slightly elevated tiles — the diamond raised 14 px
+on two darker procedural faces, depth-sorted with the fighters. All field props and floor
+textures are retired (Chamber art now only backs overworld tokens). No UI above heads: a red
+halo under the crew, blue under the dead, brighter for the active unit; hovering any fighter
+shows the 1.29 rollover plate (name + health number). Placement paints both teams' ground —
+red yours, blue theirs. Everything here is procedural: the tactical look ships in the repo
+with zero art files.

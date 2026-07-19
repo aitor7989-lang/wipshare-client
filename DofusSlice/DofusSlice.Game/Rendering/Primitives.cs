@@ -12,10 +12,16 @@ public sealed class Primitives
     public Texture2D Pixel { get; }
     public Texture2D Diamond { get; }
     public Texture2D Disc { get; }
+    public Texture2D FaceL { get; }
+    public Texture2D FaceR { get; }
+    public Texture2D Halo { get; }
 
     public int TileW { get; }
     public int TileH { get; }
     public int DiscSize { get; }
+
+    /// <summary>Extrusion height of a raised obstacle block (1.29 tactical-mode style).</summary>
+    public const int BlockH = 14;
 
     public Primitives(GraphicsDevice gd, int tileW, int tileH, int discSize)
     {
@@ -28,6 +34,60 @@ public sealed class Primitives
 
         Diamond = BuildDiamond(gd, tileW, tileH);
         Disc = BuildDisc(gd, discSize);
+        FaceL = BuildFace(gd, tileW / 2, tileH / 2, BlockH, left: true);
+        FaceR = BuildFace(gd, tileW / 2, tileH / 2, BlockH, left: false);
+        Halo = BuildHalo(gd, 46, 23, 3);
+    }
+
+    /// <summary>One extruded side of a raised tile: the diamond's lower edge swept down by
+    /// <paramref name="h"/> px — a parallelogram strip (left = SW face, mirrored for SE).</summary>
+    private static Texture2D BuildFace(GraphicsDevice gd, int w, int hh, int h, bool left)
+    {
+        var tex = new Texture2D(gd, w, hh + h);
+        var data = new Color[w * (hh + h)];
+        for (int x = 0; x < w; x++)
+        {
+            float t = left ? (x + 0.5f) / w : 1f - (x + 0.5f) / w;
+            int yEdge = (int)(t * hh);
+            for (int y = yEdge; y < yEdge + h && y < hh + h; y++)
+                data[y * w + x] = Color.White;
+        }
+        tex.SetData(data);
+        return tex;
+    }
+
+    /// <summary>The 1.29 team halo: an ellipse ring inscribed in the cell.</summary>
+    private static Texture2D BuildHalo(GraphicsDevice gd, int w, int h, int thick)
+    {
+        var tex = new Texture2D(gd, w, h);
+        var data = new Color[w * h];
+        float rx = w / 2f, ry = h / 2f;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float dx = (x + 0.5f - rx) / rx, dy = (y + 0.5f - ry) / ry;
+                float d = dx * dx + dy * dy;
+                float inner = (rx - thick) / rx;
+                if (d <= 1f && d >= inner * inner)
+                    data[y * w + x] = Color.White;
+            }
+        tex.SetData(data);
+        return tex;
+    }
+
+    /// <summary>A raised obstacle tile: top diamond lifted by <see cref="BlockH"/> with two
+    /// darker extruded faces below — how 1.29's tactical mode shows LoS blockers.</summary>
+    public void BlockAt(SpriteBatch sb, Vector2 center, Color top, Color faceL, Color faceR)
+    {
+        sb.Draw(FaceL, new Vector2(center.X - TileW / 2f, center.Y - BlockH), faceL);
+        sb.Draw(FaceR, new Vector2(center.X, center.Y - BlockH), faceR);
+        DiamondAt(sb, new Vector2(center.X, center.Y - BlockH), top);
+    }
+
+    /// <summary>The team halo ring at a unit's feet, centred on its cell.</summary>
+    public void HaloAt(SpriteBatch sb, Vector2 center, Color color)
+    {
+        sb.Draw(Halo, new Vector2(center.X - Halo.Width / 2f, center.Y - Halo.Height / 2f), color);
     }
 
     private static Texture2D BuildDiamond(GraphicsDevice gd, int w, int h)

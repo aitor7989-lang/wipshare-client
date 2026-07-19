@@ -122,3 +122,24 @@ The square grid was retired for the classic 2:1 diamond view. Rules of the proje
 - **UI**: cream 9-slice panels, cards and the green button from the pixel UI pack; the
   blackletter dungeon font only on standalone titles (GOLD, scene names, NPC headers) — it is
   too ornate for running text, which stays PixelFont. Dark ink on cream, never light.
+
+## 8. Tactical mode (the current look — supersedes §7's ground and props)
+
+The field now renders as Dofus 1.29's tactical mode, matched to two reference screenshots
+(Astrub and the Minotoror labyrinth) whose palette was sampled directly:
+
+- **Ground**: flat two-tone diamonds — Astrub tan (155,143,105)/(141,131,96), family-shifted
+  mossy for the yard and cold for the crypt — with a hairline dark seam per cell, floating in
+  pure black. Void/water cells are simply not drawn: holes in the map, like the reference.
+  No floor textures, no debris, no border scenery: the Chamber tiles and props are retired
+  from the field (the pack still supplies fallback overworld tokens only).
+- **Obstacles are slightly ELEVATED tiles**: the cell's diamond lifted by 14 px with two
+  darker extruded faces (procedural — `Primitives.BlockAt`), top ≈62% of the floor tone,
+  faces ≈68%/84% of the top, drawn in the depth-sorted entity pass so units stand behind
+  them. Trees keep a mossy top so both blocker kinds stay readable.
+- **No UI above heads**: units carry only a team halo ring at the feet — **red for the crew,
+  blue for the enemy** — brighter under the unit whose turn it is. Health bars and status
+  pips over sprites are gone; hovering any unit shows a small plate by the cursor with its
+  name and health number (the 1.29 rollover). Team HP lives in the sidebar and timeline.
+- **Placement shows both teams' ground**: red cells for your side, blue diamonds under the
+  enemy — the 1.29 pre-fight read.

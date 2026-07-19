@@ -93,9 +93,9 @@ public partial class SliceGame
         // PV / PA / PM rows — the demo's pill rows, in ink.
         var (bAp, bMp) = TitheContent.ClassApMp(a.ClassId);
         int cur = Math.Clamp(a.CurrentHp ?? s.MaxHp, 0, s.MaxHp);
-        DrawSheetRow(new Rectangle(L, w.Y + 132, W, 26), "HP", $"{cur} / {s.MaxHp}", mp);
-        DrawSheetRow(new Rectangle(L, w.Y + 162, W, 26), "ACTION POINTS (AP)", $"{bAp + s.ApBonus}", mp);
-        DrawSheetRow(new Rectangle(L, w.Y + 192, W, 26), "MOVEMENT POINTS (MP)", $"{bMp + s.MpBonus}", mp);
+        DrawSheetRow(new Rectangle(L, w.Y + 132, W, 26), "HP", $"{cur} / {s.MaxHp}", mp, "icon_stat_vit");
+        DrawSheetRow(new Rectangle(L, w.Y + 162, W, 26), "ACTION POINTS (AP)", $"{bAp + s.ApBonus}", mp, "icon_stat_ap");
+        DrawSheetRow(new Rectangle(L, w.Y + 192, W, 26), "MOVEMENT POINTS (MP)", $"{bMp + s.MpBonus}", mp, "icon_stat_mp");
         _prim.FillRect(_sb, new Rectangle(L, w.Y + 228, W, 1), Mono.Faint);
 
         // The six characteristics with [+] spenders OUTSIDE the rows (demo layout).
@@ -108,7 +108,7 @@ public partial class SliceGame
                 "cha" => s.Chance, "agi" => s.Agility, _ => s.Wisdom,
             };
             var row = new Rectangle(L, w.Y + 240 + i * 30, W - 32, 26);
-            DrawSheetRow(row, StatLabel(key, label), $"{shown}", mp);
+            DrawSheetRow(row, StatLabel(key, label), $"{shown}", mp, $"icon_stat_{key}");
             if (a.StatPoints > 0)
             {
                 var b = CharPlusRect(i);
@@ -157,11 +157,14 @@ public partial class SliceGame
         "cha" => "CHANCE", "agi" => "AGILITY", _ => "WISDOM",
     };
 
-    private void DrawSheetRow(Rectangle r, string label, string value, Point mp)
+    private void DrawSheetRow(Rectangle r, string label, string value, Point mp, string? icon = null)
     {
         _prim.FillRect(_sb, r, Mono.Panel);
         _prim.StrokeRect(_sb, r, 1, Mono.Faint);
-        _font.Draw(_sb, label, r.X + 10, r.Y + 9, 1, Mono.Ink);
+        int lx = r.X + 10;
+        if (icon != null && DrawIconRect(icon, new Rectangle(r.X + 8, r.Center.Y - 8, 16, 16), pad: 0))
+            lx = r.X + 30;
+        _font.Draw(_sb, label, lx, r.Y + 9, 1, Mono.Ink);
         _font.Draw(_sb, value, r.Right - 16 - _font.Measure(value, 1), r.Y + 9, 1, Mono.Ink);
     }
 
@@ -225,11 +228,19 @@ public partial class SliceGame
             bool hov = r.Contains(mp);
             bySlot.TryGetValue(d.slot, out string? worn);
             Mono.Slot(_sb, _prim, r, hover: hov, selected: false);
+            string slotIcon = "icon_slot_" + d.slot;
             if (worn != null)
             {
-                _font.DrawCentered(_sb, Trunc(TitheContent.ItemName(worn).ToUpperInvariant(), 7),
-                    r.Center.X, r.Y + 14, 1, Mono.Ink);
-                _font.DrawCentered(_sb, d.slot.ToUpperInvariant(), r.Center.X, r.Bottom - 16, 1, Mono.Faint);
+                // Worn: the slot glyph in ink with the piece's name outlined at its feet.
+                if (DrawIconRect(slotIcon, new Rectangle(r.X, r.Y, r.Width, r.Height - 12), Mono.Ink, pad: 2))
+                    OutlinedCentered(Trunc(TitheContent.ItemName(worn).ToUpperInvariant(), 7),
+                        r.Center.X, r.Bottom - 13, 1, Mono.Ink);
+                else
+                {
+                    _font.DrawCentered(_sb, Trunc(TitheContent.ItemName(worn).ToUpperInvariant(), 7),
+                        r.Center.X, r.Y + 14, 1, Mono.Ink);
+                    _font.DrawCentered(_sb, d.slot.ToUpperInvariant(), r.Center.X, r.Bottom - 16, 1, Mono.Faint);
+                }
                 if (hov)
                 {
                     hoverCardTitle = TitheContent.ItemName(worn).ToUpperInvariant();
@@ -237,7 +248,8 @@ public partial class SliceGame
                     hoverCard2 = "click to unequip";
                 }
             }
-            else
+            // Empty: the slot's ghost glyph, faint — Dofus's empty-doll language.
+            else if (!DrawIconRect(slotIcon, r, Mono.Faint))
                 _font.DrawCentered(_sb, d.slot.ToUpperInvariant(), r.Center.X, r.Y + 20, 1, Mono.Faint);
         }
 
@@ -263,15 +275,25 @@ public partial class SliceGame
             {
                 var (label, count, tip) = strip[i];
                 var inkc = count > 0 ? Mono.Ink : Mono.Faint;
-                _font.DrawCentered(_sb, label, r.Center.X, r.Y + 8, 1, inkc);
-                if (count > 0) _font.Draw(_sb, $"x{count}", r.X + 3, r.Y + 31, 1, Mono.Ink);
+                if (DrawIconRect(i == 0 ? "icon_ui_bread" : "icon_ui_draught", r, inkc))
+                { if (count > 0) OutlinedCentered($"x{count}", r.Right - 10, r.Bottom - 13, 1, Mono.Ink); }
+                else
+                {
+                    _font.DrawCentered(_sb, label, r.Center.X, r.Y + 8, 1, inkc);
+                    if (count > 0) _font.Draw(_sb, $"x{count}", r.X + 3, r.Y + 31, 1, Mono.Ink);
+                }
                 if (hov && count > 0) { hoverCardTitle = label; hoverCard1 = tip; hoverCard2 = null; }
             }
             else if (i - 2 < _campaign.Essences.Count)
             {
                 string ess = _campaign.Essences[i - 2];
-                _font.DrawCentered(_sb, "ESS", r.Center.X, r.Y + 8, 1, Mono.Ink);
-                _font.DrawCentered(_sb, Trunc(ess.ToUpperInvariant(), 6), r.Center.X, r.Bottom - 16, 1, Mono.Dim);
+                if (DrawIconRect("icon_ui_essence", new Rectangle(r.X, r.Y, r.Width, r.Height - 10), Mono.Ink, pad: 2))
+                    OutlinedCentered(Trunc(ess.ToUpperInvariant(), 6), r.Center.X, r.Bottom - 14, 1, Mono.Dim);
+                else
+                {
+                    _font.DrawCentered(_sb, "ESS", r.Center.X, r.Y + 8, 1, Mono.Ink);
+                    _font.DrawCentered(_sb, Trunc(ess.ToUpperInvariant(), 6), r.Center.X, r.Bottom - 16, 1, Mono.Dim);
+                }
                 if (hov)
                 {
                     hoverCardTitle = $"ESSENCE: {ess.ToUpperInvariant()}";
@@ -291,10 +313,18 @@ public partial class SliceGame
             if (idx < stash.Count)
             {
                 string id = stash[idx];
-                _font.DrawCentered(_sb, Trunc(TitheContent.ItemName(id).ToUpperInvariant(), 5),
-                    cell.Center.X, cell.Y + 9, 1, Mono.Ink);
-                _font.DrawCentered(_sb, Trunc(TitheContent.ItemSlot(id).ToUpperInvariant(), 5),
-                    cell.Center.X, cell.Bottom - 14, 1, Mono.Faint);
+                // The slot's glyph carries the cell; the name rides outlined along the bottom
+                // (the hover card still tells the whole story).
+                if (DrawIconRect("icon_slot_" + TitheContent.ItemSlot(id), cell, Mono.Ink))
+                    OutlinedCentered(Trunc(TitheContent.ItemName(id).ToUpperInvariant(), 5),
+                        cell.Center.X, cell.Bottom - 13, 1, Mono.Ink);
+                else
+                {
+                    _font.DrawCentered(_sb, Trunc(TitheContent.ItemName(id).ToUpperInvariant(), 5),
+                        cell.Center.X, cell.Y + 9, 1, Mono.Ink);
+                    _font.DrawCentered(_sb, Trunc(TitheContent.ItemSlot(id).ToUpperInvariant(), 5),
+                        cell.Center.X, cell.Bottom - 14, 1, Mono.Faint);
+                }
                 if (hov)
                 {
                     hoverCardTitle = TitheContent.ItemName(id).ToUpperInvariant();
@@ -304,10 +334,13 @@ public partial class SliceGame
             }
         }
 
-        // The kamas row, ours: one ink coin, the number, the set progress.
-        _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 7, Mono.Ink);
-        _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 5, Mono.Panel);
-        _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 3, Mono.Ink);
+        // The kamas row, ours: the pack's coin (or the old ink disc), the number, the set progress.
+        if (!DrawIconRect("icon_ui_gold", new Rectangle(w.X + 382, w.Y + 512, 32, 32), pad: 0))
+        {
+            _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 7, Mono.Ink);
+            _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 5, Mono.Panel);
+            _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 3, Mono.Ink);
+        }
         _font.Draw(_sb, $"{_campaign.Gold} GOLD", w.X + 414, w.Y + 521, 2, Mono.Ink);
         int adv = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
         _font.Draw(_sb, $"ADVENTURER {adv}/7", w.X + 414, w.Y + 545, 1, adv > 0 ? Mono.Ink : Mono.Faint);
@@ -405,11 +438,16 @@ public partial class SliceGame
             _prim.FillRect(_sb, row, Mono.Panel);
             _prim.StrokeRect(_sb, row, 1, Mono.Faint);
 
-            // The letter well, like the combat bar's slots.
+            // The spell's glyph well, like the combat bar's slots (letter when not baked).
             var well = new Rectangle(row.X + 8, row.Y + 10, 46, 46);
             Mono.Slot(_sb, _prim, well);
-            _font.DrawCentered(_sb, sp.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 11, 2, Mono.Ink);
-            _font.DrawCentered(_sb, $"{sp.ApCost}", well.Center.X, well.Bottom - 15, 1, Mono.Dim);
+            if (DrawSpellIcon(sp, well))
+                OutlinedCentered($"{sp.ApCost}", well.Right - 9, well.Bottom - 14, 1, Mono.Ink);
+            else
+            {
+                _font.DrawCentered(_sb, sp.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 11, 2, Mono.Ink);
+                _font.DrawCentered(_sb, $"{sp.ApCost}", well.Center.X, well.Bottom - 15, 1, Mono.Dim);
+            }
 
             int tx = well.Right + 12;
             _font.Draw(_sb, sp.Name.ToUpperInvariant(), tx, row.Y + 8, 1, Mono.Ink);

@@ -1842,6 +1842,29 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         return true;
     }
 
+    /// <summary>
+    /// A baked icon_* glyph (16px grid art) centred in a rect at the largest INTEGER multiple
+    /// of 16 that fits — so the two-tone pixels stay square. The white fill takes the tint;
+    /// the dark outline stays dark. False when the pack isn't baked (callers keep text).
+    /// </summary>
+    private bool DrawIconRect(string name, Rectangle r, Color? tint = null, int pad = 4)
+    {
+        var sheet = _sprites.GetSheet(name, "idle", "se");
+        if (sheet == null) return false;
+        int k = Math.Max(1, (Math.Min(r.Width, r.Height) - pad * 2) / 16);
+        int s = 16 * k;
+        _sb.Draw(sheet.Texture, new Rectangle(r.Center.X - s / 2, r.Center.Y - s / 2, s, s),
+            sheet.Frame(0), tint ?? Mono.Ink);
+        return true;
+    }
+
+    /// <summary>The icon for a spell, resolved through its content key. False = draw the letter.</summary>
+    private bool DrawSpellIcon(SpellDef spell, Rectangle r, Color? tint = null, int pad = 4)
+    {
+        string? key = TitheContent.SkillKeyById(spell.Id);
+        return key != null && DrawIconRect("icon_spell_" + key, r, tint, pad);
+    }
+
     /// <summary>Draw a sprite anchored at its feet (bottom-centre) on the cell centre.</summary>
     private void DrawSpriteFeet(Texture2D tex, Vector2 feet, Color tint, float targetHeight)
     {
@@ -2130,17 +2153,30 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 var spell = spells[i];
                 if (hov) { tip = spell; tipX = slotR.X; }
                 bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
-                var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
-                var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
-                if (!canPay) col = Mono.On ? Mono.Faint : Ew.InkMuted;
-                _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), slotR.Center.X, slotR.Y + 9, 2, col);
-                _font.DrawCentered(_sb, $"{spell.ApCost}", slotR.Center.X, slotR.Bottom - 13, 1,
-                    canPay ? Ew.InkSoft : Mono.On ? Mono.Danger : Ew.Danger);
+                // The pack's spell glyph fills the well; the AP price sits outlined in the
+                // corner so it reads on the white fill. No glyph baked -> the old letter.
+                if (DrawSpellIcon(spell, slotR, canPay ? Mono.Ink : Mono.Faint))
+                    OutlinedCentered($"{spell.ApCost}", slotR.Right - 8, slotR.Bottom - 13, 1,
+                        canPay ? Mono.Ink : Mono.Danger);
+                else
+                {
+                    var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
+                    var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
+                    if (!canPay) col = Mono.On ? Mono.Faint : Ew.InkMuted;
+                    _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), slotR.Center.X, slotR.Y + 9, 2, col);
+                    _font.DrawCentered(_sb, $"{spell.ApCost}", slotR.Center.X, slotR.Bottom - 13, 1,
+                        canPay ? Ew.InkSoft : Mono.On ? Mono.Danger : Ew.Danger);
+                }
             }
             else if (i == 6 && _campaign?.Draughts > 0)
             {
-                _font.DrawCentered(_sb, "DR", slotR.Center.X, slotR.Y + 9, 2, Mono.On ? Mono.Faint : Ew.InkMuted);
-                _font.Draw(_sb, $"x{_campaign.Draughts}", slotR.X + 3, slotR.Y + 1, 1, Ew.InkSoft);
+                if (DrawIconRect("icon_ui_draught", slotR, Mono.Ink))
+                    OutlinedCentered($"x{_campaign.Draughts}", slotR.Right - 9, slotR.Bottom - 13, 1, Mono.Ink);
+                else
+                {
+                    _font.DrawCentered(_sb, "DR", slotR.Center.X, slotR.Y + 9, 2, Mono.On ? Mono.Faint : Ew.InkMuted);
+                    _font.Draw(_sb, $"x{_campaign.Draughts}", slotR.X + 3, slotR.Y + 1, 1, Ew.InkSoft);
+                }
             }
         }
 
@@ -2255,6 +2291,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_dof.Loaded && cardKey != null
             && _dof.SpellIcon(_sb, cardKey, new Rectangle(r.X + 6, r.Y + 3, 18, 18)))
             nx = r.X + 28;
+        else if (cardKey != null
+            && DrawIconRect("icon_spell_" + cardKey, new Rectangle(r.X + 8, r.Y + 4, 16, 16), pad: 0))
+            nx = r.X + 30;
         _font.Draw(_sb, spell.Name.ToUpperInvariant(), nx, r.Y + 8, 1, Ew.Gold);
         int ly = r.Y + 28;
         foreach (var (t, c) in lines) { _font.Draw(_sb, t, r.X + 12, ly, 1, c); ly += 13; }
@@ -2832,7 +2871,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.FillRect(_sb, new Rectangle(bx, y, (int)(w * frac), h), col);
             _prim.StrokeRect(_sb, new Rectangle(bx, y, w, h), 1, new Color(80, 86, 98));
         }
-        _font.DrawCentered(_sb, $"THE BELL — {(int)MathF.Ceiling(Math.Max(0, _dive.Clock))}S", cx, y + h + 6, 1, Palette.Text);
+        string bellTxt = $"THE BELL — {(int)MathF.Ceiling(Math.Max(0, _dive.Clock))}S";
+        DrawIconRect("icon_ui_bell", new Rectangle(cx - _font.Measure(bellTxt, 1) / 2 - 24, y + h + 2, 16, 16),
+            frac > 0.25f ? Mono.Ink : Mono.Danger, pad: 0);
+        _font.DrawCentered(_sb, bellTxt, cx, y + h + 6, 1, Palette.Text);
     }
 
     // ----- Shared campaign HUD + combat overlays ------------------------------------
@@ -2845,9 +2887,31 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         if (_dof.Loaded) _dof.Slice(_sb, "float_bg", new Rectangle(-8, HudTop, ScreenW + 16, ScreenH - HudTop + 14));
         else _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-        _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
-        _font.Draw(_sb, $"BREAD {_campaign.Bread}    DRAUGHTS {_campaign.Draughts}    ESSENCES {_campaign.Essences.Count}",
-            16, HudTop + 42, 1, Palette.TextDim);
+        // The purse and the pack-chips: pack glyphs when baked, the old text otherwise.
+        if (DrawIconRect("icon_ui_gold", new Rectangle(12, HudTop + 6, 32, 32), pad: 0))
+            _font.Draw(_sb, $"{_campaign.Gold}", 48, HudTop + 14, 2, Mono.On ? Mono.Ink : new Color(232, 202, 92));
+        else
+            _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
+        var sundry = new (string icon, string label, int n)[]
+        {
+            ("icon_ui_bread", "BREAD", _campaign.Bread),
+            ("icon_ui_draught", "DRAUGHTS", _campaign.Draughts),
+            ("icon_ui_essence", "ESSENCES", _campaign.Essences.Count),
+        };
+        int chX = 16;
+        foreach (var (icon, label, n) in sundry)
+        {
+            if (DrawIconRect(icon, new Rectangle(chX, HudTop + 38, 18, 18), Mono.On ? Mono.Dim : Palette.TextDim, pad: 0))
+            {
+                _font.Draw(_sb, $"x{n}", chX + 22, HudTop + 43, 1, Palette.TextDim);
+                chX += 22 + _font.Measure($"x{n}", 1) + 20;
+            }
+            else
+            {
+                _font.Draw(_sb, $"{label} {n}", chX, HudTop + 43, 1, Palette.TextDim);
+                chX += _font.Measure($"{label} {n}", 1) + 20;
+            }
+        }
         int per = TitheContent.Prices.TitheEveryNDives;
         string tithe = _campaign.TitheDue ? $"TITHE DUE: {_campaign.TitheAmount}g"
             : $"tithe in {per - (_campaign.Dives % per)} dive(s)";

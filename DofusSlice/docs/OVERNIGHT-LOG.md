@@ -607,3 +607,27 @@ HARDENING (fresh angles):
   pass-through-safe for sundry names; solo fights show no bogus "SPLIT 1 WAYS" line.
 - Live campaign QA: solo piloted dive, auto-turn chaining Flashfire kills, survived at
   11/58 with the heart nearly hollow and the number in red — every v8.x system in frame.
+
+## v8.7: THE ICON PASS — the 1-bit Pixel Icons pack, wired game-wide
+The owner supplied a pack of ~3,000 named 16x16 two-tone glyphs (white fill, black
+outline, real alpha). 41 are baked (gitignored, like all third-party art) via
+`tools/bake_onebit.py --icons`: 9 stat, 7 equipment-slot, 20 spell, 5 UI chips.
+Icons keep their authored two-tone (NO reink): drawn tinted, the fill takes the ink
+and the outline stays dark, so glyphs read on panels and on white fills alike.
+- New helpers `DrawIconRect` (largest integer multiple of 16 that fits — pixels stay
+  square) and `DrawSpellIcon` (spell -> `icon_spell_{key}` via SkillKeyById). EVERY
+  call site keeps its old text fallback, so the public repo still runs art-free.
+- COMBAT BAND: spell wells wear their glyphs with the AP price outlined in the corner
+  (Faint when you can't pay), the draught slot wears the potion bottle, the spell
+  hover card gets its glyph in the header. Mob signatures included — enemy turns show
+  fangs, poison drops, the ghost, the flute.
+- CHARACTER SHEET: HP/AP/MP and all six characteristic rows lead with their stat glyph.
+- INVENTORY: empty doll slots show their slot's ghost glyph faint (Dofus's language),
+  worn slots show it in ink with the piece's name outlined at its feet; the stash grid
+  draws slot glyphs with outlined names; bread/draught/essence strip cells wear their
+  icons with outlined counts; the kamas row gets the pack's coin.
+- SPELL BOOK: the letter wells wear the same glyphs as the combat bar.
+- CAMPAIGN HUD: coin + gold, bread/draught/essence chips as icon + count; THE BELL
+  clock label rings with the pack's bell (Danger-tinted under 25% clock).
+- QA: city HUD, C/S/I windows, graveyard clock, live fight band + hover card all
+  screenshot-verified; vitals numbers still outlined-readable over the art.

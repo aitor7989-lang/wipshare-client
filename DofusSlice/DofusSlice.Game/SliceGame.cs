@@ -78,6 +78,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private UiFont _dfont = null!;                    // baked dungeon font (local-only art)
     private Ui.GumHud _gum = null!;                   // Gum-editor HUD skin (ui/TitheHud.gumx)
     private Audio.SoundBank _sfx = null!;             // synthesized chiptune SFX (no asset files)
+    private EwChrome _ew = null!;                     // Emberwick combat chrome (all procedural)
     private float _lastDiveClock = float.MaxValue;    // bell-toll edge detection
     private bool _pixSprites;                         // character animation packs present
     private bool Pix => _pixSprites;                  // sprites present -> full pixel dressing
@@ -157,6 +158,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _pixSprites = _sprites.GetSheet("hero", "idle", "se") != null;
         _gum = new Ui.GumHud(this);
         _sfx = new Audio.SoundBank();
+        _ew = new EwChrome(GraphicsDevice, _prim.Pixel);
 
         if (_loop)
         {
@@ -1301,7 +1303,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
         DrawTurnTimeline(); // preview the fighters you'll face
 
-        _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
+        _ew.Panel(_sb, new Rectangle(-6, HudTop + 2, ScreenW + 12, ScreenH - HudTop + 16));
         if (_tithe) DrawCrewRoster();
         _font.DrawCentered(_sb, _tithe ? "PLACE YOUR CREW, THEN PRESS FIGHT — THEN WATCH"
                                        : "POSITION YOUR HERO ON A BLUE STARTING CELL, THEN FIGHT",
@@ -1309,9 +1311,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         var r = _endTurnButton;
         bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
-        UiButtonBg(r, hover);
-        _font.DrawCentered(_sb, "FIGHT!", r.Center.X, r.Y + 34, 4, UiSkinned ? UiInkOnGreen : Palette.Text);
-        _font.DrawCentered(_sb, "(SPACE)", r.Center.X, r.Y + 80, 1, UiSkinned ? UiInkOnGreen * 0.8f : Palette.TextDim);
+        var pill = new Rectangle(r.X, r.Y + 20, r.Width, 56);
+        _ew.Pill(_sb, pill, gold: true, pressed: hover);
+        _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3, Color.White);
+        _font.DrawCentered(_sb, "(SPACE)", r.Center.X, pill.Bottom + 10, 1, Ew.InkSoft);
         DrawHoverUnitInfo();
     }
 
@@ -1606,15 +1609,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void UpdateGumHud(GameTime gameTime)
     {
         _gum.Update(gameTime);
-        bool show = _gum.Active && _tithe && !_placing
-            && (!_loop || _scene == Scene.Combat) && _engine != null!;
-        _gum.SetVisible(show);
-        if (!show) return;
-        var crew = _engine.Fighters.Where(f => f.Team == Team.Player && !f.IsSummon)
-            .Select(f => (f.Name, f.Hp, f.MaxHp, f.IsAlive)).ToList();
-        _gum.BindCombat($"ROUND {_engine.Round}",
-            $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}",
-            _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor, crew);
+        // The Emberwick combat HUD (from the user's Claude Design project) supersedes the Gum
+        // band in fights; Gum stays wired for future non-combat screens.
+        _gum.SetVisible(false);
     }
 
     /// <summary>Archetype id -> readable mob name for rollovers.</summary>
@@ -1721,19 +1718,91 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
         DrawTurnTimeline();
 
-        int ly = 92;
+        DrawEmberwickLog();
+
+        DrawEmberwickBand();
+        DrawHoverUnitInfo();
+    }
+
+    /// <summary>The Emberwick combat chat: slate card, turn headers, element-tinted lines.</summary>
+    private void DrawEmberwickLog()
+    {
+        var panel = new Rectangle(930, 84, 344, 250);
+        _ew.Panel(_sb, panel, sunken: true, radius: 10);
+        _ew.HeaderStrip(_sb, new Rectangle(panel.X + 2, panel.Y + 2, panel.Width - 4, 22));
+        _font.DrawCentered(_sb, "THE FIGHT", panel.Center.X, panel.Y + 9, 1, Ew.Ink);
+        int ly = panel.Y + 32;
         foreach (var line in _log)
         {
-            _font.Draw(_sb, Trunc(line, 44), 940, ly, 1, Palette.TextDim);
-            ly += 12;
+            if (ly > panel.Bottom - 16) break;
+            string t = line.TrimStart();
+            Color col =
+                t.StartsWith("ROUND") ? Ew.Ink
+                : t.Contains("FIRE DAMAGE") ? Ew.Ember
+                : t.Contains("WATER DAMAGE") ? Ew.Brook
+                : t.Contains("AIR DAMAGE") ? Ew.Gale
+                : t.Contains("EARTH DAMAGE") ? Ew.Loam
+                : t.Contains("DEFEATED") || t.Contains("DIES") ? Ew.Danger
+                : t.Contains("CASTS") ? Ew.AccentBright
+                : Ew.InkSoft;
+            int indent = t.StartsWith("ROUND") ? 0 : 6;
+            _font.Draw(_sb, Trunc(line, 40), panel.X + 12 + indent, ly, 1, col);
+            ly += 13;
+        }
+    }
+
+    /// <summary>
+    /// The Emberwick combat band (Claude Design import): slate panel, the active unit's
+    /// Vim heart with Spark/Stride gems, crew HP wells left, and the actor's spell wells right.
+    /// </summary>
+    private void DrawEmberwickBand()
+    {
+        _ew.Panel(_sb, new Rectangle(-6, HudTop + 2, ScreenW + 12, ScreenH - HudTop + 16));
+
+        var cur = _engine.Current;
+
+        // Vitals cluster, Dofus-style bottom centre: heart = HP, star = AP, diamond = MP.
+        var heartC = new Vector2(ScreenW / 2f, HudTop + 82);
+        _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 104, Ew.Hp, Ew.HpDeep,
+            cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp);
+        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, Color.White);
+        _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1, Ew.Ink * 0.85f);
+        _ew.Badge(_sb, EwChrome.Gem.Star, new Vector2(ScreenW / 2f - 92, HudTop + 96), 62, Ew.Ap, Ew.ApDeep);
+        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, Color.White);
+        _ew.Badge(_sb, EwChrome.Gem.Diamond, new Vector2(ScreenW / 2f + 92, HudTop + 96), 58, Ew.Mp, Ew.MpDeep);
+        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, Color.White);
+        _font.DrawCentered(_sb, cur.Name.ToUpperInvariant(), ScreenW / 2, HudTop + 12, 1,
+            cur.Team == Team.Player ? Ew.AccentBright : Ew.Danger);
+
+        // Crew HP wells, left column.
+        _font.Draw(_sb, "YOUR CREW", 20, HudTop + 14, 1, Ew.InkSoft);
+        int y = HudTop + 32;
+        foreach (var f in _engine.Fighters.Where(x => x.Team == Team.Player && !x.IsSummon))
+        {
+            _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 12), 20, y + 3, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
+            var well = new Rectangle(150, y, 190, 18);
+            _ew.Well(_sb, well);
+            int fill = (int)(184 * Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f));
+            if (fill > 0 && f.IsAlive)
+                _ew.GradientV(_sb, new Rectangle(well.X + 3, well.Y + 3, fill, 12), Ew.Hp, Ew.HpDeep);
+            _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 348, y + 3, 1,
+                f.IsAlive ? Ew.InkSoft : Ew.Danger);
+            y += 26;
         }
 
-        if (!_gum.Active)   // the Gum screen owns the band + roster when its file is present
+        // The actor's spells as slot wells, right side (element letter + AP cost).
+        _font.Draw(_sb, $"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT", 934, HudTop + 14, 1, Ew.InkSoft);
+        int sx = 934;
+        foreach (var spell in cur.Spells.Take(6))
         {
-            _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-            DrawCrewRoster();
+            var well = new Rectangle(sx, HudTop + 32, 46, 46);
+            _ew.Well(_sb, well);
+            var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
+            var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
+            _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
+            _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1, Ew.InkSoft);
+            sx += 52;
         }
-        DrawHoverUnitInfo();
     }
 
     /// <summary>The crew panel: each member's token colour, class, HP bar and fate.</summary>
@@ -1793,17 +1862,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             var r = new Rectangle(x0 + i * (cardW + gap), cy, cardW, cardH);
             bool current = f == _engine.Current;
 
-            if (_ui.Card != null)
-            {
-                _ui.Card.Draw(_sb, r, f.IsAlive ? Color.White : new Color(150, 146, 142));
-                if (current) _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
-            }
-            else
-            {
-                _prim.FillRect(_sb, r, current ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, r, current ? 2 : 1,
-                    current ? Palette.CurrentRing : new Color(60, 64, 72));
-            }
+            _ew.Panel(_sb, r, sunken: !current, radius: 8);
+            if (current) _prim.FillRect(_sb, new Rectangle(r.X + 4, r.Bottom - 4, r.Width - 8, 3), Ew.Accent);
 
             var token = f.IsAlive
                 ? (_tithe ? TitheTokenColor(f.Archetype)
@@ -1814,12 +1874,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, mid, 9, token);
 
             _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 7), r.X + 32, r.Y + 9, 1,
-                UiSkinned ? (f.IsAlive ? new Color(240, 226, 190) : new Color(196, 186, 168))
-                          : f.IsAlive ? Palette.Text : Palette.TextDim);
+                f.IsAlive ? Ew.Ink : Ew.InkMuted);
             _font.Draw(_sb, f.IsAlive ? $"{f.Hp} HP" : "DEAD", r.X + 32, r.Y + 25, 1,
-                f.IsAlive ? (f.Team == Team.Player ? (UiSkinned ? new Color(52, 108, 54) : Palette.HpFill)
-                                                   : (UiSkinned ? new Color(150, 88, 44) : new Color(210, 150, 90)))
-                          : new Color(184, 70, 60));
+                f.IsAlive ? (f.Team == Team.Player ? Ew.AccentBright : Ew.Danger) : Ew.InkMuted);
 
             if (current)
                 _prim.FillRect(_sb, new Rectangle(r.X, r.Bottom + 2, cardW, 3), Palette.CurrentRing);

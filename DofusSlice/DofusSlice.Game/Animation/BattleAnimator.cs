@@ -239,14 +239,9 @@ public sealed class BattleAnimator
     {
         if (spell.Effects.Any(e => e.Kind == EffectKind.Teleport)) return new Color(150, 210, 240);
         var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
-        return dmg?.Element switch
-        {
-            Element.Fire => new Color(240, 120, 80),
-            Element.Water => new Color(90, 160, 240),
-            Element.Air => new Color(130, 220, 140),
-            Element.Earth => new Color(190, 140, 90),
-            _ => new Color(230, 220, 180),
-        };
+        return dmg != null
+            ? DofusSlice.Game.Rendering.EwChrome.ElementColor(dmg.Element)
+            : new Color(230, 220, 180);
     }
 }
 
@@ -435,14 +430,7 @@ internal sealed class HitAnim : IAnim
             // 1.29 floats the number in the element's colour; crits go gold, heals green.
             var color = heal ? new Color(120, 220, 130)
                 : _crit ? new Color(255, 210, 90)
-                : _element switch
-                {
-                    Element.Fire => new Color(250, 120, 70),
-                    Element.Water => new Color(100, 170, 250),
-                    Element.Air => new Color(130, 225, 130),
-                    Element.Earth => new Color(205, 150, 90),
-                    _ => new Color(230, 224, 200),         // neutral grey-white
-                };
+                : DofusSlice.Game.Rendering.EwChrome.ElementColor(_element);
             int scale = _crit ? 3 : 2;
             _a.AddOverlay(new FloatingText(_at + new Vector2(0, -30), text, color, scale));
         }

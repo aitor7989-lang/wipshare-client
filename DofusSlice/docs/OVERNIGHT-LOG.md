@@ -268,3 +268,16 @@ points — five per level, spent with + buttons (or auto-spend), the class contr
 its level-1 base now. The sims auto-spend to stay honest. Variety: four fight arenas (sunken
 yard, tomb rows, barrow circle) keyed per pack and per dive, two new mobs (tomb wraith, grave
 ghoul) with skills and two new pack types fielding them.
+
+## Emberwick lands (the user's Claude Design import)
+
+Pulled the "Game UI system design" project through the design MCP (readme, tokens, the Combat
+UI board) and implemented its combat kit in-engine, 100% procedurally — rounded slate panels
+with the 2px ink outline and vertical gradients, sunken slot wells, amber/gold pill buttons,
+and the glossy gem badges rasterized from implicit curves (heart = Vim/HP with a drain fill,
+star = Spark/AP, diamond = Stride/MP). The combat band now shows the active unit's vitals
+cluster Dofus-style, crew HP wells left, the actor's spells as element-tinted wells right; the
+turn order wears slate cards with the amber active underline; the combat log became the
+design's turn-chat (header strip, element-tinted lines); FIGHT! is the gold pill. Element
+colors everywhere (floats, impacts, log) now come from the Emberwick tokens (ember/brook/
+gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for other screens.

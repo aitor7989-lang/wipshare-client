@@ -61,13 +61,12 @@ public sealed partial class SliceGame
 
         var mp = new Point(_mouse.X, _mouse.Y);
 
-        // The original's backdrop is BLACK; a faint hint of ground gives the translucent
-        // bodies some depth without changing the read.
-        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(6, 6, 7));
+        // The backdrop: the same neutral grey family as the sheet, a step darker than the bar.
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(34, 34, 34));
         for (int i = 0; i < 10; i++)
             for (int j = 0; j < 6; j++)
                 _prim.DiamondAt(_sb, new Vector2(120 + i * 128, 80 + j * 128),
-                    new Color(155, 143, 105) * (0.05f + ((i + j) % 2) * 0.03f));
+                    new Color(155, 143, 105) * (0.06f + ((i + j) % 2) * 0.03f));
 
         DrawDemoCharacterSheet(new Rectangle(20, 30, 350, 588), mp);
         DrawDemoInventory(new Rectangle(382, 30, 648, 588), mp);
@@ -331,9 +330,11 @@ public sealed partial class SliceGame
 
     private void DrawDemoHud(Point mp)
     {
-        // The 1.29 bar: flat black with a hairline top edge. No chat, no minimap (user's call).
-        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, ScreenH - 628), new Color(8, 8, 9));
-        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, 1), new Color(70, 66, 60));
+        // The 1.29 bar: the exact dark grey of the user's sheet canvas (48,48,48), flat,
+        // with a hairline top edge. No chat, no minimap (user's call).
+        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, ScreenH - 628), new Color(48, 48, 48));
+        _prim.FillRect(_sb, new Rectangle(0, 628, ScreenW, 1), new Color(96, 94, 90));
+        _prim.FillRect(_sb, new Rectangle(0, 629, ScreenW, 1), new Color(24, 24, 24));
 
         // Vitals: the theme's OWN sprites — the winged heart with the PA star and PM leaf.
         var heartC = new Point(430, 684);

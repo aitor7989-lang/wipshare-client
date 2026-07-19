@@ -380,3 +380,8 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - The character-rotate arrows are now the orange arrow pair from the user's uploaded UI sheet
   (keyed from the JPEG into the local theme assets), placed flanking the doll like the
   original layout.
+
+## Demo pass 5: the grey
+- The bottom bar was read as "flat black" — it now uses the EXACT canvas grey sampled from
+  the user's sprite sheet, RGB(48,48,48) flat with a double hairline top edge, verified by
+  sampling the rendered output. Backdrop lifted to the same neutral family (34,34,34).

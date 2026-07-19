@@ -3,6 +3,13 @@ using System.IO;
 
 try
 {
+    // Audition the synthesized SFX: write every sound as a .wav and exit.
+    if (args.Any(a => a.Equals("--emit-wavs", StringComparison.OrdinalIgnoreCase)))
+    {
+        new DofusSlice.Game.Audio.SoundBank().EmitWavs(Path.Combine(AppContext.BaseDirectory, "wavs"));
+        return 0;
+    }
+
     // Regenerate the starter Gum UI project (ui/TitheHud.gumx) for the visual editor and exit.
     if (args.Any(a => a.Equals("--emit-gum", StringComparison.OrdinalIgnoreCase)))
     {

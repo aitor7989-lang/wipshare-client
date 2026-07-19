@@ -232,3 +232,18 @@ HUD quietly returns. `dotnet run --project DofusSlice.Game -- --emit-gum` regene
 project via the same Gum data classes the editor uses, so the files are always schema-perfect.
 One gotcha found on the way: this Gum's "Rectangle" standard is a stroke shape — filled panels
 are "ColoredRectangle", which PopulateProjectWithDefaultStandards no longer adds by default.
+
+## Sound, from nothing but math
+
+The game speaks now, and ships no audio files: Audio/Synth.cs is a ~100-line chiptune synth
+(oscillators with glides, noise, exponential envelopes, a soft-clip limiter) and SoundBank
+renders all 19 sounds from recipes at startup — element-flavoured hits (fire saw-growl, water
+plop, air zip, earth thud), the crit arpeggio, heals, a death knell, steps, casts, coin
+chimes, victory/defeat stings, and THE BELL as four inharmonic partials of 220 Hz, tolling at
+dive start and as the clock crosses 30 and 10 seconds. Ambient beds loop seamlessly (graveyard
+wind from low-passed tremolo noise, a 55 Hz crypt drone with exact-cycle frequencies). Sounds
+fire on the ANIMATION beats, not the engine events — a hit sounds when the number pops — via
+an Sfx delegate on the BattleAnimator. Per-sound cooldowns keep 4x playback from machine-
+gunning, M mutes, missing audio hardware disables the bank gracefully (verified headless),
+and `--emit-wavs` writes every sound to disk for auditioning; the numbers were verified by
+FFT (bell dominant at exactly 220 Hz, drone at 55, coin at 2093).

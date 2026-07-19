@@ -74,6 +74,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private UiSkin _ui = null!;                       // pixel UI panels/buttons (local-only art)
     private UiFont _dfont = null!;                    // baked dungeon font (local-only art)
     private Ui.GumHud _gum = null!;                   // Gum-editor HUD skin (ui/TitheHud.gumx)
+    private Audio.SoundBank _sfx = null!;             // synthesized chiptune SFX (no asset files)
+    private float _lastDiveClock = float.MaxValue;    // bell-toll edge detection
     private bool _pixSprites;                         // character animation packs present
     private bool Pix => _pixSprites;                  // sprites present -> full pixel dressing
     private SpriteBank _sprites = null!;
@@ -151,6 +153,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _dfont = new UiFont(_sprites);
         _pixSprites = _sprites.GetSheet("hero", "idle", "se") != null;
         _gum = new Ui.GumHud(this);
+        _sfx = new Audio.SoundBank();
 
         if (_loop)
         {
@@ -174,7 +177,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         // One projection for both skins: the classic 2:1 diamond grid, Dofus-style.
         _proj = IsoProjector.Centered(map.Width, map.Height, TileW, TileH,
             new Vector2(ScreenW / 2f, (HudTop / 2f) - 20));
-        _anim = new BattleAnimator(_proj);
+        _anim = new BattleAnimator(_proj) { Sfx = (name, vol) => _sfx.Play(name, vol) };
 
         _camera = new Camera2D(ScreenW, HudTop);
         var corners = new[]
@@ -241,6 +244,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Leave the placement phase and start the turn-based fight.</summary>
     private void BeginFight()
     {
+        _sfx.Play("click");
         _placing = false;
         _engine.Start();
     }
@@ -301,12 +305,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             var acts = NpcActions(_openNpc);
             for (int i = 0; i < acts.Count; i++)
-                if (PanelButton(i).Contains(m)) { if (acts[i].ok) acts[i].act(); return; }
+                if (PanelButton(i).Contains(m)) { if (acts[i].ok) { _sfx.Play("coin", 0.7f); acts[i].act(); } return; }
         }
 
-        if (_hover == TitheCell) _openNpc = 0;
-        else if (_hover == TempleCell) _openNpc = 1;
-        else if (_hover == HireCell) _openNpc = 2;
+        if (_hover == TitheCell) { _openNpc = 0; _sfx.Play("click"); }
+        else if (_hover == TempleCell) { _openNpc = 1; _sfx.Play("click"); }
+        else if (_hover == HireCell) { _openNpc = 2; _sfx.Play("click"); }
         else if (_hover == LychgateCell) StartDive();
         else _openNpc = -1;
     }
@@ -451,6 +455,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyPath.Clear();
         _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
         _cryptRoom = 0; _yardMsg = ""; _yardMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
+        _lastDiveClock = float.MaxValue;
+        _sfx.Play("bell", 0.9f, jitter: false);
         _hireOnArrive = false;
     }
 
@@ -691,6 +697,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         _prevKeys = _keys; _keys = Keyboard.GetState();
         UpdateGumHud(gameTime);
+        if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
+        UpdateAmbient();
 
         if (_loop) { UpdateLoop((float)gameTime.ElapsedGameTime.TotalSeconds); base.Update(gameTime); return; }
 
@@ -808,6 +816,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Apply the fight's meta outcome once, and mark Wounded survivors with the status.</summary>
     private void ResolveWatchedFight()
     {
+        bool won = _engine.Outcome == FightOutcome.Victory;
+        _sfx.Play(won ? "victory" : "defeat", 0.8f, jitter: false);
+        if (won) _sfx.Play("coin");
         _aftermath = TitheResolution.Resolve(_engine);
         foreach (var u in _aftermath.Units.Where(u => u.Wounded))
         {
@@ -1459,6 +1470,28 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// with its name and health number next to the cursor (screen space, HUD pass).
     /// </summary>
     /// <summary>
+    /// The ambient bed per scene (graveyard wind, crypt drone) and the bell tolling as the
+    /// dive clock crosses 30 and 10 seconds — the Grasp closing in, audibly.
+    /// </summary>
+    private void UpdateAmbient()
+    {
+        string? want = null;
+        if (_loop && _scene == Scene.Graveyard) want = "wind";
+        else if (_loop && _scene == Scene.Combat && _cryptRun) want = "drone";
+        else if (_loop && _scene == Scene.Combat) want = "wind";
+        _sfx.SetAmbient(want, want == "drone" ? 0.2f : 0.13f);
+
+        if (_dive != null && !_dive.Ended)
+        {
+            float c = _dive.Clock;
+            foreach (float mark in new[] { 30f, 10f })
+                if (_lastDiveClock > mark && c <= mark)
+                    _sfx.Play("bell", mark <= 10f ? 1f : 0.8f, jitter: false);
+            _lastDiveClock = c;
+        }
+    }
+
+    /// <summary>
     /// Pump the Gum HUD layer: visible only during watched tithe combat (the surface it skins),
     /// with the fight state pushed into its named elements every frame. See Ui/GumHud.cs.
     /// </summary>
@@ -1572,7 +1605,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         }
         // Only advertise keys that work here: R/B restart or swap the STANDALONE fight and would
         // mislead during a campaign fight, where the dive owns the flow.
-        _font.Draw(_sb, _loop ? "1/2/3 = SPEED" : "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON",
+        _font.Draw(_sb, _loop ? "1/2/3 = SPEED   ·   M = SOUND" : "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON   ·   M = SOUND",
             16, HudTop - 22, 1, Palette.TextDim);
 
         // Playback speed, top-centre where the piloted mode shows the turn clock.

@@ -29,6 +29,10 @@ public sealed class BattleAnimator
 
     public BattleAnimator(IsoProjector proj) => _proj = proj;
 
+    /// <summary>Sound hook: anims call this at their visual beats (hit lands, cast starts…).
+    /// The game wires it to the SoundBank; null means silence, never a crash.</summary>
+    public Action<string, float>? Sfx { get; set; }
+
     /// <summary>True while a blocking animation or death fade is still playing.</summary>
     public bool IsBusy => _queue.Count > 0 || _corpses.Any(c => !c.Done);
 
@@ -50,13 +54,14 @@ public sealed class BattleAnimator
         switch (e)
         {
             case FighterMoved m:
-                _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.11f));
+                _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.11f, this));
                 break;
             case FighterPushed p:
-                _queue.Enqueue(new MoveAnim(p.Fighter.Id, ToPoints(p.Path), 0.07f));
+                _queue.Enqueue(new MoveAnim(p.Fighter.Id, ToPoints(p.Path), 0.07f, this, "zip"));
                 break;
             case FighterTeleported t:
                 _queue.Enqueue(new TeleportAnim(_proj.CellCenter(t.From), _proj.CellCenter(t.To), this));
+                Sfx?.Invoke("zip", 0.7f);
                 break;
             case SpellCast c:
                 _queue.Enqueue(new CastAnim(c.Caster.Id, _proj.CellCenter(c.Caster.Pos),
@@ -71,12 +76,14 @@ public sealed class BattleAnimator
             case FighterDied dd:
                 _corpses.Add(new Corpse(_proj.CellCenter(dd.At), ColorOf(dd.Fighter),
                     SpriteName(dd.Fighter), LastFacing(dd.Fighter.Id)));
+                Sfx?.Invoke("death", 0.8f);
                 break;
             case FighterSummoned s:
                 _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
                 _facing[s.Fighter.Id] = Facing4.Se;
                 _overlays.Add(new ImpactFlash(_proj.CellCenter(s.Fighter.Pos) + new Vector2(0, -16),
                     new Color(150, 220, 180)));
+                Sfx?.Invoke("summon", 0.7f);
                 break;
             case TurnStarted:
                 break;
@@ -262,18 +269,27 @@ internal sealed class MoveAnim : IAnim
     private readonly string _id;
     private readonly Vector2[] _pts;
     private readonly float _perSeg;
+    private readonly BattleAnimator? _a;
+    private readonly string _sound;
     private float _t;
 
-    public MoveAnim(string id, Vector2[] pts, float perSeg)
+    public MoveAnim(string id, Vector2[] pts, float perSeg, BattleAnimator? a = null, string sound = "step")
     {
         _id = id;
         _pts = pts.Length > 0 ? pts : new[] { Vector2.Zero };
         _perSeg = perSeg;
+        _a = a;
+        _sound = sound;
     }
 
     private float Total => _perSeg * Math.Max(1, _pts.Length - 1);
     public bool Done => _t >= Total;
-    public void Update(float dt) => _t += dt;
+
+    public void Update(float dt)
+    {
+        if (_t == 0f) _a?.Sfx?.Invoke(_sound, 0.6f);
+        _t += dt;
+    }
 
     public string? ActorId => _id;
     public AnimState ActorState => AnimState.Walk;
@@ -324,6 +340,7 @@ internal sealed class CastAnim : IAnim
 
     public void Update(float dt)
     {
+        if (_t == 0f) _a.Sfx?.Invoke("cast", 0.6f);   // the lunge begins -> the whoosh
         if (!_spawned && _t >= Dur * 0.4f)
         {
             _spawned = true;
@@ -372,6 +389,8 @@ internal sealed class HitAnim : IAnim
             _a.SetFlash(_id, 0.3f);
             if (_amount > 0) _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));
             bool heal = _amount < 0;
+            _a.Sfx?.Invoke(heal ? "heal" : _crit ? "crit" : "hit_" + _element.ToString().ToLowerInvariant(),
+                heal ? 0.7f : 0.85f);
             string text = (heal ? "+" : "-") + Math.Abs(_amount) + (_crit ? "!" : "");
             // 1.29 floats the number in the element's colour; crits go gold, heals green.
             var color = heal ? new Color(120, 220, 130)

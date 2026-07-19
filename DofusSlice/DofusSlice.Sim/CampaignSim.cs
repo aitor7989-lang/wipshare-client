@@ -91,6 +91,17 @@ public static class CampaignSim
                 log.Add($"{learner.Name} consumed {ess} (learned {TitheContent.EssenceSkillName(ess)})");
         }
 
+        // 3b. When flush, buy the Temple's shelf essence for an empty slot (her painful price is
+        //     the certain path to the exclusives — Blood Pact and Blink never drop from mobs).
+        if (c.Gold > 900 && c.Crew.Any(u => u.HasFreeEssenceSlot))
+        {
+            string shelf = TitheContent.EssenceForSale(c.Dives);
+            var buyer = c.Crew.OrderByDescending(u => u.IsAvatar)
+                .FirstOrDefault(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(shelf));
+            if (buyer != null && c.BuyEssence(shelf) && c.TeachEssence(buyer, shelf))
+                log.Add($"bought {shelf} at the Temple ({TitheContent.Prices.EssenceBuy}g) — {buyer.Name} learned it");
+        }
+
         // 4. Restock Hard Bread — it mends the party between fights on the dive.
         while (c.Bread < 5 && c.Gold >= TitheContent.Prices.HardBread + 60) c.BuyBread();
 
@@ -236,6 +247,31 @@ public static class CampaignSim
         c.Equip(avatar, "adv_blade");
         int restored = TitheContent.DamageStatFor(TitheContent.StatsOf(avatar), elem);
         Console.WriteLine($"  Equip screen ops: strip the Blade {restored} → {stripped}, re-equip → {restored}.");
+
+        // Temple exclusives (Bible §6.5): buy Blink for the archer and Blood Pact for the bulwark,
+        // then run a real jumped fight and count the exclusive casts in the combat log — proof the
+        // AI actually flies them (Blink = the skirmisher's escape; Blood Pact = blood for AP).
+        // A FRESH level-1 crew, so the g3 hounds genuinely reach melee and force the escapes.
+        var c2 = Campaign.NewGame("cannon");
+        c2.Gold += 600;
+        var archer = c2.Crew.First(u => u.ClassId == "archer");
+        var bulwark = c2.Crew.First(u => u.ClassId == "bulwark");
+        c2.BuyEssence("Blink"); c2.TeachEssence(archer, "Blink");
+        c2.BuyEssence("Blood Pact"); c2.TeachEssence(bulwark, "Blood Pact");
+
+        var rng = new SystemRng(seed);
+        var dive = new DiveSession(c2, rng);
+        var pack = dive.Packs.First(p => p.Def.Id == "hound-pack");
+        var engine = dive.BeginFight(pack, chargeTravel: false, jumped: true);
+        var lines = new List<string>();
+        engine.Logged += lines.Add;
+        engine.Start();
+        while (engine.Outcome == FightOutcome.Ongoing && engine.Round <= 40)
+        { Policy.TakeTurn(engine, engine.Current); engine.EndTurn(); }
+        int blinks = lines.Count(l => l.Contains("leaps to"));
+        int pacts = lines.Count(l => l.Contains("sacrifice"));
+        Console.WriteLine($"  Temple exclusives in a jumped g3 fight: Blood Pact sacrifices {pacts}, "
+            + $"Blink escapes {blinks} (situational — deterministic proof lives in `effects`), outcome {engine.Outcome}.");
         return 0;
     }
 

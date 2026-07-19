@@ -16,6 +16,7 @@ public enum EffectKind
     GrantAp,     // give AP to an allied target this turn (Bone Piper, Blood Pact)
     ApplyStatus, // add a timed status to the affected fighter(s)
     Summon,      // summon a creature (SummonKind) onto the targeted free cell
+    SelfHpCost,  // the caster pays Min HP (a sacrifice — wounds, never kills)
 }
 
 /// <summary>
@@ -39,6 +40,7 @@ public sealed record SpellEffect(
     public static SpellEffect StealAp(int amount) => new(EffectKind.StealAp, Element.Neutral, amount, amount);
     public static SpellEffect StealMp(int amount) => new(EffectKind.StealMp, Element.Neutral, amount, amount);
     public static SpellEffect GrantAp(int amount) => new(EffectKind.GrantAp, Element.Neutral, amount, amount);
+    public static SpellEffect SelfHpCost(int amount) => new(EffectKind.SelfHpCost, Element.Neutral, amount, amount);
     public static SpellEffect ApplyStatus(StatusKind status, int magnitude, int turns) =>
         new(EffectKind.ApplyStatus, Element.Neutral, magnitude, turns, status);
 }

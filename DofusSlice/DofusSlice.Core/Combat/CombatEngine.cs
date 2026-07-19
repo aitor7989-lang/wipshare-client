@@ -316,6 +316,20 @@ public sealed class CombatEngine
             return;
         }
 
+        if (effect.Kind == EffectKind.SelfHpCost)
+        {
+            // A sacrifice (Blood Pact): the caster pays HP up front. It wounds, never kills —
+            // the pact takes blood, not the life (clamped to leave 1 HP).
+            int cost = Math.Min(effect.Min, Math.Max(0, caster.Hp - 1));
+            if (cost > 0)
+            {
+                caster.Hp -= cost;
+                Emit($"  {caster.Name} pays {cost} HP in sacrifice ({caster.Hp}/{caster.MaxHp} HP).");
+                Raise(new DamageDealt(caster, cost, Element.Neutral, caster.Pos, caster.Hp, false));
+            }
+            return;
+        }
+
         if (effect.Kind == EffectKind.Summon)
         {
             if (_summonFactory != null && Field.IsWalkable(impact) && !IsOccupied(impact))

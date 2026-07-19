@@ -21,7 +21,8 @@ public static class TitheContent
                                     string? Status, int Mag, int Turns);
     private sealed record RankDto(int? Ap, int? Min, int? Max, int? Cooldown, int? CastsPerTurn);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
-                                   int Cooldown, int CastsPerTurn, RankDto[]? Ranks, EffectDto[] Effects);
+                                   int Cooldown, int CastsPerTurn, bool TargetsGround,
+                                   RankDto[]? Ranks, EffectDto[] Effects);
     private sealed record GrowthDto(int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom);
     private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, string? Element, int BaseHp, int Ap, int Mp,
                                    int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom, int Initiative,
@@ -51,7 +52,8 @@ public static class TitheContent
                                             int ApBonus, int MpBonus);
 
     public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
-                                    int EssenceSell, int TitheEveryNDives, int TitheBase, int TitheGrowth);
+                                    int EssenceSell, int EssenceBuy, int EssenceRemoval,
+                                    int TitheEveryNDives, int TitheBase, int TitheGrowth);
     public sealed record PackDef(string Id, string[] Comp, int Reach, bool Hunts, int Grade = 1);
     public sealed record GraveyardDef(int ClockSeconds, int CryptReach, PackDef[] Packs);
 
@@ -118,7 +120,8 @@ public static class TitheContent
             Id = IdFor(key),
             Name = s.Name + rank switch { 1 => "", 2 => " II", 3 => " III", _ => $" {rank}" },
             ApCost = ap, MinRange = min, MaxRange = max,
-            RequiresLineOfSight = s.Los, NeedsTarget = true,
+            RequiresLineOfSight = s.Los,
+            NeedsTarget = !s.TargetsGround, NeedsFreeCell = s.TargetsGround,
             Cooldown = cd,
             MaxCastsPerTurn = cpt > 0 ? cpt : int.MaxValue,
             Effects = s.Effects.Select(ToEffect).ToArray(),
@@ -162,6 +165,7 @@ public static class TitheContent
         "steal_mp" => SpellEffect.StealMp(e.Min),
         "grant_ap" => SpellEffect.GrantAp(e.Min),
         "status" => SpellEffect.ApplyStatus(ParseStatus(e.Status), e.Mag, e.Turns),
+        "self_damage" => SpellEffect.SelfHpCost(e.Min),
         _ => throw new FormatException($"tithe: unknown effect kind '{e.Kind}'"),
     };
 
@@ -267,9 +271,16 @@ public static class TitheContent
     // ----- Essences (Bible §6.5): consumables that teach their mob's signature skill -----
 
     public sealed record EssenceDto(string Name, string Skill, string? Blurb);
+    private static EssenceDto[]? _essenceList;
+    private static EssenceDto[] EssenceList => _essenceList ??=
+        JsonSerializer.Deserialize<EssenceDto[]>(TitheTables.EssencesJson, J)!;
     private static Dictionary<string, EssenceDto>? _essences;
     private static Dictionary<string, EssenceDto> EssenceRows => _essences ??=
-        JsonSerializer.Deserialize<EssenceDto[]>(TitheTables.EssencesJson, J)!.ToDictionary(e => e.Name);
+        EssenceList.ToDictionary(e => e.Name);
+
+    /// <summary>The Temple's shelf rotates one essence per city return (Bible: she sells everything,
+    /// expensively — gambling is the discount path, never the only path).</summary>
+    public static string EssenceForSale(int dives) => EssenceList[((dives % EssenceList.Length) + EssenceList.Length) % EssenceList.Length].Name;
 
     /// <summary>The skill an essence teaches when consumed, or null for an unknown essence.</summary>
     public static string? EssenceSkill(string essence) =>

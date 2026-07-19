@@ -391,10 +391,20 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                 if (_campaign.Essences.Count > 0)
                 {
                     string ess = _campaign.Essences[0];
-                    foreach (var u in _campaign.Crew.Where(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(ess)).Take(3))
+                    foreach (var u in _campaign.Crew.Where(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(ess)).Take(2))
                         a.Add(($"TEACH {ess.ToUpperInvariant()} TO {u.Name.ToUpperInvariant()}  ({u.EssenceSlots.Count}/{CampaignUnit.MaxEssenceSlots} slots)",
                                true, () => _campaign.TeachEssence(u, ess)));
                 }
+                // The shelf (rotates each return): everything is for sale, at a painful price.
+                string shelf = TitheContent.EssenceForSale(_campaign.Dives);
+                a.Add(($"BUY {shelf.ToUpperInvariant()}  ({P.EssenceBuy}g)  — {TitheContent.EssenceSkillName(shelf).ToUpperInvariant()}",
+                       _campaign.Gold >= P.EssenceBuy, () => _campaign.BuyEssence(shelf)));
+                // Surgery: strip a filled slot — costly, and the essence is destroyed.
+                var patient = _campaign.Crew.FirstOrDefault(u => u.EssenceSlots.Count > 0);
+                if (patient != null)
+                    a.Add(($"SURGERY: STRIP {patient.EssenceSlots[0].ToUpperInvariant()} FROM {patient.Name.ToUpperInvariant()}  ({P.EssenceRemoval}g, DESTROYED)",
+                           _campaign.Gold >= P.EssenceRemoval,
+                           () => _campaign.RemoveEssence(patient, patient.EssenceSlots[0])));
                 break;
             default: // the Hiring Post
                 int lvl = Math.Max(1, _campaign.Avatar?.Level ?? 1);
@@ -1639,7 +1649,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawNpcPanel(int npc)
     {
-        var r = new Rectangle(330, 296, 620, 300);
+        var r = new Rectangle(330, 296, 620, 336); // tall enough for the Temple's five services
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
         _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
         string[] titles = { "THE TITHE-KEEPER", "THE TEMPLE SISTER", "THE HIRING POST" };

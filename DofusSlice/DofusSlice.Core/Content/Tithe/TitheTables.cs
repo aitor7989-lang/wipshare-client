@@ -109,7 +109,11 @@ public static class TitheTables
         "effects": [ { "kind": "damage", "element": "air", "min": 6, "max": 10 }, { "kind": "status", "status": "mpdrain", "mag": 1, "turns": 1 } ] },
       { "key": "flashfire", "name": "Flashfire", "ap": 3, "min": 1, "max": 2, "los": true, "cooldown": 1,
         "ranks": [ { "ap": 2 } ],
-        "effects": [ { "kind": "damage", "element": "fire", "min": 12, "max": 16 }, { "kind": "push", "cells": 1 } ] }
+        "effects": [ { "kind": "damage", "element": "fire", "min": 12, "max": 16 }, { "kind": "push", "cells": 1 } ] },
+      { "key": "blood_pact", "name": "Blood Pact", "ap": 1, "min": 0, "max": 0, "los": false, "castsPerTurn": 1,
+        "effects": [ { "kind": "self_damage", "min": 10 }, { "kind": "grant_ap", "min": 3 } ] },
+      { "key": "blink", "name": "Blink", "ap": 2, "min": 1, "max": 2, "los": false, "cooldown": 30, "targetsGround": true,
+        "effects": [ { "kind": "teleport" } ] }
     ]
     """;
 
@@ -124,7 +128,9 @@ public static class TitheTables
       { "name": "Ironhide",      "skill": "warden_ironhide", "blurb": "The warden's self-shield." },
       { "name": "Sap",           "skill": "mite_sap",        "blurb": "The mite's leeching sting." },
       { "name": "Piper's Gift",  "skill": "piper_gift",      "blurb": "The piper's gift of action." },
-      { "name": "Sexton's Toll", "skill": "sexton_smash",    "blurb": "The keeper's crushing toll." }
+      { "name": "Sexton's Toll", "skill": "sexton_smash",    "blurb": "The keeper's crushing toll." },
+      { "name": "Blood Pact",    "skill": "blood_pact",      "blurb": "Temple exclusive: trade blood for action (1 AP + 10 HP → +3 AP, once a turn)." },
+      { "name": "Blink",         "skill": "blink",           "blurb": "Temple exclusive: a 2-cell escape leap, once a fight." }
     ]
     """;
 
@@ -256,7 +262,7 @@ public static class TitheTables
       "hardBread": 15,      "breadHeal": 22,
       "draught": 130,
       "hireBasePerLevel": 45,
-      "essenceSell": 45,
+      "essenceSell": 45,   "essenceBuy": 300,   "essenceRemoval": 350,
       "titheEveryNDives": 3, "titheBase": 120, "titheGrowth": 70
     }
     """;

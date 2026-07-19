@@ -26,11 +26,63 @@ public static class EffectsTest
         Tackle();
         Summon();
         DamagePreview();
+        BlinkEscape();
+        BloodPact();
         MapHardening();
         TmxImport();
 
         Console.WriteLine($"\n{_pass} passed, {_fail} failed.");
         return _fail == 0 ? 0 : 1;
+    }
+
+    /// <summary>Blink (Temple exclusive): a meleed skirmisher with no MP can ONLY escape by
+    /// teleporting — the policy must fly it out of the lock.</summary>
+    private static void BlinkEscape()
+    {
+        var blink = new SpellDef
+        {
+            Id = 900, Name = "Blink", ApCost = 2, MinRange = 1, MaxRange = 2,
+            RequiresLineOfSight = false, NeedsTarget = false, NeedsFreeCell = true, Cooldown = 30,
+            Effects = new[] { SpellEffect.Teleport() },
+        };
+        var archer = new Fighter
+        {
+            Id = "a", Name = "Archer", Team = Team.Player, PlayerControlled = true,
+            Policy = AiPolicy.Skirmisher, PreferredRangeMin = 4, PreferredRangeMax = 8,
+            MaxHp = 40, Hp = 40, BaseAp = 6, BaseMp = 0, Initiative = 100,
+            Pos = new(5, 4), Spells = new[] { blink },
+        };
+        var eng = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { archer, Foe("f1", new(4, 4)), Foe("f2", new(6, 4)) }, new SystemRng(1));
+        eng.Start();
+        DofusSlice.Core.AI.Policy.TakeTurn(eng, archer);
+        int dist = Math.Min(archer.Pos.DistanceTo(new(4, 4)), archer.Pos.DistanceTo(new(6, 4)));
+        Check("Blink escape", dist > 1, $"meleed 0-MP skirmisher blinked to {archer.Pos} (dist {dist} from lockers)");
+    }
+
+    /// <summary>Blood Pact (Temple exclusive): the self-economy trigger trades HP for AP while
+    /// healthy — cast exactly once (its per-turn cap), never suicidally.</summary>
+    private static void BloodPact()
+    {
+        var pact = new SpellDef
+        {
+            Id = 901, Name = "Blood Pact", ApCost = 1, MinRange = 0, MaxRange = 0,
+            RequiresLineOfSight = false, NeedsTarget = false, MaxCastsPerTurn = 1,
+            Effects = new[] { SpellEffect.SelfHpCost(10), SpellEffect.GrantAp(3) },
+        };
+        var bulwark = new Fighter
+        {
+            Id = "b", Name = "Bulwark", Team = Team.Player, PlayerControlled = true,
+            Policy = AiPolicy.Bruiser,
+            MaxHp = 100, Hp = 100, BaseAp = 6, BaseMp = 0, Initiative = 100,
+            Pos = new(5, 4), Spells = new[] { pact },
+        };
+        var eng = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { bulwark, Foe("f1", new(7, 4)) }, new SystemRng(1));
+        eng.Start();
+        DofusSlice.Core.AI.Policy.TakeTurn(eng, bulwark);
+        Check("Blood Pact", bulwark.Hp == 90 && bulwark.CurrentAp == 6 - 1 + 3,
+            $"paid 10 HP (at {bulwark.Hp}) for net +2 AP (at {bulwark.CurrentAp}), one cast only");
     }
 
     private static void Check(string name, bool ok, string detail)

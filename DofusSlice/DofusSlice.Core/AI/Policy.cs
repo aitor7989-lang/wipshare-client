@@ -21,7 +21,8 @@ public static class Policy
     {
         if (self.Policy == AiPolicy.Support) { SupportTurn(engine, self); return; }
 
-        TrySelfBuff(engine, self); // Ironhide etc. before wading in
+        TrySelfBuff(engine, self);    // Ironhide etc. before wading in
+        TrySelfEconomy(engine, self); // Blood Pact: trade blood for AP while healthy
 
         for (int guard = 0; guard < 24; guard++)
         {
@@ -45,6 +46,39 @@ public static class Policy
             s.Effects.Any(e => e.Kind == EffectKind.ApplyStatus && e.Status == StatusKind.Shield));
         if (buff != null && engine.CanCast(self, buff, self.Pos, out _))
             engine.TryCast(self, buff, self.Pos);
+    }
+
+    /// <summary>Blood Pact: a self-targeted AP grant paid in HP. Cast while healthy (above ~40%)
+    /// with an enemy near enough that the extra action will be spent on something real.</summary>
+    private static void TrySelfEconomy(CombatEngine engine, Fighter self)
+    {
+        if (self.Hp * 5 <= self.MaxHp * 2) return;
+        if (DistToNearestEnemy(engine, self, self.Pos) > 10) return;
+        var pact = self.Spells.FirstOrDefault(s => s.MaxRange == 0 &&
+            s.Effects.Any(e => e.Kind == EffectKind.GrantAp));
+        if (pact != null && engine.CanCast(self, pact, self.Pos, out _))
+            engine.TryCast(self, pact, self.Pos);
+    }
+
+    /// <summary>Blink: a ground-targeted self-teleport used as an escape — when meleed, jump to
+    /// the freest cell in range and keep fighting from there. Returns true if it blinked.</summary>
+    private static bool TryBlinkAway(CombatEngine engine, Fighter self)
+    {
+        if (DistToNearestEnemy(engine, self, self.Pos) > 1) return false;
+        var blink = self.Spells.FirstOrDefault(s =>
+            s.Effects.Any(e => e.Kind == EffectKind.Teleport) && s.ApCost <= self.CurrentAp);
+        if (blink == null) return false;
+
+        CellCoord? best = null; int bestDist = 1; // must beat staying in melee
+        for (int dx = -blink.MaxRange; dx <= blink.MaxRange; dx++)
+            for (int dy = -blink.MaxRange; dy <= blink.MaxRange; dy++)
+            {
+                var c = self.Pos.Offset(dx, dy);
+                if (!engine.CanCast(self, blink, c, out _)) continue;
+                int d = DistToNearestEnemy(engine, self, c);
+                if (d > bestDist) { best = c; bestDist = d; }
+            }
+        return best is { } cell && engine.TryCast(self, blink, cell);
     }
 
     // ----- Support policy: never lead, feed the frontline AP, keep out of reach ------
@@ -91,6 +125,9 @@ public static class Policy
 
     private static bool Kite(CombatEngine engine, Fighter self)
     {
+        // Meleed with a Blink learned: jump clear first, then fight from the new ground.
+        if (TryBlinkAway(engine, self)) return true;
+
         // Fire from where we stand if anything is already in the sights.
         if (TryShootBest(engine, self)) return true;
         if (self.CurrentMp <= 0) return false;

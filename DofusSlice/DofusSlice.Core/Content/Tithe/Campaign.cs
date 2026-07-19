@@ -160,6 +160,28 @@ public sealed class Campaign
         return true;
     }
 
+    /// <summary>Buy the Temple's shelf essence at her painful price (Bible §6.5: gambling for the
+    /// drop is the discount path — the Temple is the certain, expensive one).</summary>
+    public bool BuyEssence(string essence)
+    {
+        if (TitheContent.EssenceSkill(essence) == null) return false;
+        if (Gold < TitheContent.Prices.EssenceBuy) return false;
+        Gold -= TitheContent.Prices.EssenceBuy;
+        Essences.Add(essence);
+        return true;
+    }
+
+    /// <summary>Temple surgery (Bible §6.5): strip an essence out of a unit's slot. Very expensive
+    /// and the essence is DESTROYED (the Bible leans destroyed, not refunded). Frees the slot.</summary>
+    public bool RemoveEssence(CampaignUnit u, string essence)
+    {
+        if (!u.EssenceSlots.Contains(essence)) return false;
+        if (Gold < TitheContent.Prices.EssenceRemoval) return false;
+        Gold -= TitheContent.Prices.EssenceRemoval;
+        u.EssenceSlots.Remove(essence);
+        return true;
+    }
+
     /// <summary>
     /// Consume a held essence to teach its skill to a unit (Bible §6.5): learning IS consumption,
     /// the slot is campaign-permanent, and no class check is made — a wasted fit is the player's

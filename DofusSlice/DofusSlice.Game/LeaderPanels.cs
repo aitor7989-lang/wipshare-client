@@ -13,12 +13,13 @@ namespace DofusSlice.Game;
 /// </summary>
 public partial class SliceGame
 {
-    private bool _charOpen, _invOpen;
+    private bool _charOpen, _invOpen, _spellOpen;
     private string? _panelMsg;          // one-line feedback ("ate bread", "essence learned")
     private float _panelMsgUntil;       // shown while _time is before this
 
     private static readonly Rectangle CharWin = new(465, 60, 350, 588);
     private static readonly Rectangle InvWin = new(316, 60, 648, 588);
+    private static readonly Rectangle SpellWin = new(380, 60, 520, 588);
 
     // ----- shared chrome -------------------------------------------------------------
 
@@ -127,6 +128,19 @@ public partial class SliceGame
 
         int set = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
         _font.Draw(_sb, $"ADVENTURER SET: {set}/7 PIECES", L, w.Y + 476, 1, set > 0 ? Mono.Ink : Mono.Faint);
+
+        var mercs = _campaign.Crew.Where(c => !c.IsAvatar).ToList();
+        if (mercs.Count > 0)
+        {
+            _font.Draw(_sb, "COMPANIONS  (they manage themselves)", L, w.Bottom - 92, 1, Mono.Faint);
+            for (int i = 0; i < mercs.Count && i < 2; i++)
+            {
+                var c = mercs[i];
+                _font.Draw(_sb, $"{c.Name.ToUpperInvariant()}  L{c.Level}  ·  {TitheContent.UnitMaxHp(c)} HP"
+                    + (c.Wounded ? "  ·  WOUNDED" : ""),
+                    L + 10, w.Bottom - 76 + i * 14, 1, c.Wounded ? Mono.Danger : Mono.Dim);
+            }
+        }
 
         _font.DrawCentered(_sb, "(C OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
         DrawPanelMsg(w);
@@ -333,16 +347,105 @@ public partial class SliceGame
     /// a window swallowed this frame's input (the scene below should ignore it).</summary>
     private bool UpdateLeaderPanels()
     {
-        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = false; _equipOpen = false; _openNpc = -1; return true; }
-        if (Pressed(Keys.I)) { _invOpen = !_invOpen; _charOpen = false; _equipOpen = false; _openNpc = -1; return true; }
-        if (!_charOpen && !_invOpen) return false;
-        if (Pressed(Keys.Escape)) { _charOpen = _invOpen = false; return true; }
+        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = _spellOpen = _equipOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.I) || Pressed(Keys.E)) { _invOpen = !_invOpen; _charOpen = _spellOpen = _equipOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = _equipOpen = false; _openNpc = -1; return true; }
+        if (!_charOpen && !_invOpen && !_spellOpen) return false;
+        if (Pressed(Keys.Escape)) { _charOpen = _invOpen = _spellOpen = false; return true; }
         if (LeftClicked())
         {
             var m = new Point(_mouse.X, _mouse.Y);
             if (_charOpen) ClickCharacterWindow(m);
+            else if (_spellOpen) ClickSpellPanel(m);
             else ClickInventoryWindow(m);
         }
         return true;
+    }
+
+    // ----- THE SPELL BOOK (S) — one row per spell, next rank always visible --------------
+
+    private static Rectangle SpellRowR(int i) => new(SpellWin.X + 26, SpellWin.Y + 66 + i * 74, SpellWin.Width - 52, 66);
+    private static Rectangle SpellRankUpR(int i)
+    { var r = SpellRowR(i); return new Rectangle(r.Right - 96, r.Y + 20, 84, 24); }
+
+    private void DrawSpellPanel()
+    {
+        var a = _campaign.Avatar;
+        if (a == null) return;
+        var w = SpellWin;
+        var mp = new Point(_mouse.X, _mouse.Y);
+        Mono.Frame(_sb, _prim, w, emphasis: true, fillAlpha: 0.985f);
+        PanelTitle(w, "SPELLS");
+
+        _font.Draw(_sb, a.SpellPoints > 0 ? $"SPELL POINTS TO SPEND: {a.SpellPoints}" : "NO SPELL POINTS BANKED",
+            w.X + 26, w.Y + 40, 1, a.SpellPoints > 0 ? Mono.Ink : Mono.Dim);
+
+        var classKeys = new HashSet<string>(TitheContent.UnitSkillKeys(a).Take(3));
+        var keys = TitheContent.UnitSkillKeys(a).ToList();
+        for (int i = 0; i < keys.Count && i < 6; i++)
+        {
+            string key = keys[i];
+            var sp = TitheContent.UnitSkill(a, key);
+            int rank = a.RankOf(key), maxR = TitheContent.MaxRank(key);
+            var row = SpellRowR(i);
+            _prim.FillRect(_sb, row, Mono.Panel);
+            _prim.StrokeRect(_sb, row, 1, Mono.Faint);
+
+            // The letter well, like the combat bar's slots.
+            var well = new Rectangle(row.X + 8, row.Y + 10, 46, 46);
+            Mono.Slot(_sb, _prim, well);
+            _font.DrawCentered(_sb, sp.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 11, 2, Mono.Ink);
+            _font.DrawCentered(_sb, $"{sp.ApCost}", well.Center.X, well.Bottom - 15, 1, Mono.Dim);
+
+            int tx = well.Right + 12;
+            _font.Draw(_sb, sp.Name.ToUpperInvariant(), tx, row.Y + 8, 1, Mono.Ink);
+            // Rank pips: filled squares for bought ranks, hollow for the rest.
+            int px0 = tx + _font.Measure(sp.Name.ToUpperInvariant(), 1) + 12;
+            for (int r2 = 0; r2 < maxR; r2++)
+            {
+                var pip = new Rectangle(px0 + r2 * 12, row.Y + 9, 8, 8);
+                if (r2 < rank) _prim.FillRect(_sb, pip, Mono.Ink);
+                else _prim.StrokeRect(_sb, pip, 1, Mono.Dim);
+            }
+            if (!classKeys.Contains(key))
+                _font.Draw(_sb, "FROM ESSENCE", row.Right - 96 - _font.Measure("FROM ESSENCE", 1) - 12,
+                    row.Y + 8, 1, Mono.Faint);
+
+            string InfoOf(DofusSlice.Core.Spells.SpellDef d) =>
+                string.Join("  ·  ", d.Effects.Select(e => EffectLine(e).text))
+                + $"  ·  AP {d.ApCost}  ·  RANGE {d.MinRange}-{d.MaxRange}"
+                + (d.Cooldown > 0 ? $"  ·  CD {d.Cooldown}" : "");
+            _font.Draw(_sb, Trunc(InfoOf(sp), 52), tx, row.Y + 26, 1, Mono.Dim);
+            _font.Draw(_sb, rank < maxR
+                    ? Trunc($"NEXT: {InfoOf(TitheContent.SkillAtRank(key, rank + 1))}", 52)
+                    : "MAX RANK",
+                tx, row.Y + 42, 1, rank < maxR ? Mono.Faint : Mono.Dim);
+
+            if (a.SpellPoints > 0 && rank < maxR)
+            {
+                var b = SpellRankUpR(i);
+                bool hov = b.Contains(mp);
+                Mono.Button(_sb, _prim, b, hover: hov);
+                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 8, 1, Mono.ButtonInk(hov));
+            }
+        }
+
+        _font.DrawCentered(_sb, "(S OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
+        DrawPanelMsg(w);
+    }
+
+    private void ClickSpellPanel(Point m)
+    {
+        var a = _campaign.Avatar;
+        if (a == null) return;
+        if (PanelCloseRect(SpellWin).Contains(m)) { _spellOpen = false; _sfx.Play("click"); return; }
+        var keys = TitheContent.UnitSkillKeys(a).ToList();
+        for (int i = 0; i < keys.Count && i < 6; i++)
+            if (SpellRankUpR(i).Contains(m) && TitheContent.RankUp(a, keys[i]))
+            {
+                PanelFeedback($"{TitheContent.UnitSkill(a, keys[i]).Name} ranked up");
+                _sfx.Play("levelup", 0.55f, jitter: false);
+                return;
+            }
     }
 }

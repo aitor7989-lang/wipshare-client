@@ -328,7 +328,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         }
         if (UpdateLeaderPanels()) return;   // C = character sheet, I = the bag
         if (Pressed(Keys.Escape)) { _openNpc = -1; _equipOpen = false; return; }
-        if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; _openNpc = -1; return; } // stash & kit
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
@@ -787,13 +786,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         // The Leader's windows work mid-dive too — the bell keeps ticking above them.
         if (UpdateLeaderPanels()) return;
-        if (Pressed(Keys.E)) { _equipOpen = !_equipOpen; return; }
-        if (_equipOpen)
-        {
-            if (Pressed(Keys.Escape)) { _equipOpen = false; return; }
-            if (LeftClicked()) ClickEquipPanel(new Point(_mouse.X, _mouse.Y));
-            return; // the bell keeps ticking above — reading your kit is not a pause
-        }
 
         MovePartyAlongPath(dt);
         if (_dive.ConsumeDeparture() is { } dep) { _yardMsg = dep; _yardMsgTimer = 4f; } // the Grasping exit
@@ -2791,7 +2783,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   C: CHARACTER   ·   I: BAG   ·   E: KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   C: CHARACTER   ·   S: SPELLS   ·   I: BAG   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
             _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignHud();
@@ -2799,6 +2791,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_equipOpen) DrawEquipPanel();
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
+        if (_spellOpen) DrawSpellPanel();
         if (_campaign.Over) DrawGameOver();
         _sb.End();
     }
@@ -2910,7 +2903,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         EndWorld();
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   C: CHARACTER   ·   I: BAG   ·   E: KIT   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
+        _font.Draw(_sb, $"CLICK TO MOVE   ·   CLICK A PACK TO FIGHT   ·   C: CHARACTER   ·   S: SPELLS   ·   I: BAG   ·   YARD {_yardDepth + 1}/3", 16, 44, 1, Palette.TextDim);
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
@@ -2918,6 +2911,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_equipOpen) DrawEquipPanel();
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
+        if (_spellOpen) DrawSpellPanel();
         _sb.End();
     }
 
@@ -3138,7 +3132,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.FillRect(_sb, new Rectangle(x + 24, y + 24,
                 (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
             if (u.StatPoints > 0)
-                _font.Draw(_sb, $"+{u.StatPoints} PTS (E)", x + 152, y + 21, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
+                _font.Draw(_sb, $"+{u.StatPoints} PTS (C)", x + 152, y + 21, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
             string tag = u.IsAvatar ? "AVATAR" : "MERC";
             _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
                 x + 22, y + 3, 1, u.Wounded ? (Mono.On ? Mono.Danger : new Color(230, 200, 70)) : Palette.Text);
@@ -3258,7 +3252,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     panel.Center.X, y, 1, Mono.On ? Mono.Ink : new Color(190, 140, 20)); y += 18;
             }
             if (_levelUps.Count > 0)
-            { _font.DrawCentered(_sb, "press E anywhere: spend stat points and RANK UP your spell", panel.Center.X, y, 1, inkDim); y += 22; }
+            { _font.DrawCentered(_sb, "C: spend stat points   ·   S: RANK UP your spells", panel.Center.X, y, 1, inkDim); y += 22; }
 
             if (r.Gear.Count > 0)
             { _font.DrawCentered(_sb, "FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(),

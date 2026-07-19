@@ -576,3 +576,12 @@ The designer's call: reuse the Dofus-recreation test's layout wholesale, in the 
 - Every vitals number wears a near-black 4-way OUTLINE (new OutlinedCentered) so it reads
   on the white fill, the dark hollow, and anything between; the HP number burns red under
   a quarter. AP/MP captions moved beside their icons to clear the button.
+
+## v8.5: the spell book (S) — and the window set is complete
+- S opens YOUR spell book: one row per spell with the letter well and AP cost, RANK PIPS
+  (filled squares for bought ranks), the current effect line, and the NEXT rank's line
+  permanently visible beneath it — no hovering needed to know what you're buying.
+  RANK UP buttons appear when points are banked; essence-taught spells say FROM ESSENCE.
+- Window consolidation: the old E kit screen retired — E now opens the bag (alias of I),
+  the companions roster lives at the bottom of the character sheet, and every level-up
+  hint points at C (stats) and S (spells).

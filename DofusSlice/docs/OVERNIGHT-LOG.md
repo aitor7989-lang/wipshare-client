@@ -563,3 +563,8 @@ The designer's call: reuse the Dofus-recreation test's layout wholesale, in the 
 - THE TEAM moved to the right edge, Dofus-style: name, HP bar and numbers per member,
   with END TURN (and its clock) right below them. The piloting how-to lives on the
   band's left; spell hover cards still pop above the plate.
+
+## v8.4.1: END TURN takes centre stage
+- The turn TIMER is a plate-wide draining BAR now (ink, burning red under 10s), with the
+  END TURN button centred beneath it — the 1.29 arrangement. The avatar's level strip
+  moved to the team column with its XP numbers.

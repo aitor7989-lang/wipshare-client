@@ -1284,7 +1284,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>The actor's spell wells in the combat band (drawn AND clicked from here).</summary>
     private static Rectangle KitWellRect(int i) => SpellGridRect(i);
 
-    private static readonly Rectangle TitheEndTurn = new(1080, HudTop + 112, 184, 32);
+    private static readonly Rectangle TitheEndTurn = new(565, HudTop + 130, 150, 26); // centred, under the timer bar
 
     /// <summary>Your Dofus turn: 1-6 select a spell, click ground to move/cast, SPACE hands
     /// the turn to the AI, ENTER (or the button) ends it, and the 30s clock always runs.</summary>
@@ -2401,15 +2401,21 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             ty += 26;
         }
 
-        // Piloting controls: END TURN under the team, the how-to on the band's left.
+        // Piloting controls, centre stage like Dofus: the TIMER BAR drains plate-wide
+        // under the plate, with END TURN sitting centred beneath it.
         if (piloting)
         {
+            float tFrac = Math.Clamp(_turnClock / TurnSeconds, 0f, 1f);
+            bool low = _turnClock <= 10f;
+            var timer = new Rectangle(350, HudTop + 118, 580, 8);
+            Mono.Bar(_sb, _prim, timer, tFrac, low ? Mono.Danger : Mono.Ink);
+
             bool etHov = TitheEndTurn.Contains(kmp);
             if (Mono.On) Mono.Button(_sb, _prim, TitheEndTurn, hover: etHov);
             else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
             _font.DrawCentered(_sb, $"END TURN  ·  {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S",
-                TitheEndTurn.Center.X, TitheEndTurn.Y + 11, 1,
-                Mono.On ? (_turnClock <= 10f && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
+                TitheEndTurn.Center.X, TitheEndTurn.Y + 9, 1,
+                Mono.On ? (low && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
             _font.Draw(_sb, "1-6: ARM A SPELL", 16, HudTop + 24, 1, Ew.InkSoft);
             _font.Draw(_sb, "CLICK: MOVE / CAST", 16, HudTop + 40, 1, Ew.InkSoft);
             _font.Draw(_sb, "SPACE: AUTO   ·   ENTER: END", 16, HudTop + 56, 1, Ew.InkSoft);
@@ -2417,14 +2423,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         else
             _font.Draw(_sb, "WATCHING — HOVER UNITS AND SPELLS", 16, HudTop + 24, 1, Ew.InkMuted);
 
-        // The avatar's LEVEL strip, plate-wide like the demo's bottom gauge.
+        // The avatar's LEVEL strip lives with the team column now.
         var av = _campaign?.Avatar;
         if (av != null)
         {
             int need = CampaignUnit.XpForNextLevel(av.Level);
-            Mono.Bar(_sb, _prim, new Rectangle(350, HudTop + 120, 580, 8),
+            Mono.Bar(_sb, _prim, new Rectangle(1080, HudTop + 124, 184, 6),
                 Math.Clamp(need <= 0 ? 1f : (float)av.Xp / need, 0f, 1f), Mono.Dim);
-            _font.Draw(_sb, $"LVL {av.Level}", 350, HudTop + 132, 1, Ew.InkSoft);
+            _font.Draw(_sb, $"LVL {av.Level}", 1080, HudTop + 134, 1, Ew.InkSoft);
+            _font.Draw(_sb, $"{av.Xp}/{need} XP", 1264 - _font.Measure($"{av.Xp}/{need} XP", 1), HudTop + 134, 1, Ew.InkMuted);
         }
 
         if (tip != null) DrawSpellCard(tip, Math.Min(tipX, ScreenW - 300), HudTop - 6);

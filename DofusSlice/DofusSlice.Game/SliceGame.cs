@@ -1284,7 +1284,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>The actor's spell wells in the combat band (drawn AND clicked from here).</summary>
     private static Rectangle KitWellRect(int i) => SpellGridRect(i);
 
-    private static readonly Rectangle TitheEndTurn = new(565, HudTop + 130, 150, 26); // centred, under the timer bar
+    private static readonly Rectangle TitheEndTurn = new(400, HudTop + 88, 104, 22); // where the hp bar was — the heart carries HP now
 
     /// <summary>Your Dofus turn: 1-6 select a spell, click ground to move/cast, SPACE hands
     /// the turn to the AI, ENTER (or the button) ends it, and the 30s clock always runs.</summary>
@@ -2075,6 +2075,33 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             : (int)(pose.Clock * AnimFps) % sheet.FrameCount;
     }
 
+    /// <summary>Text readable on ANY backdrop: a near-black 4-way outline under ink.</summary>
+    private void OutlinedCentered(string text, int x, int y, int scale, Color ink)
+    {
+        foreach (var (ox, oy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
+            _font.DrawCentered(_sb, text, x + ox, y + oy, scale, Mono.Bg);
+        _font.DrawCentered(_sb, text, x, y, scale, ink);
+    }
+
+    /// <summary>A UI icon as a GAUGE: hollow (faint) sprite with its bottom fraction filled
+    /// in ink — the heart that empties as you bleed. False when the art isn't baked.</summary>
+    private bool DrawUiSpriteFilled(string name, Vector2 center, float targetH, float frac)
+    {
+        var sheet = _sprites.GetSheet(name, "idle", "se");
+        if (sheet == null) return false;
+        float scale = targetH / sheet.FrameHeight;
+        var top = center - new Vector2(sheet.FrameWidth * scale / 2f, targetH / 2f);
+        _sb.Draw(sheet.Texture, top, sheet.Frame(0), Mono.Faint, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+        int cut = (int)(sheet.FrameHeight * (1f - Math.Clamp(frac, 0f, 1f)));
+        if (cut < sheet.FrameHeight)
+        {
+            var src = new Rectangle(0, cut, sheet.FrameWidth, sheet.FrameHeight - cut);
+            _sb.Draw(sheet.Texture, top + new Vector2(0, cut * scale), src, Mono.Ink,
+                0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+        }
+        return true;
+    }
+
     /// <summary>Draw a single-frame UI sprite centred on a point; false when it isn't baked.</summary>
     private bool DrawUiSprite(string name, Vector2 center, float targetH, Color tint)
     {
@@ -2338,20 +2365,20 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var heartC = new Vector2(452, HudTop + 58);
         var apC = new Vector2(392, HudTop + 68);
         var mpC = new Vector2(512, HudTop + 68);
-        if (!DrawUiSprite("onebit_heart", heartC, 48, Mono.Ink))
+        // The heart IS the health bar: it drains as you bleed. Numbers wear a dark
+        // outline so they read on the white fill and the hollow dark alike.
+        if (!DrawUiSpriteFilled("onebit_heart", heartC, 48, hpFrac))
             _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 56, Ew.Hp, Ew.HpDeep, hpFrac);
         if (!DrawUiSprite("onebit_star", apC, 38, Mono.Ink))
             _ew.Badge(_sb, EwChrome.Gem.Star, apC, 40, Ew.Ap, Ew.ApDeep);
         if (!DrawUiSprite("onebit_shield", mpC, 38, Mono.Ink))
             _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 40, Ew.Mp, Ew.MpDeep);
-        var onIcon = Mono.On ? Mono.Panel : Color.White;
-        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 8, 2, onIcon);
-        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, onIcon);
-        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 6, 2, onIcon);
-        _font.DrawCentered(_sb, "AP", (int)apC.X, (int)apC.Y + 24, 1, Ew.InkSoft);
-        _font.DrawCentered(_sb, "MP", (int)mpC.X, (int)mpC.Y + 24, 1, Ew.InkSoft);
-        var hpBar = new Rectangle(404, HudTop + 88, 96, 6);
-        Mono.Bar(_sb, _prim, hpBar, hpFrac, hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
+        OutlinedCentered(cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 8, 2,
+            hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
+        OutlinedCentered(cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, Mono.Ink);
+        OutlinedCentered(cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 6, 2, Mono.Ink);
+        _font.DrawCentered(_sb, "AP", (int)apC.X - 34, (int)apC.Y + 6, 1, Ew.InkSoft);
+        _font.DrawCentered(_sb, "MP", (int)mpC.X + 34, (int)mpC.Y + 6, 1, Ew.InkSoft);
 
         // The spell grid (demo geometry: 7 columns, two rows — row two waits for pages).
         SpellDef? tip = null; int tipX = 0;
@@ -2413,8 +2440,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             bool etHov = TitheEndTurn.Contains(kmp);
             if (Mono.On) Mono.Button(_sb, _prim, TitheEndTurn, hover: etHov);
             else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
-            _font.DrawCentered(_sb, $"END TURN  ·  {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S",
-                TitheEndTurn.Center.X, TitheEndTurn.Y + 9, 1,
+            _font.DrawCentered(_sb, "END TURN", TitheEndTurn.Center.X, TitheEndTurn.Y + 8, 1,
                 Mono.On ? (low && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
             _font.Draw(_sb, "1-6: ARM A SPELL", 16, HudTop + 24, 1, Ew.InkSoft);
             _font.Draw(_sb, "CLICK: MOVE / CAST", 16, HudTop + 40, 1, Ew.InkSoft);

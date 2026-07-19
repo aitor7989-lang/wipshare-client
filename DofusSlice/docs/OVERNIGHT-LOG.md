@@ -568,3 +568,11 @@ The designer's call: reuse the Dofus-recreation test's layout wholesale, in the 
 - The turn TIMER is a plate-wide draining BAR now (ink, burning red under 10s), with the
   END TURN button centred beneath it — the 1.29 arrangement. The avatar's level strip
   moved to the team column with its XP numbers.
+
+## v8.4.2: the heart IS the health bar
+- The little HP bar under the heart is gone. The HEART ITSELF drains now: a faint hollow
+  silhouette that fills bottom-up with ink to your exact HP fraction (new
+  DrawUiSpriteFilled). END TURN moved into the bar's old spot, right under the heart.
+- Every vitals number wears a near-black 4-way OUTLINE (new OutlinedCentered) so it reads
+  on the white fill, the dark hollow, and anything between; the HP number burns red under
+  a quarter. AP/MP captions moved beside their icons to clear the button.

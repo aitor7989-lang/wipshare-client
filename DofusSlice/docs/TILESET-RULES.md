@@ -1,109 +1,99 @@
-# Tileset composition rules (derived from the pack's reference map)
+# Chamber8x8 composition rules (mined from the pack's example screenshots)
 
-The 8-bit sheet ships with an example map (34×49 tile-index grid). These rules are mined from
-that grid — every rule cites the reference rows that establish it. The renderer follows them
-exactly; deliberate deviations are listed at the end. Tile indices refer to the 8-column sheet
-(index = row·8 + col); the named constants live in `Tid` (`TileSet.cs`).
+The skin uses adamzbuub's **Chamber8x8** pack (https://adamzbuub.itch.io/chamber8x8): an 8×8-px
+wall autotile (4×4 sheet), a floor autotile (16×4 sheet), individually named props, and a
+4-frame animated knight. The art itself is **local-only and never committed** — the repo keeps
+its procedural fallback.
+
+Every rule below was derived empirically from the author's two example screenshots: both were
+reduced to native resolution (they are 10× recordings; grid origins (2,4) and (4,5)), then every
+8×8 cell was masked-matched against the pack's tiles until the whole map decoded. The rules cite
+that evidence.
 
 ## 0. Sheet mechanics
 
-- 8×8 px tiles, 8 columns. Sprite transparency = pure magenta `#FF00FF`, keyed at load.
-- The atlas is repacked with 1px extruded gutters; **only integer on-screen pixel scales**
-  (cell 32 = 4×; sprites at ×1.25 → 40px, ×2 → 64px etc. keep whole-pixel texels).
+- 8×8-px tiles. The wall sheet is 4 columns (index = row·4+col), the floor sheet 16 columns.
+- Real alpha transparency (no magenta keying needed; keying stays on harmlessly).
+- Atlases are repacked with 1-px extruded gutters; **only integer on-screen scales** (cell 32 = 4×).
+- Scale detection note: both examples pass a NEAREST roundtrip at 5× AND 10× — the 10× is real;
+  a 5× reduction still passes because every native pixel covers an even number of recording
+  pixels. Detailed-tile matching (0 exact hits at 5×, full decode at 10×) settles it.
 
-## 1. The wall sandwich (reference rows 1–2, 15–17, 30–31, 45–47)
+## 1. Walls — a ring autotile, one tile thick
 
-Every enclosed space is bounded by a wall drawn as **three horizontal layers**:
+The wall sheet is a ring-plus-fill blob. Decoded roles (col,row):
 
-```
-band   1  2  2  2  2  3     the wall's top surface (bright), corner-capped
-face   5 13 12 13 13  5     the wall's front, decorated at intervals
-floor  .  .  .  .  .  .
-band   1  2  2  2  2  3     the south wall's top surface
-face   5 13 13 12 13  5     the south face, seen from outside
-skirt 46 46 46 46 46 46     dark base strip (reference rows 17/47)
-```
-
-- **North wall** (above the playfield): band row, then face row.
-- **South wall** (below): band row, then face row, then skirt row.
-- **Sides**: single vertical columns of the family's side tile, meeting the bands at corners.
-- **Face composition** (reference row 2: `5,12,12,12,13,12,13,13,14,...,5`): the base face tile
-  dominates; the darker edge face sits beside the corners only; decor forms a small CLUSTER near
-  one end plus sparse repeats — a cycle pattern reads mechanical and is wrong.
-- **Depth (the 3D read)**: light band on top, dark face directly below, floor below that. Two
-  reinforcing cues from the reference: props stand ON the north band (shelves/jars along the
-  wall top, every ~6 tiles in the City), and the west wall shades the single floor column beside
-  it with VARIED shade tiles (16/17/26 mixed down the column — reference rows 3–8 — never one
-  tile stacked into a stripe).
-
-Per family:
-
-| layer | City (purple room, ref rows 1–17) | Yard/Crypt (dungeon, ref rows 30–47) |
+| tile | role | evidence |
 |---|---|---|
-| band | 2 (corners 1 / 3) | 105 (corners 84 / 85) |
-| face | 5·13·14 cycle, decor 12 (bottles) | 111·112·113·112 cycle, decor 114 (torch) |
-| side | 3 | 94 |
-| skirt | 46 | 106 (sparse 107) |
-| outer void | 7 sprinkled SE (ref: right column + below) | 91 / 94 |
+| (0,0) (1,0) (2,0) | NW corner, N edge, NE corner | every room's top row |
+| (0,1) (2,1) | W edge, E edge | every room's side columns |
+| (0,2) (1,2) (2,2) | SW corner, S edge, SE corner | every room's bottom row; (1,2) is pixel-identical to (1,0) |
+| (0,3) (1,3) | concave (inner) corners W/E | stepped outlines: `W02 W03` / `F59 W13 W22` turns |
+| (3,y), (1,1) | empty | unused |
+| (2,3) | fill / plain cap | runs inside 2-thick walls and T-junctions (ex2 rows 5–6) |
 
-## 2. Floors (reference: every room interior)
+- **Rooms are outlined by a single-tile wall run** — the ring tiles, corner-capped. The cap is
+  pale stone; its **dark south lip is baked into the tile** (there is no separate face row and
+  no separate shadow layer — see §3).
+- **Two-thick walls** (a wall seen from both sides, ex2's room divider): north row = fill (2,3),
+  south row = N-edge (1,0) so the lip faces the lower room.
+- **Stepped outlines**: convex turns use the ring corners, concave turns the (0,3)/(1,3) inner
+  corners — the examples' alcove bumps prove both.
 
-- **One plain base tile floods the room.** City 15; Crypt 25 (smooth worked stone). The Yard is
-  the outdoor exception: its base mixes 82 / 83 **per cell** (dead, uneven earth).
-- **Variants come in clumps, never lone tiles**: the reference's moss/stripe patches span 2+
-  adjacent tiles (rows 32–44 grow green 88/89/90 patches inside dark floor). Implemented by
-  hashing the 2×2 block (`x/2, y/2`), so a variant always appears as a patch.
-  - City floors are UNIFORM 15 — the reference's apparent variation indoors is wall-adjacent
-    shading (16/17/26 by the west wall) and furniture, never random floor sprinkles. 13/14 are
-    face tiles and must not appear on floors.
-  - Yard clumps: mossy 88 / 89 / 97, ~1 block in 3; bramble 90 as a RARE accent (~1 block in 8).
-  - Crypt clumps: 82 / 83 / 86 / 93, ~1 block in 4.
-- **Rugs are rectangles anchored to landmarks, never scattered** (reference: the striped mat
-  and check rugs form solid rectangles inside the top room): 2×2 gold-stripe 20 before the
-  Tithe-Keeper, 2×2 lattice 47 before the Temple, 2×2 blue-weave 52 before the Hiring Post.
-- `Water` renders 92 with sparse 98 glints.
+### Wall furniture (all embedded IN the wall line)
 
-## 3. Obstacles & props
+- **Chest alcoves**: a chest prop replaces a wall cell's look (chest over the dark interior),
+  flanked by wall tiles; gold piles often on the floor beside. Ex1's north wall bumps out one
+  row to pocket three chests; ex2 embeds them straight into runs.
+- **Doors**: `DoorUp` in horizontal runs, `DoorSide` in vertical runs — they sit ON a wall cell
+  where a corridor passes (ex2 has two DoorSide at the same x, rows 3 and 8).
+- **Pillars** (8×16): stand at wall corners/junctions, feet on the adjacent floor cell, upper
+  half overlapping the band (ex1: three; ex2: two — all at corners or junction points).
+- **Spiderwebs** (16×8): hang UNDER a band's south edge, sparse (ex1: one under the south wall).
 
-- Rock cells: **tombstone arch 110** in the Yard (pale `#CECEDA` tint); **stone lump 44** in the
-  Crypt; the City map has none.
-- Tree cells: **evergreen 45**, feet-anchored, ×1.25.
-- The Lychgate and the Crypt door: **arch 110 at ×2 with torches 114** flanking (reference
-  embeds torches in wall faces; gates get them as standing props).
-- Services: Tithe-Keeper = chest 71, Temple = statue 12, Hiring Post = figure 76.
+## 2. Floors — an edge autotile that carries all the shading
 
-## 4. Sprites (reference: figures inside rooms; sidebar sprite table)
+The floor sheet is four 4×4 groups. Decoded (index = row·16+col):
 
-- All sprites are **feet-anchored** — they stand on their cell's bottom edge and grow upward.
-- Idle pairs animate at 2 fps: figures 74/76/78/80(+1), bird 63, ghost 65, spider 101.
-- Crew = figures A/B/C; mobs = figure D, crab 100, spider 101, mite 67, bird 63; the Sexton
-  is figure D at ×2 (a looming silhouette, reference-style black).
-- The survivor is a figure plus the pack's own **"?" bubble 69** beside its head.
+- **41** — the plain grey paving that floods every interior. **26** — solid dark: the void
+  outside rooms (and pits).
+- **Group 2 (cols 8–11) = the wall-adjacent edge ring.** Observed neighbour masks are unanimous:
+  8=NW corner, 9/10=N edge, 11=NE, 24/40=W edge, 27/43=E edge, 56=SW, 57/58=S edge, 59=SE.
+  The dark edging + brown weathering on these tiles IS the wall-base shading — place them on
+  every floor cell that touches a wall, dark side toward the wall. Pairs (9/10, 24/40, 27/43,
+  57/58) are variants; mix them to break repetition.
+- **Group 1 inner 2×2 = diagonal nubs**: 21=wall-NW-only, 22=NE, 37=SW, 38=SE — for floor cells
+  that touch a wall only diagonally (observed 4–5× each, exclusively on those masks).
+- **Group 3 inner 2×2 = interior detail**: 29/30/45/46 sprinkled on open floor with no wall
+  constraint, roughly 1 cell in 12. Never clumped, unlike the old Scut moss rule.
+- Free debris props (bones, wood scraps, the key) are scattered on open floor at **sub-tile
+  offsets** — the examples place them off-grid deliberately (bones at (5.12,2.12), (13.88,9.88)…).
 
-## 5. Deviations (deliberate, for gameplay legibility or space)
+## 3. Depth & light — everything is baked
 
-1. **Team pads**: colored ground pads under units (class color vs enemy red). The reference has
-   no pads; watched combat needs team/class readability at a glance, and HP bars need an anchor.
-2. **Skirt + shadow economy**: the south skirt row renders, but the outer SE `7`-shadow ring is
-   reduced to the right-hand column only — the HUD panel already crops the bottom.
-3. **Cell highlights** (hover, movement range, placement) are translucent squares over the
-   tiles — pure gameplay UI with no reference equivalent.
-4. **No drop-shadow discs under props** — the pack's sprites cast no shadows; only units keep
-   their team pads (rule 1).
+The Scut skin needed a hand-dithered shadow layer; Chamber does not. The 1:1 decode left zero
+unexplained shading: the wall tiles carry their own south lip, the floor edge tiles carry the
+wall-base darkening, the knight and props have baked outlines. **The renderer draws no
+procedural shadows in this skin.**
 
-## 6. Findings from the 1:1 reference recreation
+## 4. The knight & sprites
 
-The reference was rebuilt pixel-identically (0 differing pixels of 426,496) from three layers,
-which is the proof behind every rule above and adds two discoveries:
+- `Knight_Idle/Walk/Use`: 4-frame 8×8 strips, feet-anchored, small baked drop shadow.
+- The examples free-place the knight (it moves off-grid); our units stay cell-anchored and
+  animate Idle at ~3 fps, mirrored to face their enemy's side.
+- The pack has no monster art: crew are knights tinted by class; the dead are the same knight
+  in rust/bone tints (a dark mirror of the living — fits TITHE), the Sexton at ×2.
 
-1. **Tile data alone = 97.3%.** The example map uses `flipX` on 71 tiles and one rotation —
-   mirroring is part of the pack's vocabulary (not yet used by the game renderer).
-2. **The dither shadow layer (+2.3%)**: light comes from the NW. Interior north and west wall
-   edges (and hand-picked interior blocks) cast a shadow ramp onto the floor, colour `#1E2431`:
-   a SOLID 1px line against the wall, then two dithered lines fading out —
-   `########` / `.#.#.#.#` / `#.#.#.#.` (and the same rotated for west walls). Application in
-   the reference is contextual (interior edges only; exterior south faces never cast), so the
-   game applies it along the playfield's north and west edges.
-3. **The sprite layer (+0.35%)** is hand-placed: single keyed tiles plus a few multi-tile
-   composites (a 2-tile robot, a 2×2 mushroom whirl). Sprites stand mid-cell or perch ON wall
-   faces/bands — free placement, not grid law.
+## 5. Game mapping (deliberate deviations for TITHE)
+
+1. **Obstacles**: rocks = `Pillar` (8×16), trees/clutter = `Barril`/bones — the pack has no
+   rocks or trees; pillars and barrels are its blocker vocabulary.
+2. **Services** (City): Tithe-Keeper = red-brown chest with gold piles beside (the pack's own
+   chest-and-gold pairing), Temple = `Crown` on a metal pedestal, Hiring Post = `Barril` + wood.
+3. **Families by tint**: one stone family shipped, so City is neutral, the Graveyard is tinted
+   mossy-grey, the Crypt cold blue. Props keep their colour (gold must pop).
+4. **Gates**: the Lychgate and Crypt door are `DoorUp` embedded in the wall run, pillars flanking.
+5. **Team pads, HP bars, square cell highlights**: gameplay UI kept verbatim from the Scut skin
+   (watched combat needs the readability; the pack has no equivalent).
+6. **Pits**: `Water`/`Void` cells render as floor-holes of 26 — the examples' rooms float in
+   that same darkness.

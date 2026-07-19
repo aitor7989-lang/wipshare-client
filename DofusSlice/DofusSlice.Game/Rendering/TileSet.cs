@@ -4,11 +4,10 @@ using Microsoft.Xna.Framework.Graphics;
 namespace DofusSlice.Game.Rendering;
 
 /// <summary>
-/// The 8-bit tileset renderer: an 8-column sheet of 8×8 tiles (index = row·8 + col), drawn
-/// point-scaled to <see cref="Cell"/>-pixel cells for the top-down pixel look. Loaded from
-/// <c>assets/tileset.png</c> — a local-only file that is never committed (third-party art);
-/// when it is absent the game keeps its procedural iso look, so the repo runs without it.
-/// The pack marks sprite transparency with pure magenta (#FF00FF), keyed out on load.
+/// A sheet of 8×8 tiles drawn point-scaled to <see cref="Cell"/>-pixel cells (index = row·cols + col;
+/// the column count comes from the sheet width). Loaded from local-only PNGs that are never
+/// committed (third-party art); when absent the game keeps its procedural iso look, so the repo
+/// runs without them. Pure-magenta (#FF00FF) pixels are keyed out for sheets that use it.
 /// </summary>
 public sealed class TileSet
 {
@@ -18,11 +17,13 @@ public sealed class TileSet
     private const int Pad = Src + 2; // padded stride: 1px extruded gutter kills atlas bleeding
 
     private readonly Texture2D? _tex;
+    private readonly int _cols;
     public bool Loaded => _tex != null;
 
     public TileSet(Texture2D? sheet)
     {
         if (sheet == null) return;
+        _cols = sheet.Width / Src;
 
         var src = new Color[sheet.Width * sheet.Height];
         sheet.GetData(src);
@@ -32,7 +33,7 @@ public sealed class TileSet
 
         // Repack into a padded atlas: each 8×8 tile gets a 1px gutter of its own extruded edge
         // pixels, so sub-pixel camera offsets can never sample a neighbouring tile's edge.
-        int cols = sheet.Width / Src, rows = sheet.Height / Src;
+        int cols = _cols, rows = sheet.Height / Src;
         var tex = new Texture2D(sheet.GraphicsDevice, cols * Pad, rows * Pad);
         var dst = new Color[cols * Pad * rows * Pad];
         for (int ty = 0; ty < rows; ty++)
@@ -48,15 +49,16 @@ public sealed class TileSet
         _tex = tex;
     }
 
-    private static Rectangle Rect(int idx) => new(idx % 8 * Pad + 1, idx / 8 * Pad + 1, Src, Src);
+    private Rectangle Rect(int idx) => new(idx % _cols * Pad + 1, idx / _cols * Pad + 1, Src, Src);
 
-    /// <summary>Draw a tile centred on a cell centre (floors, rugs, flat props).</summary>
-    public void Draw(SpriteBatch sb, int idx, Vector2 center, Color? tint = null, float scale = 1f)
+    /// <summary>Draw a tile centred on a cell centre (floors, walls, flat props).</summary>
+    public void Draw(SpriteBatch sb, int idx, Vector2 center, Color? tint = null, float scale = 1f,
+        bool flip = false)
     {
         if (_tex == null) return;
         float s = Cell / (float)Src * scale;
         sb.Draw(_tex, center, Rect(idx), tint ?? Color.White, 0f,
-            new Vector2(Src / 2f, Src / 2f), s, SpriteEffects.None, 0f);
+            new Vector2(Src / 2f, Src / 2f), s, flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
     }
 
     /// <summary>Draw anchored at the feet (bottom edge sits on the cell's bottom edge) — standing
@@ -71,38 +73,89 @@ public sealed class TileSet
 }
 
 /// <summary>
-/// Named tile indices for the Scut 7DRL sheet, catalogued from the pack's own example map.
-/// Data-ish by design: retile the game by editing this table, not the draw code.
+/// The Chamber8x8 skin: wall + floor autotile atlases, named props, and the 4-frame knight.
+/// All art is loaded from the gitignored assets folder (chamber_*.png) and never committed;
+/// <see cref="Loaded"/> is false without it and the game keeps its procedural look.
+/// See docs/TILESET-RULES.md for the composition grammar these pieces obey.
 /// </summary>
-public static class Tid
+public sealed class ChamberSet
 {
-    // Purple interior (the City). Wall sandwich per TILESET-RULES.md §1.
-    public const int CityFloor = 15;
-    public static readonly int[] FloorShades = { 16, 17, 26 }; // west-wall floor shading, varied
-    public const int CityBand = 2, CityCornerL = 1, CityCornerR = 3, CitySide = 3;
-    public static readonly int[] CityFace = { 5, 13, 14 };  // [edge, base, sparse]
-    public const int CityDecor = 12, CitySkirt = 46;
-    public const int RugGold = 20, RugCheck = 21, RugWeave = 47, RugBlue = 52;
-    public const int Shelf = 6, Console = 10, Brazier = 50, Statue = 12;
+    public TileSet Wall { get; }
+    public TileSet Floor { get; }
+    public bool Loaded { get; }
 
-    // Dark mossy outdoors (the Graveyard): dark ground, mossy growth in clumps.
-    public static readonly int[] YardBase = { 82, 83 };  // mixed per-cell, reference-style
-    public static readonly int[] YardMoss = { 88, 89, 97 };
-    public const int YardBramble = 90;                   // rare accent, never common
-    public const int DunBand = 105, DunCornerL = 84, DunCornerR = 85, DunSide = 94;
-    public static readonly int[] DunFace = { 111, 112, 113 };  // [edge, base, sparse]
-    public const int DunDecor = 114, DunSkirt = 106, DunSkirtAlt = 107;
-    public const int YardVoid = 94, CityVoid = 7, DunVoid = 91;
+    private readonly Dictionary<string, Texture2D> _props = new();
+    private readonly Dictionary<string, Texture2D> _anim = new();
 
-    // Blue dungeon (the Crypt's fight arenas).
-    public const int CryptFloor = 25;
-    public static readonly int[] CryptClumps = { 82, 83, 86, 93 };
+    public ChamberSet(SpriteBank bank)
+    {
+        Wall = new TileSet(bank.Get("chamber_wall"));
+        Floor = new TileSet(bank.Get("chamber_floor"));
+        Loaded = Wall.Loaded && Floor.Loaded;
+        if (!Loaded) return;
 
-    public const int Void = 94, Water = 92, WaterGlint = 98;
-    public const int Tombstone = 110, Tree = 45, RockBlob = 44, Pillar = 33;
+        foreach (var name in new[]
+        {
+            "chest", "chest_open", "chest_b", "gold1", "gold2", "gold3", "door", "door_side",
+            "pillar", "web", "webb", "bones", "bonesb", "barrel", "crown", "key", "metal",
+            "wood", "woodr", "fx_smear",
+        })
+            if (bank.Get("chamber_" + name) is { } t) _props[name] = t;
+        foreach (var state in new[] { "idle", "walk", "use" })
+            if (bank.Get("chamber_knight_" + state) is { } t) _anim[state] = t;
+    }
 
-    // Sprites (magenta-keyed). Pairs are idle animation frames (base, base+1).
-    public const int FigA = 74, FigB = 76, FigC = 78, FigD = 80; // little black people
-    public const int Ghost = 65, Bird = 63, Spider = 101, Bat = 99, Crab = 100, Mite = 67;
-    public const int Bang = 68, Question = 69, GoldPile = 70, Chest = 71, Arch = 110, Torch = 114;
+    /// <summary>Feet-anchored prop draw at an integer point scale (4× per unit of scale).</summary>
+    public void Prop(SpriteBatch sb, string name, Vector2 feet, Color? tint = null, float scale = 1f)
+    {
+        if (!_props.TryGetValue(name, out var t)) return;
+        float s = TileSet.Cell / (float)TileSet.Src * scale;
+        sb.Draw(t, feet, null, tint ?? Color.White, 0f,
+            new Vector2(t.Width / 2f, t.Height), s, SpriteEffects.None, 0f);
+    }
+
+    /// <summary>One knight frame, feet-anchored; <paramref name="flip"/> mirrors it to face west.</summary>
+    public void Knight(SpriteBatch sb, string state, int frame, Vector2 feet, Color tint,
+        bool flip = false, float scale = 1f)
+    {
+        if (!_anim.TryGetValue(state, out var t) && !_anim.TryGetValue("idle", out t)) return;
+        int frames = Math.Max(1, t.Width / TileSet.Src);
+        var rect = new Rectangle(frame % frames * TileSet.Src, 0, TileSet.Src, t.Height);
+        float s = TileSet.Cell / (float)TileSet.Src * scale;
+        sb.Draw(t, feet, rect, tint, 0f, new Vector2(TileSet.Src / 2f, t.Height), s,
+            flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
+    }
+}
+
+/// <summary>
+/// Named tile indices for the Chamber8x8 sheets, decoded from the pack's example screenshots
+/// (docs/TILESET-RULES.md cites the evidence per tile). Data-ish by design: retile the game by
+/// editing this table, not the draw code.
+/// </summary>
+public static class Ch
+{
+    // Wall sheet (4 columns): the ring autotile. Index = row·4 + col.
+    public const int WallNW = 0, WallN = 1, WallNE = 2;
+    public const int WallW = 4, WallE = 6;
+    public const int WallSW = 8, WallS = 9, WallSE = 10;
+    public const int WallInnerW = 12, WallInnerE = 13;   // concave corners for stepped outlines
+    public const int WallFill = 14;                       // plain cap: 2-thick walls, junctions
+
+    // Floor sheet (16 columns): the edge autotile. Dark side of each edge tile faces the wall.
+    public const int FVoid = 26, FPlain = 41;
+    public const int FNW = 8, FNE = 11, FSW = 56, FSE = 59;
+    public static readonly int[] FN = { 9, 10 };
+    public static readonly int[] FW = { 24, 40 };
+    public static readonly int[] FE = { 27, 43 };
+    public static readonly int[] FS = { 57, 58 };
+    public const int FNubNW = 21, FNubNE = 22, FNubSW = 37, FNubSE = 38; // diagonal-only contact
+    public static readonly int[] FDetail = { 29, 30, 45, 46 };           // sparse interior detail
+
+    /// <summary>The dark between-rooms colour — the screen clear when the skin is active.</summary>
+    public static readonly Color VoidInk = new(11, 16, 22);
+
+    // Family tints: one stone family ships, so scenes differ by tint (TILESET-RULES.md §5.3).
+    public static readonly Color CityTint = Color.White;
+    public static readonly Color YardTint = new(202, 212, 192);
+    public static readonly Color CryptTint = new(188, 198, 220);
 }

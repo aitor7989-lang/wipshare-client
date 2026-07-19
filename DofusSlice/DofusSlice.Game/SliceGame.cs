@@ -70,8 +70,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private Primitives _prim = null!;
     private PixelFont _font = null!;
     private IsoProjector _proj = null!;
-    private TileSet _tiles = null!;                   // the 8-bit tileset skin (local-only art)
-    private bool Pix => _tiles.Loaded;                // tileset present -> top-down pixel look
+    private ChamberSet _tiles = null!;                // the Chamber8x8 skin (local-only art)
+    private bool Pix => _tiles.Loaded;                // skin present -> top-down pixel look
     private SpriteBank _sprites = null!;
     private Camera2D _camera = null!;
 
@@ -142,7 +142,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
-        _tiles = new TileSet(_sprites.Get("tileset"));
+        _tiles = new ChamberSet(_sprites);
         _prim.SquareMode = Pix;
         _prim.SquareSize = TileSet.Cell;
 
@@ -946,10 +946,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pix)
         {
             var fam = PixFamNow();
-            DrawPixWalls(_engine.Field.Width, _engine.Field.Height, fam);
             foreach (var c in CellsByDepth())
                 DrawPixCell(c, _engine.Field.TileAt(c), fam, _engine.Field.Width, _engine.Field.Height);
-            DrawPixShadows(_engine.Field.Width, _engine.Field.Height);
+            // Walls after floors so their furniture (webs, pillars) hangs over the paving.
+            DrawPixWalls(_engine.Field.Width, _engine.Field.Height, fam);
             return;
         }
         foreach (var c in CellsByDepth())
@@ -1014,6 +1014,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawTileOutline(Vector2 center, Color color)
     {
+        if (Pix)
+        {
+            // Square cells in the pixel skin: the outline must match the highlight shape.
+            int s = TileSet.Cell - 2;
+            _prim.StrokeRect(_sb, new Rectangle((int)(center.X - s / 2f), (int)(center.Y - s / 2f), s, s), 1, color);
+            return;
+        }
         var top = center + new Vector2(0, -TileH / 2f);
         var right = center + new Vector2(TileW / 2f, 0);
         var bottom = center + new Vector2(0, TileH / 2f);
@@ -1036,146 +1043,103 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     private static int PixHash(CellCoord c) => (c.X * 73856093 ^ c.Y * 19349663) & 0x7fffffff;
 
-    /// <summary>Variants grow in 2×2 clumps, never lone tiles (TILESET-RULES §2): hash the block.</summary>
-    private static int PixBlockHash(CellCoord c) =>
-        ((c.X >> 1) * 73856093 ^ (c.Y >> 1) * 19349663) & 0x7fffffff;
-
-    /// <summary>City rug rectangles anchored to the service landmarks (TILESET-RULES §2).</summary>
-    private int PixRugAt(CellCoord c)
+    /// <summary>The scene tint: one stone family ships, so families differ by tint (§5.3).</summary>
+    private static Color PixTint(PixFam fam) => fam switch
     {
-        if (c.X >= TitheCell.X - 1 && c.X <= TitheCell.X && c.Y >= TitheCell.Y + 1 && c.Y <= TitheCell.Y + 2)
-            return Tid.RugGold;
-        if (c.X >= TempleCell.X - 1 && c.X <= TempleCell.X && c.Y >= TempleCell.Y + 1 && c.Y <= TempleCell.Y + 2)
-            return Tid.RugWeave;
-        if (c.X >= HireCell.X - 1 && c.X <= HireCell.X && c.Y >= HireCell.Y + 1 && c.Y <= HireCell.Y + 2)
-            return Tid.RugBlue;
-        return -1;
-    }
+        PixFam.City => Ch.CityTint,
+        PixFam.Yard => Ch.YardTint,
+        _ => Ch.CryptTint,
+    };
 
     private void DrawPixCell(CellCoord c, TileKind kind, PixFam fam, int width, int height)
     {
         var center = _proj.CellCenter(c);
-        if (kind == TileKind.Void)
+        if (kind is TileKind.Void or TileKind.Water)
         {
-            _tiles.Draw(_sb, fam == PixFam.City ? Tid.CityVoid : Tid.DunVoid, center);
-            return;
-        }
-        if (kind == TileKind.Water)
-        {
-            _tiles.Draw(_sb, Tid.Water, center);
-            if (PixHash(c) % 4 == 0) _tiles.Draw(_sb, Tid.WaterGlint, center, Color.White * 0.85f);
+            // Pits: holes in the paving showing the same dark the rooms float in (§5.6).
+            _tiles.Floor.Draw(_sb, Ch.FVoid, center);
             return;
         }
 
-        if (fam == PixFam.City)
-        {
-            int rug = PixRugAt(c);
-            if (rug >= 0) { _tiles.Draw(_sb, rug, center); return; }
-            // The 3D read (TILESET-RULES §1.5): the west wall shades the floor column beside
-            // it — with VARIED shade tiles down the column (reference mixes 16/17/26), never one
-            // tile stacked into a mechanical stripe. Everything else is plain 15.
-            _tiles.Draw(_sb, c.X == 0 ? Tid.FloorShades[PixHash(c) % Tid.FloorShades.Length] : Tid.CityFloor, center);
-            return;
-        }
-        int bh = PixBlockHash(c);
-        if (fam == PixFam.Crypt)
-        {
-            _tiles.Draw(_sb, bh % 4 == 0 ? Tid.CryptClumps[bh % Tid.CryptClumps.Length] : Tid.CryptFloor, center);
-            return;
-        }
-        // Yard (TILESET-RULES §2): dead mixed earth per-cell, mossy growth in blocks, rare bramble.
-        int tile = bh % 8 == 0 ? Tid.YardBramble
-            : bh % 3 == 0 ? Tid.YardMoss[bh % Tid.YardMoss.Length]
-            : Tid.YardBase[PixHash(c) % Tid.YardBase.Length];
-        _tiles.Draw(_sb, tile, center);
-    }
+        // The floor edge autotile (TILESET-RULES §2): every cell touching a wall wears the edge
+        // tile whose dark side faces that wall — corners first, then edges (paired variants mixed
+        // by hash), then plain paving with sparse interior detail, never clumped.
+        int h = PixHash(c);
+        bool n = c.Y == 0, s = c.Y == height - 1, w = c.X == 0, e = c.X == width - 1;
+        int tile =
+            n && w ? Ch.FNW : n && e ? Ch.FNE : s && w ? Ch.FSW : s && e ? Ch.FSE
+            : n ? Ch.FN[h % Ch.FN.Length] : s ? Ch.FS[h % Ch.FS.Length]
+            : w ? Ch.FW[h % Ch.FW.Length] : e ? Ch.FE[h % Ch.FE.Length]
+            : h % 12 == 0 ? Ch.FDetail[h / 12 % Ch.FDetail.Length]
+            : Ch.FPlain;
+        _tiles.Floor.Draw(_sb, tile, center, PixTint(fam));
 
-    /// <summary>The NW-light dither shadow discovered in the 1:1 recreation (TILESET-RULES §6):
-    /// a solid line against the wall then a two-step checker fade, colour #1E2431, cast onto the
-    /// floor row under the north wall and the floor column beside the west wall.</summary>
-    private void DrawPixShadows(int width, int height)
-    {
-        var ink = new Color(30, 36, 49);
-        int px = TileSet.Cell / TileSet.Src; // one source pixel on screen
-        for (int x = 0; x < width; x++)
+        // Free debris (§2): bones and wood scraps sit at sub-tile offsets on open floor — the
+        // examples place them off-grid deliberately. Kept off the walkable-critical City lanes.
+        if (!n && !s && !w && !e && h % 41 == 7)
         {
-            var o = _proj.CellCenter(x, 0) - new Vector2(TileSet.Cell / 2f, TileSet.Cell / 2f);
-            _prim.FillRect(_sb, new Rectangle((int)o.X, (int)o.Y, TileSet.Cell, px), ink);
-            for (int i = 0; i < TileSet.Src; i++)
-            {
-                if (i % 2 == 1) _prim.FillRect(_sb, new Rectangle((int)o.X + i * px, (int)o.Y + px, px, px), ink);
-                else _prim.FillRect(_sb, new Rectangle((int)o.X + i * px, (int)o.Y + 2 * px, px, px), ink);
-            }
-        }
-        for (int y = 0; y < height; y++)
-        {
-            var o = _proj.CellCenter(0, y) - new Vector2(TileSet.Cell / 2f, TileSet.Cell / 2f);
-            _prim.FillRect(_sb, new Rectangle((int)o.X, (int)o.Y, px, TileSet.Cell), ink);
-            for (int i = 0; i < TileSet.Src; i++)
-            {
-                if (i % 2 == 1) _prim.FillRect(_sb, new Rectangle((int)o.X + px, (int)o.Y + i * px, px, px), ink);
-                else _prim.FillRect(_sb, new Rectangle((int)o.X + 2 * px, (int)o.Y + i * px, px, px), ink);
-            }
+            var off = new Vector2(h >> 3 & 7, h >> 6 & 7) - new Vector2(3.5f);
+            string prop = fam == PixFam.City ? (h % 2 == 0 ? "wood" : "metal")
+                : h % 3 == 0 ? "woodr" : h % 3 == 1 ? "bones" : "bonesb";
+            _tiles.Prop(_sb, prop, center + off * 2f + new Vector2(0, TileSet.Cell / 2f), PixTint(fam));
         }
     }
 
     /// <summary>
-    /// The wall sandwich (TILESET-RULES §1): band + decorated face above the playfield, band +
-    /// face + skirt below, side columns capped by corners, and a whisper of SE drop shadow.
+    /// The wall ring (TILESET-RULES §1): a single-tile run of the ring autotile around the
+    /// playfield — the cap's dark south lip is baked into the tiles, so there is no separate
+    /// face row and no procedural shadow (§3). Wall furniture per §1: chest alcoves inset in
+    /// the City's north run (the tithe hoard), spiderwebs under the band elsewhere, and
+    /// pillars overlapping the four corners.
     /// </summary>
     private void DrawPixWalls(int width, int height, PixFam fam)
     {
-        bool city = fam == PixFam.City;
-        int band = city ? Tid.CityBand : Tid.DunBand;
-        int cornerL = city ? Tid.CityCornerL : Tid.DunCornerL;
-        int cornerR = city ? Tid.CityCornerR : Tid.DunCornerR;
-        int side = city ? Tid.CitySide : Tid.DunSide;
-        int decor = city ? Tid.CityDecor : Tid.DunDecor;
-        int skirt = city ? Tid.CitySkirt : Tid.DunSkirt;
-        var face = city ? Tid.CityFace : Tid.DunFace;
-
-        // Face composition (TILESET-RULES §1): the base face tile dominates; the edge face sits
-        // beside the corners; decor forms a small cluster plus sparse repeats — never a cycle.
-        int Face(int x) =>
-            x == 0 || x == width - 1 ? face[0]
-            : x is 2 or 3 || (x > 5 && x % 7 == 5) ? decor
-            : x % 5 == 0 ? face[2]
-            : face[1];
-
+        var tint = PixTint(fam);
         for (int x = 0; x < width; x++)
         {
-            _tiles.Draw(_sb, band, _proj.CellCenter(x, -2));      // north band
-            _tiles.Draw(_sb, Face(x), _proj.CellCenter(x, -1));   // north face (decorated)
-            _tiles.Draw(_sb, band, _proj.CellCenter(x, height));  // south band
-            _tiles.Draw(_sb, Face((x + 4) % width), _proj.CellCenter(x, height + 1)); // south face
-            _tiles.Draw(_sb, PixHash(new CellCoord(x, height + 2)) % 5 == 0 ? Tid.DunSkirtAlt : skirt,
-                _proj.CellCenter(x, height + 2));                 // skirt
-            // Props stand ON the wall top (the reference layers shelves/jars along the band).
-            if (city && x % 6 == 4) _tiles.Draw(_sb, Tid.Shelf, _proj.CellCenter(x, -2));
+            _tiles.Wall.Draw(_sb, Ch.WallN, _proj.CellCenter(x, -1), tint);
+            _tiles.Wall.Draw(_sb, Ch.WallS, _proj.CellCenter(x, height), tint);
         }
-        _tiles.Draw(_sb, cornerL, _proj.CellCenter(-1, -2));
-        _tiles.Draw(_sb, cornerR, _proj.CellCenter(width, -2));
-        _tiles.Draw(_sb, cornerL, _proj.CellCenter(-1, height));
-        _tiles.Draw(_sb, cornerR, _proj.CellCenter(width, height));
-        for (int y = -1; y <= height + 2; y++)
+        for (int y = 0; y < height; y++)
         {
-            _tiles.Draw(_sb, side, _proj.CellCenter(-1, y));
-            _tiles.Draw(_sb, side, _proj.CellCenter(width, y));
-            // SE drop shadow: sparse void tiles hugging the right wall (TILESET-RULES §5.2).
-            if (PixHash(new CellCoord(width + 1, y)) % 3 != 0)
-                _tiles.Draw(_sb, city ? Tid.CityVoid : Tid.DunVoid, _proj.CellCenter(width + 1, y));
+            _tiles.Wall.Draw(_sb, Ch.WallW, _proj.CellCenter(-1, y), tint);
+            _tiles.Wall.Draw(_sb, Ch.WallE, _proj.CellCenter(width, y), tint);
         }
+        _tiles.Wall.Draw(_sb, Ch.WallNW, _proj.CellCenter(-1, -1), tint);
+        _tiles.Wall.Draw(_sb, Ch.WallNE, _proj.CellCenter(width, -1), tint);
+        _tiles.Wall.Draw(_sb, Ch.WallSW, _proj.CellCenter(-1, height), tint);
+        _tiles.Wall.Draw(_sb, Ch.WallSE, _proj.CellCenter(width, height), tint);
+
+        for (int x = 1; x < width - 1; x++)
+        {
+            int h = PixHash(new CellCoord(x, -1));
+            var bandFeet = _proj.CellCenter(x, -1) + new Vector2(0, TileSet.Cell / 2f);
+            if (fam == PixFam.City && x % 5 == 2)
+                _tiles.Prop(_sb, h % 7 == 0 ? "chest_b" : "chest", bandFeet, tint);   // alcove chests
+            else if (fam != PixFam.City && h % 5 == 1)                                 // hanging webs
+                _tiles.Prop(_sb, h % 2 == 0 ? "web" : "webb",
+                    bandFeet + new Vector2(0, TileSet.Cell / 2f), tint);
+        }
+
+        // Corner pillars: feet on the wall corner cell, upper half rising above the band.
+        foreach (var (px, py) in new[] { (-1, -1), (width, -1), (-1, height), (width, height) })
+            _tiles.Prop(_sb, "pillar", _proj.CellCenter(px, py) + new Vector2(0, TileSet.Cell / 2f), tint);
     }
 
-    /// <summary>Sprite + idle-frame count for a unit archetype (pairs animate at 2 fps).</summary>
-    private static (int idx, int frames) PixSprite(string archetype) => archetype switch
+    /// <summary>
+    /// Knight tint per archetype (TILESET-RULES §4): the pack ships one knight, so the crew
+    /// wears it silver and the dead wear rust/bone tints — a dark mirror of the living.
+    /// </summary>
+    private static Color PixKnightTint(string archetype) => archetype switch
     {
-        "archer" => (Tid.FigA, 2), "bulwark" => (Tid.FigB, 2), "cannon" => (Tid.FigC, 2),
-        "barrow_husk" => (Tid.FigD, 2), "crypt_warden" => (Tid.FigB, 2),
-        "marrow_spitter" => (Tid.Crab, 1), "gravehound" => (Tid.Spider, 2),
-        "grave_mite" => (Tid.Mite, 1), "bone_piper" => (Tid.Bird, 2),
-        "sexton" => (Tid.FigD, 2),
-        _ => (Tid.FigA, 2),
+        "barrow_husk" => new Color(214, 150, 118),
+        "gravehound" => new Color(172, 116, 112),
+        "marrow_spitter" => new Color(196, 146, 192),
+        "grave_mite" => new Color(160, 158, 116),
+        "bone_piper" => new Color(216, 196, 146),
+        "crypt_warden" => new Color(146, 164, 196),
+        "sexton" => new Color(128, 112, 138),
+        _ => Color.White, // the living
     };
 
     private void DrawFloorOverlays()
@@ -1309,10 +1273,16 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (Pix)
         {
-            // A tombstone in the yard, a stone lump in the crypt, an evergreen for trees.
-            if (kind == TileKind.Tree) { _tiles.DrawFeet(_sb, Tid.Tree, center, null, 1.4f); return; }
-            if (PixFamNow() == PixFam.Crypt) { _tiles.DrawFeet(_sb, Tid.RockBlob, center, null, 1.2f); return; }
-            _tiles.DrawFeet(_sb, Tid.Tombstone, center, new Color(206, 206, 218), 1.2f);
+            // The pack's blocker vocabulary (TILESET-RULES §5.1): most stones are low tomb
+            // blocks (the wall cap tile standing alone), the odd one a pillar so the field
+            // keeps some height; trees/clutter become barrels.
+            var feet = center + new Vector2(0, TileSet.Cell / 2f);
+            var tint = PixTint(PixFamNow());
+            int h = PixHash(_proj.ScreenToCell(center));
+            if (kind == TileKind.Tree) { _tiles.Prop(_sb, "barrel", feet, tint, 1.25f); return; }
+            if (h % 4 == 0) { _tiles.Prop(_sb, "pillar", feet, tint); return; }
+            _tiles.Wall.Draw(_sb, Ch.WallN, center, tint);
+            if (h % 3 == 0) _tiles.Prop(_sb, "bones", feet + new Vector2(2, 6), tint);
             return;
         }
         if (kind == TileKind.Tree)
@@ -1408,15 +1378,23 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             if (_placing && f == _selCrew)                  // highlight the crew member being placed
                 _prim.DiamondAt(_sb, center, new Color(245, 224, 120) * 0.35f);
-            // Team pad under the feet: the figures are black silhouettes (the pack's idiom), so
-            // the class/enemy colour lives in the ground pad and the HP bar above.
+            // Team pad under the feet: one knight serves every unit (TILESET-RULES §4), so the
+            // class/enemy colour lives in the ground pad and the HP bar above.
             var pad = crew ? col : new Color(206, 66, 54);
             _prim.DiscAt(_sb, center + new Vector2(0, TileSet.Cell * 0.30f), TileSet.Cell * 0.30f, pad * 0.8f);
-            var (idx, frames) = PixSprite(f.Archetype);
-            int frame = frames > 1 ? ((int)(_time * 2) + (f.Id.GetHashCode() & 1)) % frames : 0;
-            float sc = f.Archetype == "sexton" ? 1.8f : 1.2f;
-            var stint = flash > 0f ? Color.Lerp(Color.White, new Color(255, 90, 90), flash) : Color.White;
-            _tiles.DrawFeet(_sb, idx + frame, center, stint, sc);
+            var pose = _anim.PoseFor(f);
+            string state = pose.State switch
+            {
+                AnimState.Walk => "walk",
+                AnimState.Cast or AnimState.Hurt => "use",
+                _ => "idle",
+            };
+            int frame = (int)(_time * 3) + (f.Id.GetHashCode() & 3);
+            float sc = f.Archetype == "sexton" ? 2f : 1.25f;
+            var stint = PixKnightTint(f.Archetype);
+            if (flash > 0f) stint = Color.Lerp(stint, new Color(255, 90, 90), flash);
+            bool flip = pose.Dir is Facing4.Sw or Facing4.Nw;
+            _tiles.Knight(_sb, state, frame, center + new Vector2(0, TileSet.Cell / 2f), stint, flip, sc);
             float spriteTop = center.Y + TileSet.Cell / 2f - TileSet.Cell * sc;
             DrawHpBar(f, center.X, spriteTop - 10);
             DrawStatusPips(f, center.X, spriteTop - 2);
@@ -1811,9 +1789,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pix)
         {
             var fam = PixFamNow();
-            DrawPixWalls(map.Width, map.Height, fam);
             foreach (var c in PlaneCellsByDepth(map)) DrawPixCell(c, map.Tile(c.X, c.Y), fam, map.Width, map.Height);
-            DrawPixShadows(map.Width, map.Height);
+            // Walls after floors so their furniture (webs, pillars) hangs over the paving.
+            DrawPixWalls(map.Width, map.Height, fam);
             return;
         }
         foreach (var c in PlaneCellsByDepth(map))
@@ -1844,9 +1822,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         DrawPlaneTiles(_cityMap);
         foreach (var cell in new[] { TitheCell, TempleCell, HireCell, LychgateCell })
             if (cell == _hover) _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CurrentRing * 0.30f);
-        DrawBuilding(TitheCell, new Color(214, 176, 84), "T", "TITHE-KEEPER", Tid.Chest);
-        DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER", Tid.Statue);
-        DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST", Tid.FigB);
+        DrawBuilding(TitheCell, new Color(214, 176, 84), "T", "TITHE-KEEPER", "chest_open");
+        DrawBuilding(TempleCell, new Color(186, 150, 220), "+", "TEMPLE SISTER", "crown");
+        DrawBuilding(HireCell, new Color(150, 190, 140), "H", "HIRING POST", "barrel");
         DrawLychgate(LychgateCell);
         _sb.End();
 
@@ -1859,12 +1837,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _sb.End();
     }
 
-    private void DrawBuilding(CellCoord c, Color col, string glyph, string label, int pixTile = -1)
+    private void DrawBuilding(CellCoord c, Color col, string glyph, string label, string? pixProp = null)
     {
         var center = _proj.CellCenter(c);
-        if (Pix && pixTile >= 0)
+        if (Pix && pixProp != null)
         {
-            _tiles.DrawFeet(_sb, pixTile, center, null, 1.6f);
+            // Services wear the pack's own vocabulary (TILESET-RULES §5.2): the open tithe
+            // chest gets its gold piles beside it, the crown a pedestal, the post its barrel.
+            var feet = center + new Vector2(0, TileSet.Cell / 2f);
+            if (pixProp == "chest_open")
+            {
+                _tiles.Prop(_sb, "gold2", feet + new Vector2(-TileSet.Cell, 0));
+                _tiles.Prop(_sb, "gold1", feet + new Vector2(TileSet.Cell, 0));
+            }
+            if (pixProp == "crown") _tiles.Prop(_sb, "metal", feet, PixTint(PixFam.City));
+            _tiles.Prop(_sb, pixProp, feet - (pixProp == "crown" ? new Vector2(0, 10) : Vector2.Zero),
+                null, pixProp == "crown" ? 1f : 1.25f);
             _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
             return;
         }
@@ -1882,9 +1870,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var center = _proj.CellCenter(c);
         if (Pix)
         {
-            _tiles.DrawFeet(_sb, Tid.Arch, center, new Color(226, 226, 238), 2.2f);
-            _tiles.Draw(_sb, Tid.Torch, center + new Vector2(-TileSet.Cell, -6), null, 1f);
-            _tiles.Draw(_sb, Tid.Torch, center + new Vector2(TileSet.Cell, -6), null, 1f);
+            // The gate is a wall door flanked by pillars (TILESET-RULES §5.4).
+            var feet = center + new Vector2(0, TileSet.Cell / 2f);
+            _tiles.Prop(_sb, "pillar", feet + new Vector2(-TileSet.Cell, 0), PixTint(PixFamNow()));
+            _tiles.Prop(_sb, "pillar", feet + new Vector2(TileSet.Cell, 0), PixTint(PixFamNow()));
+            _tiles.Prop(_sb, "door", feet, null, 1.5f);
             _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 74, 1, new Color(200, 200, 220));
             return;
         }
@@ -1974,8 +1964,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (Pix)
         {
             _prim.DiscAt(_sb, center + new Vector2(0, 12), 12, new Color(120, 190, 150) * 0.55f);
-            _tiles.DrawFeet(_sb, Tid.FigA + (int)(_time * 2) % 2, center, null, 1f);
-            _tiles.Draw(_sb, Tid.Question, center + new Vector2(12, -TileSet.Cell), null, 0.8f);
+            _tiles.Knight(_sb, "idle", (int)(_time * 3), center + new Vector2(0, TileSet.Cell / 2f),
+                new Color(190, 210, 196));
+            _font.DrawCentered(_sb, "?", (int)center.X + 14, (int)center.Y - TileSet.Cell, 2, new Color(232, 220, 140));
         }
         else
         {
@@ -1995,9 +1986,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var col = _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
         if (Pix)
         {
-            _tiles.DrawFeet(_sb, Tid.Arch, center, col * 1.4f, 2.2f);
+            // The Crypt mouth: a wall door flanked by pillars, tinted by its state (§5.4).
+            var feet = center + new Vector2(0, TileSet.Cell / 2f);
+            _tiles.Prop(_sb, "pillar", feet + new Vector2(-TileSet.Cell, 0), col * 1.3f);
+            _tiles.Prop(_sb, "pillar", feet + new Vector2(TileSet.Cell, 0), col * 1.3f);
+            _tiles.Prop(_sb, locked || _cryptCleared ? "door" : "door_side", feet, col * 1.5f, 1.5f);
             if (!_cryptCleared && !locked)
-                _tiles.Draw(_sb, Tid.Torch, center + new Vector2(0, -TileSet.Cell * 1.6f), null, 1f);
+                _tiles.Prop(_sb, "key", center + new Vector2(0, -TileSet.Cell), null, 0.8f);
             _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - 74, 1,
                 _cryptCleared ? Palette.TextDim : new Color(204, 172, 224));
             string psub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
@@ -2020,10 +2015,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (Pix)
         {
-            int t = (int)(_time * 2);
-            _tiles.DrawFeet(_sb, Tid.FigA + t % 2, center + new Vector2(-11, 0), null, 1f);
-            _tiles.DrawFeet(_sb, Tid.FigB + (t + 1) % 2, center + new Vector2(11, 2), null, 1f);
-            _tiles.DrawFeet(_sb, Tid.FigC + t % 2, center + new Vector2(0, -7), null, 1f);
+            // Three knights marching in a loose wedge — the crew on the overworld.
+            int t = (int)(_time * 3);
+            var feet = center + new Vector2(0, TileSet.Cell / 2f);
+            _tiles.Knight(_sb, "idle", t, feet + new Vector2(-12, -2), Color.White);
+            _tiles.Knight(_sb, "idle", t + 1, feet + new Vector2(12, 0), new Color(216, 224, 236));
+            _tiles.Knight(_sb, "idle", t + 2, feet + new Vector2(0, -9), new Color(236, 224, 204));
             _font.DrawCentered(_sb, "CREW", (int)center.X, (int)center.Y - 44, 1, Palette.Text);
             return;
         }
@@ -2050,13 +2047,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (c == _hover && afford) _prim.DiamondAt(_sb, center, Palette.CurrentRing * 0.30f);
         if (Pix)
         {
-            var (idx, fr) = PixSprite(p.Def.Comp[0]);
+            // A huddle of dead knights in the pack leader's tint, greyed when out of reach.
+            var mobTint = afford ? PixKnightTint(p.Def.Comp[0]) : new Color(120, 120, 128);
             int n = Math.Min(size, 3);
-            var mobTint = afford ? Color.White : new Color(120, 120, 128);
             for (int i = 0; i < n; i++)
             {
-                var o = new Vector2((i - (n - 1) / 2f) * 12, (i % 2) * 6 - 2);
-                _tiles.DrawFeet(_sb, idx + (fr > 1 ? (i + (int)(_time * 2)) % fr : 0), center + o, mobTint, 1f);
+                var o = new Vector2((i - (n - 1) / 2f) * 12, (i % 2) * 6 - 2 + TileSet.Cell / 2f);
+                _tiles.Knight(_sb, "idle", i + (int)(_time * 3), center + o, mobTint, i % 2 == 1);
             }
         }
         else

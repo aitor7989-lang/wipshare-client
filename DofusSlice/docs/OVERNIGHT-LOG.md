@@ -164,3 +164,21 @@ dotnet run --project DofusSlice.Sim campaign survey 40
   either AI triggers for Blink/Blood Pact or a SelfHPCost effect — design note),
   survivors/temperament (6b), and the visual pass on the equip screen when Xvfb
   cooperates.
+
+## Chamber8x8 skin (the second tileset)
+
+The Scut skin is retired; the game now wears adamzbuub's **Chamber8x8** pack (local-only,
+never committed). Method, same as before but sharper: the pack's two example screenshots were
+decoded 100% — they are 10× recordings (a 5× reduction also roundtrips because every feature
+is even-sized; detailed-tile matching settles the scale), grid origins (2,4)/(4,5). Every cell
+masked-matched against the pack: the wall sheet is a ring autotile (+2 concave corners + fill),
+the floor sheet an edge autotile whose dark sides carry all wall-base shading, props embed in
+wall runs (chest alcoves, doors) or scatter off-grid (bones at (5.12, 2.12)), and nothing is
+left over — no dither shadow layer this time, depth is baked into the tiles.
+
+In game: `ChamberSet` (wall/floor atlases + named props + the 4-frame knight), floor edge
+autotile per boundary adjacency, wall ring with corner pillars, City alcove chests, webs in
+the dungeon families, tomb blocks/pillars/barrels as obstacles, services in pack vocabulary
+(open chest + gold, crown, barrel), gates as doors with flanking pillars, and every unit is
+the knight — crew silver, the dead in rust/bone tints, walk/use animations driven by the
+battle poses. Full ruleset with per-tile evidence: docs/TILESET-RULES.md.

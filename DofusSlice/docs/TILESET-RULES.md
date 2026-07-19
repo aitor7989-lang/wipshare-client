@@ -27,8 +27,14 @@ skirt 46 46 46 46 46 46     dark base strip (reference rows 17/47)
 - **North wall** (above the playfield): band row, then face row.
 - **South wall** (below): band row, then face row, then skirt row.
 - **Sides**: single vertical columns of the family's side tile, meeting the bands at corners.
-- **Face decoration cadence**: one decor tile roughly every 5 face tiles, never adjacent
-  (reference row 2 places bottles at irregular ~4–6 spacing; row 31 embeds one torch per span).
+- **Face composition** (reference row 2: `5,12,12,12,13,12,13,13,14,...,5`): the base face tile
+  dominates; the darker edge face sits beside the corners only; decor forms a small CLUSTER near
+  one end plus sparse repeats — a cycle pattern reads mechanical and is wrong.
+- **Depth (the 3D read)**: light band on top, dark face directly below, floor below that. Two
+  reinforcing cues from the reference: props stand ON the north band (shelves/jars along the
+  wall top, every ~6 tiles in the City), and the west wall shades the single floor column beside
+  it with VARIED shade tiles (16/17/26 mixed down the column — reference rows 3–8 — never one
+  tile stacked into a stripe).
 
 Per family:
 
@@ -47,8 +53,9 @@ Per family:
 - **Variants come in clumps, never lone tiles**: the reference's moss/stripe patches span 2+
   adjacent tiles (rows 32–44 grow green 88/89/90 patches inside dark floor). Implemented by
   hashing the 2×2 block (`x/2, y/2`), so a variant always appears as a patch.
-  - City is the exception: room floors vary **per-cell, sparsely** (13 / 14, ~1 cell in 8) —
-    the reference's interiors sprinkle singles; only organic growth clumps.
+  - City floors are UNIFORM 15 — the reference's apparent variation indoors is wall-adjacent
+    shading (16/17/26 by the west wall) and furniture, never random floor sprinkles. 13/14 are
+    face tiles and must not appear on floors.
   - Yard clumps: mossy 88 / 89 / 97, ~1 block in 3; bramble 90 as a RARE accent (~1 block in 8).
   - Crypt clumps: 82 / 83 / 86 / 93, ~1 block in 4.
 - **Rugs are rectangles anchored to landmarks, never scattered** (reference: the striped mat

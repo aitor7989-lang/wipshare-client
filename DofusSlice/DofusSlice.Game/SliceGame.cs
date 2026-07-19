@@ -947,7 +947,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             var fam = PixFamNow();
             DrawPixWalls(_engine.Field.Width, _engine.Field.Height, fam);
-            foreach (var c in CellsByDepth()) DrawPixCell(c, _engine.Field.TileAt(c), fam);
+            foreach (var c in CellsByDepth())
+                DrawPixCell(c, _engine.Field.TileAt(c), fam, _engine.Field.Width, _engine.Field.Height);
             return;
         }
         foreach (var c in CellsByDepth())
@@ -1050,7 +1051,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         return -1;
     }
 
-    private void DrawPixCell(CellCoord c, TileKind kind, PixFam fam)
+    private void DrawPixCell(CellCoord c, TileKind kind, PixFam fam, int width, int height)
     {
         var center = _proj.CellCenter(c);
         if (kind == TileKind.Void)
@@ -1069,13 +1070,10 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             int rug = PixRugAt(c);
             if (rug >= 0) { _tiles.Draw(_sb, rug, center); return; }
-        }
-
-        if (fam == PixFam.City)
-        {
-            // Room floors vary per-cell, sparsely and subtly (TILESET-RULES §2) — never in blocks.
-            int ch = PixHash(c);
-            _tiles.Draw(_sb, ch % 8 == 0 ? Tid.CityClumps[ch % Tid.CityClumps.Length] : Tid.CityFloor, center);
+            // The 3D read (TILESET-RULES §1.5): the west wall shades the floor column beside
+            // it — with VARIED shade tiles down the column (reference mixes 16/17/26), never one
+            // tile stacked into a mechanical stripe. Everything else is plain 15.
+            _tiles.Draw(_sb, c.X == 0 ? Tid.FloorShades[PixHash(c) % Tid.FloorShades.Length] : Tid.CityFloor, center);
             return;
         }
         int bh = PixBlockHash(c);
@@ -1106,16 +1104,24 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         int skirt = city ? Tid.CitySkirt : Tid.DunSkirt;
         var face = city ? Tid.CityFace : Tid.DunFace;
 
-        int Face(int x) => x % 5 == 2 ? decor : face[x % face.Length]; // decor cadence ~1-in-5
+        // Face composition (TILESET-RULES §1): the base face tile dominates; the edge face sits
+        // beside the corners; decor forms a small cluster plus sparse repeats — never a cycle.
+        int Face(int x) =>
+            x == 0 || x == width - 1 ? face[0]
+            : x is 2 or 3 || (x > 5 && x % 7 == 5) ? decor
+            : x % 5 == 0 ? face[2]
+            : face[1];
 
         for (int x = 0; x < width; x++)
         {
             _tiles.Draw(_sb, band, _proj.CellCenter(x, -2));      // north band
             _tiles.Draw(_sb, Face(x), _proj.CellCenter(x, -1));   // north face (decorated)
             _tiles.Draw(_sb, band, _proj.CellCenter(x, height));  // south band
-            _tiles.Draw(_sb, Face(x + 3), _proj.CellCenter(x, height + 1)); // south face
+            _tiles.Draw(_sb, Face((x + 4) % width), _proj.CellCenter(x, height + 1)); // south face
             _tiles.Draw(_sb, PixHash(new CellCoord(x, height + 2)) % 5 == 0 ? Tid.DunSkirtAlt : skirt,
                 _proj.CellCenter(x, height + 2));                 // skirt
+            // Props stand ON the wall top (the reference layers shelves/jars along the band).
+            if (city && x % 6 == 4) _tiles.Draw(_sb, Tid.Shelf, _proj.CellCenter(x, -2));
         }
         _tiles.Draw(_sb, cornerL, _proj.CellCenter(-1, -2));
         _tiles.Draw(_sb, cornerR, _proj.CellCenter(width, -2));
@@ -1776,7 +1782,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             var fam = PixFamNow();
             DrawPixWalls(map.Width, map.Height, fam);
-            foreach (var c in PlaneCellsByDepth(map)) DrawPixCell(c, map.Tile(c.X, c.Y), fam);
+            foreach (var c in PlaneCellsByDepth(map)) DrawPixCell(c, map.Tile(c.X, c.Y), fam, map.Width, map.Height);
             return;
         }
         foreach (var c in PlaneCellsByDepth(map))

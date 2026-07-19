@@ -78,9 +78,9 @@ public static class Tid
 {
     // Purple interior (the City). Wall sandwich per TILESET-RULES.md §1.
     public const int CityFloor = 15;
-    public static readonly int[] CityClumps = { 13, 14 };
+    public static readonly int[] FloorShades = { 16, 17, 26 }; // west-wall floor shading, varied
     public const int CityBand = 2, CityCornerL = 1, CityCornerR = 3, CitySide = 3;
-    public static readonly int[] CityFace = { 5, 13, 14, 13 };
+    public static readonly int[] CityFace = { 5, 13, 14 };  // [edge, base, sparse]
     public const int CityDecor = 12, CitySkirt = 46;
     public const int RugGold = 20, RugCheck = 21, RugWeave = 47, RugBlue = 52;
     public const int Shelf = 6, Console = 10, Brazier = 50, Statue = 12;
@@ -90,7 +90,7 @@ public static class Tid
     public static readonly int[] YardMoss = { 88, 89, 97 };
     public const int YardBramble = 90;                   // rare accent, never common
     public const int DunBand = 105, DunCornerL = 84, DunCornerR = 85, DunSide = 94;
-    public static readonly int[] DunFace = { 111, 112, 113, 112 };
+    public static readonly int[] DunFace = { 111, 112, 113 };  // [edge, base, sparse]
     public const int DunDecor = 114, DunSkirt = 106, DunSkirtAlt = 107;
     public const int YardVoid = 94, CityVoid = 7, DunVoid = 91;
 

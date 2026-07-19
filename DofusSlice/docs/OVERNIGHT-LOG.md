@@ -425,3 +425,10 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - ONE text size across the characteristics panel (the 18px vitals dropped to the body size).
 - Inventory decluttered further: 18 eggs with empty rows below, one lock, one count; the pet
   strip holds just a pet and the idol.
+
+## The Gum visual editor is player-usable now
+- F9 in combat flips the band to the GUM LAYER (ui/TitheHud.gumx) with live data bound by
+  name (RoundText/TurnText/CrewName0-3/CrewBarBack-Fill0-3/CrewHp0-3); F9 again returns the
+  coded Dofus/Emberwick HUD. The published build ships ui/ next to the exe, and the runtime
+  hot-reload watches THAT copy - so editing TITHE/ui/TitheHud.gumx in the Gum tool while the
+  game runs updates it live.

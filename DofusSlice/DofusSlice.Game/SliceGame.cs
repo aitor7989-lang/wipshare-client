@@ -1878,12 +1878,23 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     /// Pump the Gum HUD layer: visible only during watched tithe combat (the surface it skins),
     /// with the fight state pushed into its named elements every frame. See Ui/GumHud.cs.
     /// </summary>
+    private bool _gumWanted;   // F9: show the Gum-editor HUD layer instead of the coded band
+    private bool _gumShowing;
+
     private void UpdateGumHud(GameTime gameTime)
     {
         _gum.Update(gameTime);
-        // The Emberwick combat HUD (from the user's Claude Design project) supersedes the Gum
-        // band in fights; Gum stays wired for future non-combat screens.
-        _gum.SetVisible(false);
+        // F9 flips the combat band to the GUM EDITOR layer: open ui/TitheHud.gumx in the Gum
+        // tool while the game runs — every save hot-reloads live. F9 again = the coded HUD.
+        if (Pressed(Keys.F9) && _gum.Active) { _gumWanted = !_gumWanted; _sfx.Play("click"); }
+        _gumShowing = _gumWanted && _gum.Active && _scene == Scene.Combat && !_placing;
+        _gum.SetVisible(_gumShowing);
+        if (_gumShowing && _engine.Outcome == FightOutcome.Ongoing)
+            _gum.BindCombat($"ROUND {_engine.Round}",
+                $"{_engine.Current.Name.ToUpperInvariant()}'S TURN",
+                _engine.Current.Team == Team.Player ? new Color(120, 200, 120) : new Color(214, 110, 96),
+                _engine.Fighters.Where(f => f.Team == Team.Player && !f.IsSummon)
+                    .Select(f => (f.Name, f.Hp, f.MaxHp, f.IsAlive)).ToList());
     }
 
     /// <summary>Archetype id -> readable mob name for rollovers.</summary>
@@ -2001,7 +2012,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         DrawEmberwickLog();
 
-        DrawEmberwickBand();
+        if (!_gumShowing) DrawEmberwickBand(); // F9: the Gum editor layer replaces the band
         DrawHoverUnitInfo();
     }
 

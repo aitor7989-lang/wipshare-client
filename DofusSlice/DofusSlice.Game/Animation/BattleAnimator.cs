@@ -21,6 +21,16 @@ public sealed class BattleAnimator
     private readonly List<Overlay> _overlays = new();
     private readonly List<Corpse> _corpses = new();
     private readonly Dictionary<string, float> _displayHp = new();
+    private readonly Dictionary<string, Vector2> _displayPos = new();
+    private readonly List<(CellCoord cell, Color color)> _telegraphCells = new();
+
+    /// <summary>Cells the current telegraph wants highlighted this frame (movement green,
+    /// spell-range blue, target red) — the game draws them under the units, 1.29-style.</summary>
+    public IReadOnlyList<(CellCoord cell, Color color)> TelegraphCells => _telegraphCells;
+    internal void AddTelegraphCell(CellCoord c, Color col) => _telegraphCells.Add((c, col));
+    internal CellCoord DisplayCellOf(string id) =>
+        _displayPos.TryGetValue(id, out var v) ? _proj.ScreenToCell(v) : default;
+    internal IsoProjector Projector => _proj;
     private readonly Dictionary<string, float> _flash = new();
     private readonly Dictionary<string, Pose> _poses = new();
     private readonly Dictionary<string, Facing4> _facing = new();
@@ -46,7 +56,12 @@ public sealed class BattleAnimator
         _poses.Clear();
         _facing.Clear();
         _pendingShake = 0f;
-        foreach (var f in fighters) _displayHp[f.Id] = f.Hp;
+        _displayPos.Clear();
+        foreach (var f in fighters)
+        {
+            _displayHp[f.Id] = f.Hp;
+            _displayPos[f.Id] = _proj.CellCenter(f.Pos);
+        }
     }
 
     public void OnEvent(CombatEvent e)
@@ -54,18 +69,19 @@ public sealed class BattleAnimator
         switch (e)
         {
             case FighterMoved m:
-                _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.11f, this));
+                _queue.Enqueue(new PathTelegraph(this, m.Path.ToArray(), 0.4f));
+                _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.15f, this));
                 break;
             case FighterPushed p:
                 _queue.Enqueue(new MoveAnim(p.Fighter.Id, ToPoints(p.Path), 0.07f, this, "zip"));
                 break;
             case FighterTeleported t:
-                _queue.Enqueue(new TeleportAnim(_proj.CellCenter(t.From), _proj.CellCenter(t.To), this));
+                _queue.Enqueue(new TeleportAnim(t.Fighter.Id, _proj.CellCenter(t.From), _proj.CellCenter(t.To), this));
                 Sfx?.Invoke("zip", 0.7f);
                 break;
             case SpellCast c:
-                _queue.Enqueue(new CastAnim(c.Caster.Id, _proj.CellCenter(c.Caster.Pos),
-                    _proj.CellCenter(c.Target), c.Spell, this));
+                _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target, 0.85f));
+                _queue.Enqueue(new CastAnim(c.Caster.Id, _proj.CellCenter(c.Target), c.Spell, this));
                 break;
             case DamageDealt d:
                 _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical, d.Element));
@@ -80,23 +96,36 @@ public sealed class BattleAnimator
                 break;
             case FighterSummoned s:
                 _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
+                _displayPos[s.Fighter.Id] = _proj.CellCenter(s.Fighter.Pos);
                 _facing[s.Fighter.Id] = Facing4.Se;
                 _overlays.Add(new ImpactFlash(_proj.CellCenter(s.Fighter.Pos) + new Vector2(0, -16),
                     new Color(150, 220, 180)));
                 Sfx?.Invoke("summon", 0.7f);
                 break;
-            case TurnStarted:
+            case TurnStarted ts:
+                _queue.Enqueue(new TurnTelegraph(this, ts.Fighter.Id, ts.Fighter.Name,
+                    ts.Fighter.Team == Team.Player, 0.55f));
                 break;
         }
     }
 
     public void Update(float dt, IReadOnlyList<Fighter> fighters)
     {
+        _telegraphCells.Clear();
         if (_queue.Count > 0)
         {
             var head = _queue.Peek();
             head.Update(dt);
-            if (head.Done) _queue.Dequeue();
+            if (head.Done)
+            {
+                _queue.Dequeue();
+                if (head.EndPos is { } end) _displayPos[end.id] = end.pos;
+            }
+        }
+        else
+        {
+            // Nothing replaying: the ledger tracks the engine truth (placement drags, spawns).
+            foreach (var f in fighters) _displayPos[f.Id] = _proj.CellCenter(f.Pos);
         }
 
         for (int i = _overlays.Count - 1; i >= 0; i--)
@@ -167,6 +196,7 @@ public sealed class BattleAnimator
     public Vector2 CenterFor(Fighter f)
     {
         if (_queue.Count > 0 && _queue.Peek().TryCenter(f.Id, out var c)) return c;
+        if (_displayPos.TryGetValue(f.Id, out var p)) return p;   // replay truth, not engine truth
         return _proj.CellCenter(f.Pos);
     }
 
@@ -261,6 +291,10 @@ internal interface IAnim
     string? ActorId => null;
     AnimState ActorState => AnimState.Idle;
     Facing4 ActorFacing => Facing4.Se;
+
+    /// <summary>Where the driven fighter STANDS once this anim completes — the replay-position
+    /// ledger applies it on dequeue so nobody ever pre-snaps to the engine's final state.</summary>
+    (string id, Vector2 pos)? EndPos => null;
 }
 
 /// <summary>Slides a fighter's token along a path, one segment at a time.</summary>
@@ -284,6 +318,7 @@ internal sealed class MoveAnim : IAnim
 
     private float Total => _perSeg * Math.Max(1, _pts.Length - 1);
     public bool Done => _t >= Total;
+    public (string id, Vector2 pos)? EndPos => (_id, _pts[^1]);
 
     public void Update(float dt)
     {
@@ -318,17 +353,18 @@ internal sealed class MoveAnim : IAnim
 /// <summary>A short lunge of the caster toward the target, spawning an impact flash.</summary>
 internal sealed class CastAnim : IAnim
 {
-    private const float Dur = 0.28f;
+    private const float Dur = 0.34f;
     private readonly string _id;
-    private readonly Vector2 _from, _to;
+    private readonly Vector2 _to;
+    private Vector2 _from;
     private readonly Color _impact;
     private readonly BattleAnimator _a;
     private float _t;
     private bool _spawned;
 
-    public CastAnim(string id, Vector2 from, Vector2 to, SpellDef spell, BattleAnimator a)
+    public CastAnim(string id, Vector2 to, SpellDef spell, BattleAnimator a)
     {
-        _id = id; _from = from; _to = to; _a = a;
+        _id = id; _to = to; _a = a;
         _impact = BattleAnimator.SpellColor(spell);
     }
 
@@ -340,7 +376,11 @@ internal sealed class CastAnim : IAnim
 
     public void Update(float dt)
     {
-        if (_t == 0f) _a.Sfx?.Invoke("cast", 0.6f);   // the lunge begins -> the whoosh
+        if (_t == 0f)
+        {
+            _from = _a.Projector.CellCenter(_a.DisplayCellOf(_id));  // lunge from where it STANDS
+            _a.Sfx?.Invoke("cast", 0.6f);
+        }
         if (!_spawned && _t >= Dur * 0.4f)
         {
             _spawned = true;
@@ -421,9 +461,13 @@ internal sealed class TeleportAnim : IAnim
     private float _t;
     private bool _spawned;
 
-    public TeleportAnim(Vector2 from, Vector2 to, BattleAnimator a) { _from = from; _to = to; _a = a; }
+    private readonly string _id;
+
+    public TeleportAnim(string id, Vector2 from, Vector2 to, BattleAnimator a)
+    { _id = id; _from = from; _to = to; _a = a; }
 
     public bool Done => _t >= Dur;
+    public (string id, Vector2 pos)? EndPos => (_id, _to);
 
     public void Update(float dt)
     {
@@ -526,5 +570,133 @@ internal sealed class Corpse
         prim.DiscAt(sb, _center + new Vector2(0, 2), 13f * scale, new Color(0, 0, 0, 80) * alpha);
         prim.DiscAt(sb, head, 15f * scale, new Color(20, 20, 24) * alpha);
         prim.DiscAt(sb, head, 13f * scale, _color * alpha);
+    }
+}
+
+/// <summary>A beat announcing whose turn begins: ring + name plate over the unit (1.29 read).</summary>
+internal sealed class TurnTelegraph : IAnim
+{
+    private readonly BattleAnimator _a;
+    private readonly string _id, _name;
+    private readonly bool _player;
+    private readonly float _dur;
+    private float _t;
+
+    public TurnTelegraph(BattleAnimator a, string id, string name, bool player, float dur)
+    { _a = a; _id = id; _name = name; _player = player; _dur = dur; }
+
+    public bool Done => _t >= _dur;
+    public string? ActorId => _id;
+
+    public void Update(float dt)
+    {
+        if (_t == 0f)
+        {
+            var pos = _a.Projector.CellCenter(_a.DisplayCellOf(_id));
+            _a.AddOverlay(new BannerOverlay(pos + new Vector2(0, -52), _name.ToUpperInvariant(),
+                _player ? new Color(120, 200, 120) : new Color(214, 110, 96), _dur));
+        }
+        var cell = _a.DisplayCellOf(_id);
+        float pulse = 0.35f + 0.25f * MathF.Sin(_t * 9f);
+        _a.AddTelegraphCell(cell, (_player ? new Color(120, 200, 120) : new Color(214, 110, 96)) * pulse);
+        _t += dt;
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
+/// <summary>The 1.29 movement read: the chosen path glows green before the walk plays.</summary>
+internal sealed class PathTelegraph : IAnim
+{
+    private readonly BattleAnimator _a;
+    private readonly CellCoord[] _path;
+    private readonly float _dur;
+    private float _t;
+
+    public PathTelegraph(BattleAnimator a, CellCoord[] path, float dur) { _a = a; _path = path; _dur = dur; }
+
+    public bool Done => _t >= _dur;
+
+    public void Update(float dt)
+    {
+        // Cells light up one by one along the path, then hold — the plan, then the walk.
+        int lit = Math.Min(_path.Length, 1 + (int)(_t / 0.05f));
+        for (int i = 0; i < lit; i++)
+            _a.AddTelegraphCell(_path[i], new Color(96, 190, 96) * 0.45f);
+        _t += dt;
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
+/// <summary>
+/// The spell read, exactly as the player asked: the caster announces the spell by name, its
+/// range shades blue from where it stands, and the chosen target cell pulses red — THEN the
+/// cast plays. Range is pure 1.29 diamond distance from the replay position.
+/// </summary>
+internal sealed class CastTelegraph : IAnim
+{
+    private readonly BattleAnimator _a;
+    private readonly string _id;
+    private readonly SpellDef _spell;
+    private readonly CellCoord _target;
+    private readonly float _dur;
+    private float _t;
+
+    public CastTelegraph(BattleAnimator a, string id, SpellDef spell, CellCoord target, float dur)
+    { _a = a; _id = id; _spell = spell; _target = target; _dur = dur; }
+
+    public bool Done => _t >= _dur;
+    public string? ActorId => _id;
+
+    public void Update(float dt)
+    {
+        if (_t == 0f)
+        {
+            var pos = _a.Projector.CellCenter(_a.DisplayCellOf(_id));
+            _a.AddOverlay(new BannerOverlay(pos + new Vector2(0, -52), _spell.Name.ToUpperInvariant(),
+                new Color(150, 190, 240), _dur));
+            _a.Sfx?.Invoke("click", 0.5f);
+        }
+        var from = _a.DisplayCellOf(_id);
+        for (int dx = -_spell.MaxRange; dx <= _spell.MaxRange; dx++)
+            for (int dy = -_spell.MaxRange; dy <= _spell.MaxRange; dy++)
+            {
+                int d = Math.Abs(dx) + Math.Abs(dy);
+                if (d < _spell.MinRange || d > _spell.MaxRange) continue;
+                if (_spell.LineOnly && dx != 0 && dy != 0) continue;
+                _a.AddTelegraphCell(new CellCoord(from.X + dx, from.Y + dy), new Color(90, 120, 220) * 0.35f);
+            }
+        float pulse = 0.4f + 0.3f * MathF.Sin(_t * 10f);
+        _a.AddTelegraphCell(_target, new Color(224, 60, 40) * pulse);
+        _t += dt;
+    }
+
+    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+}
+
+/// <summary>A small floating name plate (turn and spell announcements).</summary>
+internal sealed class BannerOverlay : Overlay
+{
+    private readonly Vector2 _pos;
+    private readonly string _text;
+    private readonly Color _color;
+    private readonly float _dur;
+    private float _t;
+
+    public BannerOverlay(Vector2 pos, string text, Color color, float dur)
+    { _pos = pos; _text = text; _color = color; _dur = dur; }
+
+    public override bool Done => _t >= _dur;
+    public override void Update(float dt) => _t += dt;
+
+    public override void Draw(SpriteBatch sb, Primitives prim, PixelFont font)
+    {
+        float a = Math.Min(1f, Math.Min(_t / 0.1f, (_dur - _t) / 0.15f));
+        int w = font.Measure(_text, 1) + 12;
+        var r = new Rectangle((int)(_pos.X - w / 2f), (int)_pos.Y - 4, w, 16);
+        prim.FillRect(sb, r, new Color(10, 11, 14) * (0.85f * a));
+        prim.StrokeRect(sb, r, 1, _color * a);
+        font.DrawCentered(sb, _text, (int)_pos.X, r.Y + 5, 1, Color.White * a);
     }
 }

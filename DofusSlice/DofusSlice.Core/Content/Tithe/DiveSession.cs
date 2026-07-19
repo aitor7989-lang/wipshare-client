@@ -19,6 +19,9 @@ public sealed class DiveSession
         public bool Cleared { get; set; }
     }
 
+    /// <summary>The most recent fight's per-unit resolution (XP shares, fates) for the UI.</summary>
+    public TitheResolution.Result? LastResolution { get; private set; }
+
     public sealed record FightReport(string PackId, FightOutcome Outcome, int Gold, int Xp,
                                      IReadOnlyList<string> Drops, IReadOnlyList<string> Gear,
                                      IReadOnlyList<string> Lost, IReadOnlyList<string> Wounded);
@@ -186,7 +189,9 @@ public sealed class DiveSession
     {
         MendWithBread();
         if (chargeTravel) Clock -= pack.Def.Reach; // headless charges travel; the visual walks it in real time
-        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade, jumped);
+        // Each pack brawls on its own ground: the arena variant keys off the pack id.
+        int variant = Math.Abs(pack.Def.Id.GetHashCode()) % 4;
+        return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade, jumped, variant);
     }
 
     /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>
@@ -194,6 +199,7 @@ public sealed class DiveSession
     {
         InFight = false; // folding results IS the fight ending — the exit may fire again now
         var res = TitheResolution.Resolve(engine);
+        LastResolution = res; // per-unit XP shares for the end-of-fight window
         var lost = new List<string>();
         var wounded = new List<string>();
         var gearGot = new List<string>();

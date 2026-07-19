@@ -41,7 +41,23 @@ TINY = {
 TINY_STATES = {"idle": "Idle", "walk": "Walk", "cast": "Attack01", "hurt": "Hurt", "die": "Death"}
 
 
-def bake_character(name, root, template, states, frame):
+def recolor_ranger(img):
+    """Hue the hero's steel armour toward ranger green (low-saturation pixels only), so the
+    archer stops wearing the sword-and-board guy's exact skin."""
+    px = img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            mx, mn = max(r, g, b), min(r, g, b)
+            sat = 0 if mx == 0 else (mx - mn) / mx
+            if sat < 0.28:  # armour greys -> mossy green leathers
+                px[x, y] = (int(r * 0.62), int(g * 0.88), int(b * 0.5), a)
+    return img
+
+
+def bake_character(name, root, template, states, frame, recolor=None):
     sheets = {}
     for game_state, pack_state in states.items():
         p = os.path.join(root, template.format(s=pack_state))
@@ -67,6 +83,8 @@ def bake_character(name, root, template, states, frame):
         strip = Image.new("RGBA", (w * n, h))
         for i in range(n):
             strip.paste(im.crop((i * frame + x0, y0, i * frame + x1, y1)), (i * w, 0))
+        if recolor:
+            strip = recolor(strip)
         strip.save(os.path.join(OUT, f"{name}_{game_state}_se_{n}.png"))
     print(f"  {name}: {len(sheets)} states, frame {w}x{h}")
 
@@ -136,6 +154,9 @@ def main():
         print("characters (FreeCharactersAnimations):")
         for name, (tpl, frame) in CHARS2.items():
             bake_character(name, a.chars2, tpl, CHARS2_STATES, frame)
+        # The archer: the hero re-dressed in ranger greens (distinct silhouette colourway).
+        bake_character("archer", a.chars2, CHARS2["hero"][0], CHARS2_STATES,
+                       CHARS2["hero"][1], recolor=recolor_ranger)
     if a.tiny:
         print("characters (Tiny RPG):")
         for name, (tpl, frame) in TINY.items():

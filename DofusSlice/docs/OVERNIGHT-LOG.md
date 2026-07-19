@@ -247,3 +247,24 @@ an Sfx delegate on the BattleAnimator. Per-sound cooldowns keep 4x playback from
 gunning, M mutes, missing audio hardware disables the bank gracefully (verified headless),
 and `--emit-wavs` writes every sound to disk for auditioning; the numbers were verified by
 FFT (bell dominant at exactly 220 Hz, drone at 55, coin at 2093).
+
+## The first playtest report (all of it)
+
+The root visual bug is dead: the animator now keeps a replay-position ledger, so a fighter
+STANDS where the replay says it stands — no more pre-snapping to the engine's final cell, no
+more attacks landing before the walk, no more back-and-forth "teleporting" archers (that was
+CenterFor falling through to engine truth). On top of the ledger, watched combat now
+TELEGRAPHS: every turn opens with a name banner and a pulsing team ring, movement paints its
+green path cell by cell before the walk, and every cast announces the spell by name, shades
+its true range blue from the caster's replay cell and pulses the target red before the lunge
+— the whole AI decision is legible, and the pacing slowed to match. The dead leave the turn
+order (1.29), placement supports swapping two crew, the blackletter font is retired, and the
+archer finally has its own skin (the hero re-baked into ranger greens).
+
+Progression got its Dofus furniture: a cream end-of-fight window with per-unit XP shares and
+live XP bars, level-up call-outs with their own sting, XP bars + banked-point nudges in the
+city crew panel, and the kit screen grew crew tabs, an XP header and MANUAL characteristic
+points — five per level, spent with + buttons (or auto-spend), the class contributing only
+its level-1 base now. The sims auto-spend to stay honest. Variety: four fight arenas (sunken
+yard, tomb rows, barrow circle) keyed per pack and per dive, two new mobs (tomb wraith, grave
+ghoul) with skills and two new pack types fielding them.

@@ -62,6 +62,12 @@ public static class TitheTables
       { "id": "bone_piper",    "name": "Bone Piper",    "policy": "support", "maxHp": 26, "ap": 6, "mp": 3,
         "strength": 10, "agility": 10, "initiative": 10, "prefRangeMin": 3, "prefRangeMax": 6,
         "skills": ["piper_gift"], "xp": 120, "gold": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
+      { "id": "tomb_wraith",   "name": "Tomb Wraith",   "policy": "ranged",  "maxHp": 24, "ap": 6, "mp": 3,
+        "strength": 8, "agility": 18, "initiative": 14, "prefRangeMin": 4, "prefRangeMax": 7,
+        "skills": ["wraith_wail"], "xp": 140, "gold": 24, "essence": "Marrow Spit", "drop": 6, "gear": 5, "resAir": 30 },
+      { "id": "grave_ghoul",   "name": "Grave Ghoul",   "policy": "melee",   "maxHp": 44, "ap": 6, "mp": 4,
+        "strength": 24, "agility": 10, "initiative": 12, "skills": ["ghoul_rend"], "xp": 150, "gold": 24,
+        "essence": "Seize", "drop": 5, "gear": 5, "resEarth": 20, "resWater": -20 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
         "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 700, "gold": 120,
         "essence": "Sexton's Toll", "drop": 100, "gear": 65, "resEarth": 20, "resFire": 20, "resAir": 20, "resWater": 20 }
@@ -95,6 +101,10 @@ public static class TitheTables
         "effects": [ { "kind": "status", "status": "shield", "mag": 8, "turns": 1 } ] },
       { "key": "mite_sap", "name": "Sap", "ap": 2, "min": 1, "max": 1, "los": true,
         "effects": [ { "kind": "damage", "element": "air", "min": 4, "max": 7 }, { "kind": "status", "status": "mpdrain", "mag": 1, "turns": 1 } ] },
+      { "key": "wraith_wail", "name": "Wraith Wail", "ap": 3, "min": 3, "max": 7, "los": true,
+        "effects": [ { "kind": "damage", "element": "air", "min": 11, "max": 15 } ] },
+      { "key": "ghoul_rend", "name": "Ghoul Rend", "ap": 3, "min": 1, "max": 1, "los": true,
+        "effects": [ { "kind": "damage", "element": "earth", "min": 14, "max": 20 } ] },
       { "key": "piper_gift", "name": "Piper's Gift", "ap": 3, "min": 1, "max": 4, "los": true, "castsPerTurn": 1,
         "effects": [ { "kind": "grant_ap", "min": 2 } ] },
       { "key": "sexton_smash", "name": "Sexton's Toll", "ap": 5, "min": 1, "max": 1, "los": true, "cooldown": 2,
@@ -152,6 +162,71 @@ public static class TitheTables
         "...#..........T",
         ".........T.....",
         "...#.......#...",
+        "..............."
+      ]
+    }
+    """;
+
+    // Alternate fight grounds so the yard's packs don't all brawl on one field: a sunken yard
+    // split by pits, a tomb row of long walls, and an open barrow circle. Same 15x13 frame.
+    public const string ArenaJson2 = """
+    {
+      "name": "The Sunken Yard",
+      "rows": [
+        "...............",
+        "....oo....#....",
+        "ss..oo.........",
+        "ss.......T.....",
+        "sP...#....oo...",
+        "ss........oo...",
+        "ss....#........",
+        "ss.............",
+        "ss..oo...#.....",
+        "....oo......T..",
+        ".........#.....",
+        "...T...........",
+        "..............."
+      ]
+    }
+    """;
+
+    public const string ArenaJson3 = """
+    {
+      "name": "The Tomb Rows",
+      "rows": [
+        "...............",
+        "...#.#.....#...",
+        "ss.............",
+        "ss...#.#.#.....",
+        "sP.............",
+        "ss.....#.#.#...",
+        "ss.............",
+        "ss...#.#.#.....",
+        "ss.............",
+        "...#.....#.#...",
+        "......T........",
+        "...............",
+        "..............."
+      ]
+    }
+    """;
+
+    public const string ArenaJson4 = """
+    {
+      "name": "The Barrow Circle",
+      "rows": [
+        "...............",
+        "......###......",
+        "ss...#...#.....",
+        "ss..#..T..#....",
+        "sP.............",
+        "ss..#.....#....",
+        "ss...#...#.....",
+        "ss....###......",
+        "ss.............",
+        "........T......",
+        "..T............",
+        "...........#...",
         "..............."
       ]
     }
@@ -288,6 +363,8 @@ public static class TitheTables
         { "id": "husks-near", "comp": ["barrow_husk", "barrow_husk"],                                    "reach": 18, "hunts": false, "grade": 1 },
         { "id": "bonewash",   "comp": ["barrow_husk", "marrow_spitter"],                                 "reach": 28, "hunts": false, "grade": 1 },
         { "id": "warden-way", "comp": ["crypt_warden", "grave_mite", "grave_mite"],                      "reach": 36, "hunts": false, "grade": 2 },
+        { "id": "wailing-row","comp": ["tomb_wraith", "barrow_husk", "grave_mite"],                      "reach": 40, "hunts": false, "grade": 2 },
+        { "id": "ghoul-ditch","comp": ["grave_ghoul", "grave_ghoul", "marrow_spitter"],                  "reach": 50, "hunts": false, "grade": 2 },
         { "id": "hound-pack", "comp": ["gravehound", "gravehound", "barrow_husk", "marrow_spitter"],     "reach": 46, "hunts": true,  "grade": 3 },
         { "id": "deep-court", "comp": ["gravehound", "gravehound", "gravehound", "barrow_husk"],         "reach": 56, "hunts": true,  "grade": 3 },
         { "id": "warband",    "comp": ["crypt_warden", "gravehound", "gravehound", "marrow_spitter", "barrow_husk"], "reach": 66, "hunts": true, "grade": 4 }

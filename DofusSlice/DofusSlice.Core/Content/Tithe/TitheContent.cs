@@ -345,15 +345,15 @@ public static class TitheContent
     public static UnitStats StatsOf(CampaignUnit u)
     {
         var c = Classes[u.ClassId];
-        var g = c.Growth ?? new GrowthDto(0, 0, 0, 0, 0, 0);
-        int lv = Math.Max(0, u.Level - 1);
 
-        int vit = c.Vitality + g.Vitality * lv;
-        int str = c.Strength + g.Strength * lv;
-        int intel = c.Intelligence + g.Intelligence * lv;
-        int cha = c.Chance + g.Chance * lv;
-        int agi = c.Agility + g.Agility * lv;
-        int wis = c.Wisdom + g.Wisdom * lv;
+        // 1.29 rule: characteristic points are the PLAYER'S to spend (five per level, held on
+        // the unit until allocated). The class contributes only its level-1 base.
+        int vit = c.Vitality + u.SpentOn("vit");
+        int str = c.Strength + u.SpentOn("str");
+        int intel = c.Intelligence + u.SpentOn("int");
+        int cha = c.Chance + u.SpentOn("cha");
+        int agi = c.Agility + u.SpentOn("agi");
+        int wis = c.Wisdom + u.SpentOn("wis");
         int pow = 0, ap = 0, mp = 0;
 
         // Gear: sum the equipped pieces, then the highest set tier whose piece-count is satisfied.
@@ -381,6 +381,27 @@ public static class TitheContent
 
     /// <summary>Effective max HP for a persistent unit (baseHp + total Vitality).</summary>
     public static int UnitMaxHp(CampaignUnit u) => StatsOf(u).MaxHp;
+
+    /// <summary>
+    /// Spend all of a unit's banked characteristic points along its class growth ratios —
+    /// the headless sims' stand-in for a player, and the "auto" button in the kit screen.
+    /// </summary>
+    public static void AutoSpendStats(CampaignUnit u)
+    {
+        var g = Classes[u.ClassId].Growth ?? new GrowthDto(1, 1, 1, 1, 1, 1);
+        var weights = new (string key, int w)[]
+        {
+            ("vit", g.Vitality), ("str", g.Strength), ("int", g.Intelligence),
+            ("cha", g.Chance), ("agi", g.Agility), ("wis", g.Wisdom),
+        };
+        int total = weights.Sum(x => x.w);
+        if (total == 0) { weights = new[] { ("vit", 1), ("str", 1), ("int", 1), ("cha", 1), ("agi", 1), ("wis", 1) }; total = 6; }
+        int guard = 10_000;
+        while (u.StatPoints > 0 && guard-- > 0)
+            foreach (var (key, w) in weights)
+                for (int i = 0; i < w && u.StatPoints > 0; i++)
+                    u.SpendStat(key);
+    }
 
     /// <summary>A class's damage element (Bible §6.6). Defaults to Neutral (Strength) if unthemed.</summary>
     public static Element ClassElement(string classId) =>
@@ -444,7 +465,13 @@ public static class TitheContent
 
     // ----- Encounter assembly -------------------------------------------------------
 
-    public static MapData Arena() => MapLoader.Parse(TitheTables.ArenaJson);
+    public static MapData Arena(int variant = 0) => MapLoader.Parse(((variant % 4 + 4) % 4) switch
+    {
+        1 => TitheTables.ArenaJson2,
+        2 => TitheTables.ArenaJson3,
+        3 => TitheTables.ArenaJson4,
+        _ => TitheTables.ArenaJson,
+    });
 
     /// <summary>
     /// Assemble a ready-to-watch fight: the graveyard arena, a crew placed on the start cells,
@@ -494,9 +521,9 @@ public static class TitheContent
     /// </summary>
     public static CombatEngine BuildDiveFight(IReadOnlyList<CampaignUnit> party,
                                               IReadOnlyList<string> packMobs, IRng rng, int grade = 1,
-                                              bool jumped = false)
+                                              bool jumped = false, int arenaVariant = 0)
     {
-        var map = Arena();
+        var map = Arena(arenaVariant);
         var field = map.ToBattlefield();
 
         // Prepared tier: the tidy start-zone cluster (the player may re-place). Jumped tier

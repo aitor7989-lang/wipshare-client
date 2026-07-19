@@ -36,8 +36,11 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private DiveSession.PackState? _pendingPack;      // the pack currently being fought
     private DiveSession.FightReport? _fightReport;    // the just-finished fight's result
     private bool _combatResolved;                     // ApplyResult already folded this fight in
+    private List<(string name, int level)> _levelUps = new(); // level-ups from the last fight
+    private bool _reportSounded;                      // the loot window's one-time stings
     private int _openNpc = -1;                        // which City building's panel is open
     private bool _equipOpen;                          // the stash & kit screen (E in the City)
+    private int _equipUnit;                           // which crew member the kit screen shows
     private MapData _cityMap = null!, _graveMap = null!;
     private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
 
@@ -194,7 +197,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Load an external Tiled (.tmx) or JSON map if present, else the embedded default.</summary>
     private MapData LoadMap()
     {
-        if (_tithe) return TitheContent.Arena();
+        if (_tithe) return TitheContent.Arena(_seed);
         var dir = Path.Combine(AppContext.BaseDirectory, "maps");
         try
         {
@@ -319,33 +322,115 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
 
     // ----- The stash & kit screen (Bible §6.13: manage the stash and equip units) -----
 
-    private static Rectangle EquipRowRect(int i) => new(260, 214 + i * 34, 372, 30);
-    private static Rectangle StashRowRect(int i) => new(648, 214 + i * 34, 372, 30);
+    private static Rectangle EquipRowRect(int i) => new(260, 292 + i * 34, 372, 30);
+    private static Rectangle StashRowRect(int i) => new(648, 292 + i * 34, 372, 30);
 
     /// <summary>Click an equipped row to strip it to the stash; click a stash row to equip it.
     /// Only the avatar re-gears (Bible §6.6.9 — mercs keep the kit they were hired with).</summary>
+    private static readonly (string key, string label)[] StatRows =
+    {
+        ("vit", "VIT"), ("str", "STR"), ("int", "INT"), ("cha", "CHA"), ("agi", "AGI"), ("wis", "WIS"),
+    };
+
+    private static Rectangle EquipTabRect(int i) => new(260 + i * 130, 168, 124, 22);
+    private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, 226, 20, 18);
+    private static Rectangle AutoSpendRect => new(896, 226, 124, 18);
+
+    private CampaignUnit? EquipShownUnit =>
+        _campaign.Crew.Count == 0 ? null : _campaign.Crew[Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1)];
+
     private void ClickEquipPanel(Point m)
     {
-        var a = _campaign.Avatar;
-        if (a == null) return;
-        for (int i = 0; i < a.Equipment.Count; i++)
-            if (EquipRowRect(i).Contains(m)) { _campaign.Unequip(a, a.Equipment[i]); return; }
+        for (int i = 0; i < _campaign.Crew.Count; i++)
+            if (EquipTabRect(i).Contains(m)) { _equipUnit = i; _sfx.Play("click"); return; }
+
+        var u = EquipShownUnit;
+        if (u == null) return;
+
+        if (u.StatPoints > 0)
+        {
+            for (int i = 0; i < StatRows.Length; i++)
+                if (StatPlusRect(i).Contains(m)) { u.SpendStat(StatRows[i].key); _sfx.Play("click"); return; }
+            if (AutoSpendRect.Contains(m)) { TitheContent.AutoSpendStats(u); _sfx.Play("coin"); return; }
+        }
+
+        // Only the avatar re-gears (Bible §6.10) — mercenaries keep their hire kit.
+        if (!u.IsAvatar) return;
+        for (int i = 0; i < u.Equipment.Count; i++)
+            if (EquipRowRect(i).Contains(m)) { _campaign.Unequip(u, u.Equipment[i]); _sfx.Play("click"); return; }
         for (int i = 0; i < _campaign.Stash.Count; i++)
-            if (StashRowRect(i).Contains(m)) { _campaign.Equip(a, _campaign.Stash[i]); return; }
+            if (StashRowRect(i).Contains(m)) { _campaign.Equip(u, _campaign.Stash[i]); _sfx.Play("coin"); return; }
     }
 
     private void DrawEquipPanel()
     {
-        var a = _campaign.Avatar;
+        var a = EquipShownUnit;
         if (a == null) return;
         var r = new Rectangle(236, 150, 800, 470);
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
         _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing);
-        _font.DrawCentered(_sb, "STASH + KIT: THE AVATAR", r.Center.X, r.Y + 14, 2, Palette.Text);
-        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 44, 1, Palette.TextDim);
-        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 44, 1, Palette.TextDim);
-
         var mp = new Point(_mouse.X, _mouse.Y);
+
+        // Crew tabs: the kit screen manages every unit's points, gear stays avatar-only.
+        for (int i = 0; i < _campaign.Crew.Count; i++)
+        {
+            var t = EquipTabRect(i);
+            bool sel = i == Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1);
+            _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
+            _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
+            _font.DrawCentered(_sb, Trunc(_campaign.Crew[i].Name.ToUpperInvariant(), 12), t.Center.X, t.Y + 7, 1,
+                sel ? Palette.Text : Palette.TextDim);
+        }
+
+        // Level + XP bar + banked points.
+        int need = CampaignUnit.XpForNextLevel(a.Level);
+        _font.Draw(_sb, $"LVL {a.Level}", 260, r.Y + 48, 2, Palette.Text);
+        _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, 260, 10), Palette.HpBack);
+        _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), new Color(120, 170, 230));
+        _font.Draw(_sb, $"{a.Xp} / {need} XP", 610, r.Y + 48, 1, Palette.TextDim);
+        _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
+            820, r.Y + 48, 1, a.StatPoints > 0 ? new Color(240, 208, 120) : Palette.TextDim);
+
+        // The six characteristics with [+] spend buttons (1.29's manual allocation).
+        for (int i = 0; i < StatRows.Length; i++)
+        {
+            var (key, label) = StatRows[i];
+            int x = 260 + i * 126;
+            int shown = key switch
+            {
+                "vit" => TitheContent.StatsOf(a).MaxHp,
+                "str" => TitheContent.StatsOf(a).Strength,
+                "int" => TitheContent.StatsOf(a).Intelligence,
+                "cha" => TitheContent.StatsOf(a).Chance,
+                "agi" => TitheContent.StatsOf(a).Agility,
+                _ => TitheContent.StatsOf(a).Wisdom,
+            };
+            _font.Draw(_sb, key == "vit" ? $"HP {shown}" : $"{label} {shown}", x, r.Y + 80, 1, Palette.Text);
+            if (a.StatPoints > 0)
+            {
+                var b = StatPlusRect(i);
+                _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
+                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1, Color.White);
+            }
+        }
+        if (a.StatPoints > 0)
+        {
+            _prim.FillRect(_sb, AutoSpendRect, AutoSpendRect.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
+            _prim.StrokeRect(_sb, AutoSpendRect, 1, new Color(96, 150, 96));
+            _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1, Palette.Text);
+        }
+
+        if (!a.IsAvatar)
+        {
+            _font.DrawCentered(_sb, "MERCENARIES KEEP THEIR HIRE KIT — ONLY THE AVATAR RE-GEARS",
+                r.Center.X, 340, 1, Palette.TextDim);
+            DrawEquipFooter(a, r);
+            return;
+        }
+
+        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 122, 1, Palette.TextDim);
+        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 122, 1, Palette.TextDim);
+
         for (int i = 0; i < a.Equipment.Count; i++)
         {
             var b = EquipRowRect(i);
@@ -356,7 +441,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
         }
         if (a.Equipment.Count == 0)
-            _font.Draw(_sb, "— nothing worn —", 268, 220, 1, Palette.TextDim);
+            _font.Draw(_sb, "— nothing worn —", 268, 298, 1, Palette.TextDim);
 
         for (int i = 0; i < _campaign.Stash.Count; i++)
         {
@@ -368,8 +453,13 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _font.Draw(_sb, TitheContent.ItemStatLine(id), b.X + 8, b.Y + 17, 1, Palette.TextDim);
         }
         if (_campaign.Stash.Count == 0)
-            _font.Draw(_sb, "— the stash is empty —", 656, 220, 1, Palette.TextDim);
+            _font.Draw(_sb, "— the stash is empty —", 656, 298, 1, Palette.TextDim);
 
+        DrawEquipFooter(a, r);
+    }
+
+    private void DrawEquipFooter(CampaignUnit a, Rectangle r)
+    {
         // Live effective block, so every click's consequence is visible immediately (Dofus idiom).
         var s = TitheContent.StatsOf(a);
         var elem = TitheContent.ClassElement(a.ClassId);
@@ -456,6 +546,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
         _cryptRoom = 0; _yardMsg = ""; _yardMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
         _lastDiveClock = float.MaxValue;
+        _graveMap = TitheContent.Arena(_campaign.Dives); // a fresh yard layout each dive
         _sfx.Play("bell", 0.9f, jitter: false);
         _hireOnArrive = false;
     }
@@ -654,7 +745,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         {
             if (!_combatResolved && !_anim.IsBusy)
             {
+                var preLevels = _campaign.Crew.ToDictionary(u => u.Id, u => u.Level);
                 _fightReport = _dive!.ApplyResult(_pendingPack!, _engine);
+                _levelUps = _campaign.Crew
+                    .Where(u => preLevels.TryGetValue(u.Id, out int was) && u.Level > was)
+                    .Select(u => (u.Name, u.Level)).ToList();
+                _reportSounded = false;
                 _combatResolved = true;
             }
             if (_combatResolved && (Pressed(Keys.Space) || Pressed(Keys.Enter) || LeftClicked()))
@@ -785,13 +881,22 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             if (m.Y >= HudTop) return;
 
             var onCell = _engine.FighterAt(_hover);
-            if (onCell is { Team: Team.Player })
+            if (_selCrew != null && onCell is { Team: Team.Player } other && other != _selCrew)
+            {
+                (other.Pos, _selCrew.Pos) = (_selCrew.Pos, other.Pos); // swap two crew members
+                _selCrew = null;
+                _sfx.Play("click");
+            }
+            else if (onCell is { Team: Team.Player })
             {
                 _selCrew = onCell; // pick up a crew member
+                _sfx.Play("click");
             }
             else if (_selCrew != null && _map.PlayerStartCells.Contains(_hover) && onCell is null)
             {
                 _selCrew.Pos = _hover; // drop the selected member on a free start cell
+                _selCrew = null;
+                _sfx.Play("click");
             }
         }
     }
@@ -816,9 +921,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// <summary>Apply the fight's meta outcome once, and mark Wounded survivors with the status.</summary>
     private void ResolveWatchedFight()
     {
-        bool won = _engine.Outcome == FightOutcome.Victory;
-        _sfx.Play(won ? "victory" : "defeat", 0.8f, jitter: false);
-        if (won) _sfx.Play("coin");
+        _reportSounded = false; // the end-of-fight window plays the stings
         _aftermath = TitheResolution.Resolve(_engine);
         foreach (var u in _aftermath.Units.Where(u => u.Wounded))
         {
@@ -1054,12 +1157,9 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _prim.StrokeRect(_sb, r, 2, Palette.HpFill);
     }
 
-    /// <summary>Headline text: the baked dungeon font when present, chunky PixelFont otherwise.</summary>
-    private void UiTitle(string text, int x, int y, Color color)
-    {
-        if (_dfont.Loaded) _dfont.Draw(_sb, text, x, y - 6, 2, color);
-        else _font.Draw(_sb, text, x, y, 3, color);
-    }
+    /// <summary>Headline text (plain chunky PixelFont — the blackletter experiment is retired).</summary>
+    private void UiTitle(string text, int x, int y, Color color) =>
+        _font.Draw(_sb, text, x, y, 3, color);
 
     private void DrawTileOutline(Vector2 center, Color color)
     {
@@ -1102,7 +1202,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     /// </summary>
     private static (string sprite, Color tint, int scale) PixActor(string archetype) => archetype switch
     {
-        "archer" => ("hero", new Color(214, 234, 202), 1),
+        "archer" => ("archer", Color.White, 1),
         "bulwark" => ("soldier", Color.White, 1),
         "cannon" => ("hero", Color.White, 1),
         "barrow_husk" => ("orc", new Color(212, 186, 158), 1),
@@ -1110,6 +1210,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         "marrow_spitter" => ("slime", new Color(196, 146, 192), 1),
         "grave_mite" => ("slime", new Color(176, 176, 122), 1),
         "bone_piper" => ("orc", new Color(222, 206, 152), 1),
+        "tomb_wraith" => ("slime", new Color(170, 210, 230), 1),
+        "grave_ghoul" => ("orc", new Color(160, 190, 140), 1),
         "crypt_warden" => ("soldier", new Color(142, 160, 198), 1),
         "sexton" => ("orc", new Color(140, 120, 146), 2),
         _ => ("hero", Color.White, 1),
@@ -1118,6 +1220,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawFloorOverlays()
     {
         if (_engine.Outcome != FightOutcome.Ongoing) return;
+
+        // The AI's visible thinking: turn ring, movement path, spell range + target, drawn
+        // under the units exactly when the animator replays that beat.
+        foreach (var (cell, color) in _anim.TelegraphCells)
+            if (_engine.Field.InBounds(cell))
+                _prim.DiamondAt(_sb, _proj.CellCenter(cell), color);
 
         // Always mark the active fighter's cell so the turn reads on the board.
         if (_engine.Current.IsAlive)
@@ -1670,7 +1778,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawTurnTimeline()
     {
         Fighter? hoveredCard = null;
-        var order = _engine.Fighters;
+        var order = _engine.Fighters.Where(f => f.IsAlive).ToList(); // the dead leave the order, 1.29-style
         const int cardW = 96, cardH = 46, gap = 8;
         int totalW = order.Count * cardW + (order.Count - 1) * gap;
         int x0 = ScreenW - 20 - totalW;
@@ -1934,8 +2042,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var r = new Rectangle(330, 296, 620, 336); // tall enough for the Temple's five services
         UiPanelBg(r);
         string[] titles = { "THE TITHE-KEEPER", "THE TEMPLE SISTER", "THE HIRING POST" };
-        if (_dfont.Loaded) _dfont.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 10, 2, UiInk);
-        else _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, UiSkinned ? UiInk : Palette.Text);
+        _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, UiSkinned ? UiInk : Palette.Text);
 
         var acts = NpcActions(npc);
         for (int i = 0; i < acts.Count; i++)
@@ -2139,8 +2246,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         UiTitle(_scene == Scene.City ? "THE CITY" : "THE GRAVEYARD", 16, 12, Palette.Text);
 
         _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-        if (_dfont.Loaded) _dfont.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 8, 2, new Color(232, 202, 92));
-        else _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
+        _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
         _font.Draw(_sb, $"BREAD {_campaign.Bread}    DRAUGHTS {_campaign.Draughts}    ESSENCES {_campaign.Essences.Count}",
             16, HudTop + 42, 1, Palette.TextDim);
         int per = TitheContent.Prices.TitheEveryNDives;
@@ -2157,6 +2263,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 8, new Color(18, 18, 22));
             _prim.DiscAt(_sb, new Vector2(x + 8, y + 7), 6, col);
             _font.DrawCentered(_sb, TitheGlyph(u.ClassId), x + 8, y + 2, 1, Color.White);
+            int xpNeed = CampaignUnit.XpForNextLevel(u.Level);
+            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24, 120, 4), new Color(38, 40, 48));
+            _prim.FillRect(_sb, new Rectangle(x + 24, y + 24,
+                (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), new Color(120, 170, 230));
+            if (u.StatPoints > 0)
+                _font.Draw(_sb, $"+{u.StatPoints} PTS (E)", x + 152, y + 21, 1, new Color(240, 208, 120));
             string tag = u.IsAvatar ? "AVATAR" : "MERC";
             _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
                 x + 22, y + 3, 1, u.Wounded ? new Color(230, 200, 70) : Palette.Text);
@@ -2206,33 +2318,88 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         var r = _fightReport!;
         bool win = r.Outcome == FightOutcome.Victory;
         bool bossRoom = _cryptRun && _cryptRooms[_cryptRoom].Boss;
+
+        if (!_reportSounded)
+        {
+            _reportSounded = true;
+            _sfx.Play(win ? "victory" : "defeat", 0.8f, jitter: false);
+            if (win && r.Gold > 0) _sfx.Play("coin");
+            if (_levelUps.Count > 0) _sfx.Play("levelup", 0.9f, jitter: false);
+        }
+
+        int rows = (_dive?.LastResolution ?? _aftermath)?.Units.Count ?? 0;
+        int extras = _levelUps.Count + (_fightReport!.Gear.Count > 0 ? 1 : 0)
+            + (_fightReport.Drops.Count > 0 ? 1 : 0) + (_fightReport.Lost.Count > 0 ? 1 : 0);
+        var panel = new Rectangle(340, 150, 600, Math.Clamp(210 + rows * 20 + extras * 18 + (_levelUps.Count > 0 ? 22 : 0), 260, 460));
+        UiPanelBg(panel);
+        var ink = UiSkinned ? UiInk : Palette.Text;
+        var inkDim = UiSkinned ? UiInkDim : Palette.TextDim;
+
         string title = !win ? "THE CREW FALLS"
             : bossRoom ? "THE SEXTON FALLS"
             : _cryptRun ? "ROOM CLEARED"
             : _jumpedFight ? "THE AMBUSH IS BEATEN" : "PACK CLEARED";
-        _font.DrawCentered(_sb, title, ScreenW / 2, 175, 5, win ? Palette.HpFill : Palette.HeroColor);
+        _font.DrawCentered(_sb, title, panel.Center.X, panel.Y + 18, 3,
+            win ? (UiSkinned ? new Color(52, 108, 54) : Palette.HpFill) : new Color(184, 70, 60));
 
-        int y = 265;
+        int y = panel.Y + 60;
         if (win)
         {
-            _font.DrawCentered(_sb, $"+{r.Gold} GOLD    +{r.Xp} XP", ScreenW / 2, y, 2, Palette.Text); y += 36;
+            _font.DrawCentered(_sb, $"+{r.Gold} GOLD      +{r.Xp} XP POOL", panel.Center.X, y, 2, ink); y += 34;
+
+            // Per-unit XP shares with live XP bars — the Dofus end-of-fight window.
+            var res = _dive?.LastResolution ?? _aftermath;
+            if (res != null)
+                foreach (var ur in res.Units)
+                {
+                    var cu = _campaign.Crew.FirstOrDefault(c => c.Id == ur.Id);
+                    _font.Draw(_sb, Trunc(ur.Name.ToUpperInvariant(), 14), panel.X + 28, y, 1, ink);
+                    _font.Draw(_sb, ur.Died ? "LOST" : ur.Wounded ? "WOUNDED" : $"+{ur.XpGained} XP",
+                        panel.X + 170, y, 1,
+                        ur.Died ? new Color(184, 70, 60) : ur.Wounded ? new Color(190, 140, 40) : inkDim);
+                    if (cu != null)
+                    {
+                        int need = CampaignUnit.XpForNextLevel(cu.Level);
+                        _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2, 180, 8), new Color(60, 56, 50));
+                        _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2,
+                            (int)(180 * Math.Clamp(need <= 0 ? 1f : (float)cu.Xp / need, 0f, 1f)), 8),
+                            new Color(120, 170, 230));
+                        _font.Draw(_sb, $"LVL {cu.Level}", panel.X + 492, y, 1, inkDim);
+                    }
+                    y += 20;
+                }
+            y += 8;
+
+            foreach (var (name, level) in _levelUps)
+            {
+                _font.DrawCentered(_sb, $"* {name.ToUpperInvariant()} REACHES LEVEL {level}! +5 POINTS +1 SPELL *",
+                    panel.Center.X, y, 1, new Color(190, 140, 20)); y += 18;
+            }
+            if (_levelUps.Count > 0)
+            { _font.DrawCentered(_sb, "spend points in the city: E, then the + buttons", panel.Center.X, y, 1, inkDim); y += 22; }
+
             if (r.Gear.Count > 0)
-            { _font.DrawCentered(_sb, "★ FOUND: " + string.Join(", ", r.Gear).ToUpperInvariant() + " ★", ScreenW / 2, y, 1, new Color(240, 208, 120)); y += 24; }
+            { _font.DrawCentered(_sb, "FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(),
+                panel.Center.X, y, 1, new Color(150, 110, 20)); y += 18; }
             if (r.Drops.Count > 0)
-            { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(200, 170, 240)); y += 24; }
-            if (r.Wounded.Count > 0)
-            { _font.DrawCentered(_sb, "WOUNDED: " + string.Join(", ", r.Wounded).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(230, 200, 70)); y += 24; }
+            { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(),
+                panel.Center.X, y, 1, new Color(120, 80, 160)); y += 18; }
             if (r.Lost.Count > 0)
-            { _font.DrawCentered(_sb, "LOST: " + string.Join(", ", r.Lost).ToUpperInvariant(), ScreenW / 2, y, 1, new Color(214, 96, 88)); y += 24; }
+            { _font.DrawCentered(_sb, "LOST: " + string.Join(", ", r.Lost).ToUpperInvariant(),
+                panel.Center.X, y, 1, new Color(184, 70, 60)); y += 18; }
         }
-        else { _font.DrawCentered(_sb, "CAMPAIGN OVER", ScreenW / 2, y, 2, Palette.HeroColor); y += 36; }
+        else
+        {
+            _font.DrawCentered(_sb, _campaign.Over ? "CAMPAIGN OVER" : "the bell drags the survivors out",
+                panel.Center.X, y, 2, new Color(184, 70, 60)); y += 36;
+        }
 
         string next = _dive!.Ended
             ? (_campaign.Over ? "PRESS SPACE — THE CAMPAIGN IS OVER" : "THE BELL TOLLS — PRESS SPACE TO BE EJECTED")
             : bossRoom ? "THE ALTAR TEARS THE CREW OUT — PRESS SPACE"
             : _cryptRun ? "THE DOOR AHEAD GRINDS OPEN — PRESS SPACE TO PRESS DEEPER"
             : "PRESS SPACE TO PRESS ON";
-        _font.DrawCentered(_sb, next, ScreenW / 2, y + 22, 1, Palette.Text);
+        _font.DrawCentered(_sb, next, panel.Center.X, panel.Bottom - 30, 1, ink);
     }
 
     private static string Trunc(string s, int max) => s.Length <= max ? s : s[..max];

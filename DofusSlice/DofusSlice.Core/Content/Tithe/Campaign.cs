@@ -43,6 +43,23 @@ public sealed class CampaignUnit
     /// <summary>Unspent spell points (Bible §6.3: +1 per level; ranks change shape/economics).</summary>
     public int SpellPoints { get; set; }
 
+    /// <summary>Unspent characteristic points (1.29: five per level, spent by the PLAYER).</summary>
+    public int StatPoints { get; set; }
+
+    /// <summary>Manually allocated characteristic points: keys vit/str/int/cha/agi/wis.</summary>
+    public Dictionary<string, int> SpentStats { get; init; } = new();
+
+    public int SpentOn(string key) => SpentStats.GetValueOrDefault(key);
+
+    /// <summary>Spend one characteristic point (flat cost 1 for now; soft-cost tiers later).</summary>
+    public bool SpendStat(string key)
+    {
+        if (StatPoints <= 0) return false;
+        StatPoints--;
+        SpentStats[key] = SpentStats.GetValueOrDefault(key) + 1;
+        return true;
+    }
+
     /// <summary>Bought spell ranks, key → rank (absent = rank 1).</summary>
     public Dictionary<string, int> SpellRanks { get; init; } = new();
     public int RankOf(string skill) => SpellRanks.TryGetValue(skill, out int r) ? r : 1;
@@ -74,7 +91,8 @@ public sealed class CampaignUnit
         while (Xp >= XpForNextLevel(Level))
         {
             Xp -= XpForNextLevel(Level); Level++;
-            SpellPoints++; // 1.29: one spell point per level (Bible §6.3)
+            SpellPoints++;   // 1.29: one spell point per level (Bible §6.3)
+            StatPoints += 5; // 1.29: five characteristic points per level, player-spent
         }
     }
 }
@@ -160,7 +178,8 @@ public sealed class Campaign
         Gold -= price;
         // A hire arrives with its level's banked spell points (auto-spent by its class template).
         Crew.Add(new CampaignUnit
-        { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level, SpellPoints = level - 1 });
+        { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level,
+          SpellPoints = level - 1, StatPoints = (level - 1) * 5 });
         return true;
     }
 

@@ -64,6 +64,9 @@ public static class CampaignSim
     /// <summary>The player's stand-in spending before a dive: pay the tithe, mend, restock, hire.</summary>
     private static void CityPrep(Campaign c, bool verbose, int dive)
     {
+        // The sim stands in for the player: spend banked characteristic points by class growth.
+        foreach (var u in c.Crew) TitheContent.AutoSpendStats(u);
+
         var log = new List<string>();
         c.RestCrew(); // the city is safe rest — HP back to full (wounds still need a Draught)
 

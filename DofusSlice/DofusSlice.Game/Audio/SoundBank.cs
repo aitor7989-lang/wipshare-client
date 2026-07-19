@@ -83,6 +83,11 @@ public sealed class SoundBank
             At(Gain(Env(Tone(0.1, _ => 784, Square), 0.004, 0.09), 0.4), 0.18),
             At(Gain(Env(Tone(0.30, _ => 1046, Square), 0.004, 0.2), 0.45), 0.27),
             At(Gain(Env(Tone(0.42, _ => 261, Tri), 0.01, 0.3), 0.5), 0.00)));
+        yield return ("levelup", Mix(
+            At(Gain(Env(Tone(0.09, _ => 587, Tri), 0.004, 0.08), 0.45), 0.00),
+            At(Gain(Env(Tone(0.09, _ => 784, Tri), 0.004, 0.08), 0.45), 0.09),
+            At(Gain(Env(Tone(0.09, _ => 988, Tri), 0.004, 0.08), 0.45), 0.18),
+            At(Gain(Env(Tone(0.34, _ => 1175, Tri), 0.004, 0.24), 0.5), 0.27)));
         yield return ("defeat", Mix(
             At(Gain(Env(Tone(0.2, _ => 220, Saw), 0.01, 0.16), 0.4), 0.00),
             At(Gain(Env(Tone(0.2, _ => 174, Saw), 0.01, 0.16), 0.4), 0.18),

@@ -139,7 +139,9 @@ public sealed class DofusUi
             Slice(sb, "panel_frame", r);
             return;
         }
-        TileInto(sb, Get("panel_fill")!.Tex, new Rectangle(r.X + 8, r.Y + 8, r.Width - 16, r.Height - 16),
+        // The body starts just INSIDE the silver rail (its opaque band sits ~17-21px in), so
+        // no dark paint ever shows OUTSIDE the white line — the rail alone defines the window.
+        TileInto(sb, Get("panel_fill")!.Tex, new Rectangle(r.X + 19, r.Y + 19, r.Width - 38, r.Height - 40),
             new Color(46, 44, 40, 240));
         Slice(sb, "popup_frame", r);
     }

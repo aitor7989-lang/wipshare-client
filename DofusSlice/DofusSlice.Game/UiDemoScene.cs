@@ -148,14 +148,14 @@ public sealed partial class SliceGame
         var port = new Rectangle(L, a.Y + 106, 72, 72);
         _dof.Slot(_sb, port, hover: port.Contains(mp));
         var sheet = _sprites.GetSheet("hero", "idle", "se");
-        if (sheet != null)
-            SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X + 3, port.Bottom - 9), Color.White, 54f,
+        if (sheet != null) // +21% of height: the sprite's body mass sits left of its frame centre
+            SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X + 11, port.Bottom - 9), Color.White, 54f,
                 (int)(_time * 6) % sheet.FrameCount);
         _dof.Draw(_sb, "help", new Rectangle(L - 4, a.Y + 102, 18, 18));
         var plus = new Rectangle(L - 4, a.Y + 124, 18, 18);
         _dof.Button(_sb, plus, hover: plus.Contains(mp));
         DTC("+", plus.Center.X, plus.Y + 2, 1, Color.White);
-        DT("Aspette", L + 86, a.Y + 108, 2, WinInk);
+        DT("Aspette", L + 86, a.Y + 108, 1, WinInk);
         DT("Omega 191  -  Beta-Major", L + 86, a.Y + 132, 1, WinInkDim);
         DT("15 080 points", L + 86, a.Y + 150, 1, WinGold);
 
@@ -165,10 +165,10 @@ public sealed partial class SliceGame
         DT("Energie", L, a.Y + 210, 1, WinInk);
         _dof.Gauge(_sb, new Rectangle(L + 92, a.Y + 210, W - 92, 12), 0.55f, "gauge_timer");
 
-        // The three vital rows.
-        DemoRow(new Rectangle(L, a.Y + 234, W, 26), "vit", "Points de vie (PV)", "2 330", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 264, W, 26), "ap", "Points d'action (PA)", "7", mp, big: true);
-        DemoRow(new Rectangle(L, a.Y + 294, W, 26), "mp", "Points de mouvement (PM)", "3", mp, big: true);
+        // The three vital rows — ONE text size across the whole panel now.
+        DemoRow(new Rectangle(L, a.Y + 234, W, 26), "vit", "Points de vie (PV)", "2 330", mp);
+        DemoRow(new Rectangle(L, a.Y + 264, W, 26), "ap", "Points d'action (PA)", "7", mp);
+        DemoRow(new Rectangle(L, a.Y + 294, W, 26), "mp", "Points de mouvement (PM)", "3", mp);
 
         // The six characteristics; [+] spenders outside the rows.
         (string icon, string label, string val)[] stats =
@@ -231,30 +231,24 @@ public sealed partial class SliceGame
         DemoEquipSlot(new Rectangle(doll.X + 72, doll.Bottom - 62, 50, 50), mp, "shield");
 
         var hero = _sprites.GetSheet("hero", "idle", "se");
-        int midX = doll.Center.X + 2;
+        int midX = doll.Center.X;
         int feetY = doll.Center.Y + 56;
-        if (hero != null)
-            SpriteDraw.Feet(_sb, hero, new Vector2(midX, feetY), Color.White, 136f,
+        if (hero != null) // anchor shifted +21% of height: the body mass sits left of frame centre
+            SpriteDraw.Feet(_sb, hero, new Vector2(midX + 29, feetY), Color.White, 136f,
                 (int)(_time * 5) % hero.FrameCount);
-        if (_dof.Texture("rot_l") != null)
+        if (_dof.Texture("rot_l") != null) // small, flanking the visual body clear of the sprite
         {
-            _dof.Draw(_sb, "rot_l", new Rectangle(midX - 44, feetY - 26, 15, 24));
-            _dof.Draw(_sb, "rot_r", new Rectangle(midX + 29, feetY - 26, 15, 24));
+            _dof.Draw(_sb, "rot_l", new Rectangle(midX - 58, feetY - 20, 12, 18));
+            _dof.Draw(_sb, "rot_r", new Rectangle(midX + 46, feetY - 20, 12, 18));
         }
 
-        // The pet / consumable strip.
+        // The pet / consumable strip — mostly EMPTY, just a pet and the idol at the end.
         for (int i = 0; i < 7; i++)
         {
             var s = new Rectangle(L + i * 50, b.Y + 366, 46, 46);
             _dof.Slot(_sb, s, hover: s.Contains(mp));
-            string egg = $"egg_{(i * 5 + 3) % 24 + 1:00}";
-            if (i is 0 or 1 or 5 && _dof.Texture(egg) != null)
-                _dof.Draw(_sb, egg, new Rectangle(s.X + 4, s.Y + 4, 38, 38));
-            if (i == 5)
-            {
-                _prim.FillRect(_sb, s, Color.Black * 0.45f);
-                _dof.Draw(_sb, "lock", new Rectangle(s.Center.X - 8, s.Center.Y - 8, 16, 16));
-            }
+            if (i == 0 && _dof.Texture("egg_21") != null)
+                _dof.Draw(_sb, "egg_21", new Rectangle(s.X + 4, s.Y + 4, 38, 38));
             if (i == 6 && _dof.Texture("egg_24") != null)
                 _dof.Draw(_sb, "egg_24", new Rectangle(s.X + 4, s.Y + 4, 38, 38));
         }
@@ -278,6 +272,7 @@ public sealed partial class SliceGame
         _dof.Button(_sb, dropBtn, hover: dropBtn.Contains(mp));
         DTC("v", dropBtn.Center.X, dropBtn.Y + 3, 1, Color.White);
 
+        // The grid breathes now: eggs fill the top rows only, one lock, one stack count.
         for (int row = 0; row < 8; row++)
             for (int col = 0; col < 5; col++)
             {
@@ -286,15 +281,15 @@ public sealed partial class SliceGame
                 if (cell.Contains(mp) && LeftClicked()) _demoSlot = idx;
                 _dof.Slot(_sb, cell, hover: cell.Contains(mp), selected: idx == _demoSlot);
                 string egg = $"egg_{idx % 24 + 1:00}";
-                if (_dof.Texture(egg) != null)
+                if (idx < 18 && _dof.Texture(egg) != null)
                     _dof.Draw(_sb, egg, new Rectangle(cell.X + 3, cell.Y + 3, 36, 36));
-                if (idx is 6 or 9 or 22)
+                if (idx == 9)
                 {
                     _prim.FillRect(_sb, cell, Color.Black * 0.45f);
                     _dof.Draw(_sb, "lock", new Rectangle(cell.Center.X - 8, cell.Center.Y - 8, 16, 16));
                 }
-                if (idx is 7 or 18)
-                    DT(((idx * 7) % 9 + 2).ToString(), cell.X + 3, cell.Y + 1, 1, Color.White);
+                if (idx == 7)
+                    DT("2", cell.X + 3, cell.Y + 1, 1, Color.White);
             }
 
         var scis = new Rectangle(rx, b.Y + 493, 22, 20);

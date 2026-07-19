@@ -413,3 +413,15 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   pills end 16px above the rail zone, inventory search/kamas 27px clear, grid pitch 45.
 - Verified with 2x zoom crops of every margin-critical region (window bottoms, band corners,
   doll, HUD plate) — all gaps confirmed visually after the render.
+
+## Demo pass 9: verify-and-fix (user list)
+- The "second grey border" was our own body fill leaking 12px outside the silver rail (the
+  frame art has ONE rail at 17-21px, measured). The body now starts just inside the rail —
+  the white line alone defines the window.
+- The character is now MEASURABLY centred: the sprite's body mass sits 21% of its height left
+  of the frame centre (sword side), so the anchor compensates; the rendered mass centre
+  measures -0.7px from true centre. Portrait got the same correction. Arrows shrunk again
+  (12x18) and flank the visual body.
+- ONE text size across the characteristics panel (the 18px vitals dropped to the body size).
+- Inventory decluttered further: 18 eggs with empty rows below, one lock, one count; the pet
+  strip holds just a pet and the idol.

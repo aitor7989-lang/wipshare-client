@@ -1282,9 +1282,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         && _engine.Current is { PlayerControlled: true, IsSummon: false, IsMercenary: false };
 
     /// <summary>The actor's spell wells in the combat band (drawn AND clicked from here).</summary>
-    private static Rectangle KitWellRect(int i) => new(934 + i * 52, HudTop + 32, 46, 46);
+    private static Rectangle KitWellRect(int i) => SpellGridRect(i);
 
-    private static readonly Rectangle TitheEndTurn = new(1080, HudTop + 96, 184, 36);
+    private static readonly Rectangle TitheEndTurn = new(1080, HudTop + 112, 184, 32);
 
     /// <summary>Your Dofus turn: 1-6 select a spell, click ground to move/cast, SPACE hands
     /// the turn to the AI, ENTER (or the button) ends it, and the 30s clock always runs.</summary>
@@ -2322,124 +2322,116 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _ew.Panel(_sb, new Rectangle(-6, HudTop + 2, ScreenW + 12, ScreenH - HudTop + 16));
 
         var cur = _engine.Current;
-
-        // Vitals cluster, Dofus-style bottom centre: heart = HP, star = AP, shield = MP.
         float hpFrac = cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp;
-        if (Mono.On)
-        {
-            // 1-bit vitals: three UNIFORM 48px kit icons (baked into identical boxes, drawn at
-            // native size so their pixels stay square), dark numbers punched into the white
-            // shapes, one HP bar under the heart. Symmetric, no glosses, nothing off-grid.
-            var heartC = new Vector2(ScreenW / 2f, HudTop + 66);
-            var apC = new Vector2(ScreenW / 2f - 96, HudTop + 72);
-            var mpC = new Vector2(ScreenW / 2f + 96, HudTop + 72);
-            if (!DrawUiSprite("onebit_heart", heartC, 48, Mono.Ink))
-                _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 64, Ew.Hp, Ew.HpDeep, hpFrac);
-            if (!DrawUiSprite("onebit_star", apC, 48, Mono.Ink))
-                _ew.Badge(_sb, EwChrome.Gem.Star, apC, 48, Ew.Ap, Ew.ApDeep);
-            if (!DrawUiSprite("onebit_shield", mpC, 48, Mono.Ink))
-                _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 48, Ew.Mp, Ew.MpDeep);
-            _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 9, 2, Mono.Panel);
-            _font.DrawCentered(_sb, cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, Mono.Panel);
-            _font.DrawCentered(_sb, cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 8, 2, Mono.Panel);
-            _font.DrawCentered(_sb, "AP", (int)apC.X, (int)apC.Y + 28, 1, Mono.Dim);
-            _font.DrawCentered(_sb, "MP", (int)mpC.X, (int)mpC.Y + 28, 1, Mono.Dim);
-            var hpBar = new Rectangle(ScreenW / 2 - 60, HudTop + 96, 120, 8);
-            Mono.Bar(_sb, _prim, hpBar, hpFrac, hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
-            _font.DrawCentered(_sb, $"{cur.Hp} / {cur.MaxHp}", ScreenW / 2, hpBar.Bottom + 6, 1, Mono.Dim);
-        }
-        else
-        {
-            var heartC = new Vector2(ScreenW / 2f, HudTop + 82);
-            _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 104, Ew.Hp, Ew.HpDeep, hpFrac);
-            _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, Color.White);
-            _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1, Ew.Ink * 0.85f);
-            _ew.Badge(_sb, EwChrome.Gem.Star, new Vector2(ScreenW / 2f - 92, HudTop + 96), 62, Ew.Ap, Ew.ApDeep);
-            _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, Color.White);
-            _ew.Badge(_sb, EwChrome.Gem.Diamond, new Vector2(ScreenW / 2f + 92, HudTop + 96), 58, Ew.Mp, Ew.MpDeep);
-            _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, Color.White);
-        }
-        _font.DrawCentered(_sb, cur.Name.ToUpperInvariant(), ScreenW / 2, HudTop + 12, 1,
-            cur.Team == Team.Player ? Ew.AccentBright : Ew.Danger);
-
-        // Crew HP wells, left column (Dofus theme: the segmented red candy gauge).
-        _font.Draw(_sb, "YOUR CREW", 20, HudTop + 14, 1, Ew.InkSoft);
-        int y = HudTop + 32;
-        foreach (var f in _engine.Fighters.Where(x => x.Team == Team.Player && !x.IsSummon))
-        {
-            _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 12), 20, y + 3, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
-            var well = new Rectangle(150, y, 190, 18);
-            float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f);
-            if (_dof.Loaded)
-                _dof.Gauge(_sb, well, f.IsAlive ? frac : 0f);
-            else
-            {
-                _ew.Well(_sb, well);
-                int fill = (int)(184 * frac);
-                if (fill > 0 && f.IsAlive)
-                    _ew.GradientV(_sb, new Rectangle(well.X + 3, well.Y + 3, fill, 12), Ew.Hp, Ew.HpDeep);
-            }
-            _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 348, y + 3, 1,
-                f.IsAlive ? Ew.InkSoft : Ew.Danger);
-            y += 26;
-        }
-
-        // The actor's spells as slot wells, right side. HOVER a well for the full spell card.
-        // On YOUR turn this IS the spell bar: 1-6 or click to arm, dimmed when unaffordable.
         bool piloting = _tithe && AvatarTurn && !_autoTurn;
-        string kitTitle = piloting ? "YOUR KIT" : $"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT";
-        _font.Draw(_sb, kitTitle, 934, HudTop + 14, 1, piloting ? Ew.Ink : Ew.InkSoft);
-        _font.Draw(_sb, piloting ? "(1-6 · click)" : "(hover)",
-            934 + _font.Measure(kitTitle, 1) + 8, HudTop + 14, 1, Ew.InkMuted);
-        SpellDef? tip = null; int tipX = 0;
         var kmp = new Point(_mouse.X, _mouse.Y);
-        int wi = 0;
-        foreach (var spell in cur.Spells.Take(6))
+
+        // The centred plate, straight from the F10 demo HUD: vitals left, the 7x2 spell
+        // grid right, the level strip beneath — and the TEAM on the right edge, Dofus-style.
+        var plate = new Rectangle(350, HudTop + 6, 580, 106);
+        _prim.FillRect(_sb, plate, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
+        _prim.StrokeRect(_sb, plate, 1, Mono.On ? Mono.Dim : Ew.Outline);
+        _font.Draw(_sb, Trunc(cur.Name.ToUpperInvariant(), 16), plate.X + 10, plate.Y + 5, 1,
+            cur.Team == Team.Player ? Ew.Ink : Ew.Danger);
+
+        // Vitals: the heart flanked by the AP star and MP shield, numbers punched dark.
+        var heartC = new Vector2(452, HudTop + 58);
+        var apC = new Vector2(392, HudTop + 68);
+        var mpC = new Vector2(512, HudTop + 68);
+        if (!DrawUiSprite("onebit_heart", heartC, 48, Mono.Ink))
+            _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 56, Ew.Hp, Ew.HpDeep, hpFrac);
+        if (!DrawUiSprite("onebit_star", apC, 38, Mono.Ink))
+            _ew.Badge(_sb, EwChrome.Gem.Star, apC, 40, Ew.Ap, Ew.ApDeep);
+        if (!DrawUiSprite("onebit_shield", mpC, 38, Mono.Ink))
+            _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 40, Ew.Mp, Ew.MpDeep);
+        var onIcon = Mono.On ? Mono.Panel : Color.White;
+        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 8, 2, onIcon);
+        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, onIcon);
+        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 6, 2, onIcon);
+        _font.DrawCentered(_sb, "AP", (int)apC.X, (int)apC.Y + 24, 1, Ew.InkSoft);
+        _font.DrawCentered(_sb, "MP", (int)mpC.X, (int)mpC.Y + 24, 1, Ew.InkSoft);
+        var hpBar = new Rectangle(404, HudTop + 88, 96, 6);
+        Mono.Bar(_sb, _prim, hpBar, hpFrac, hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
+
+        // The spell grid (demo geometry: 7 columns, two rows — row two waits for pages).
+        SpellDef? tip = null; int tipX = 0;
+        var spells = cur.Spells;
+        for (int i = 0; i < 14; i++)
         {
-            var well = KitWellRect(wi);
-            bool hov = well.Contains(kmp);
-            bool sel = piloting && _selectedSpell == wi;
-            bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
-            if (hov) { tip = spell; tipX = well.X; }
-            if (Mono.On) Mono.Slot(_sb, _prim, well, hover: hov, selected: sel);
+            var slotR = SpellGridRect(i);
+            bool hov = slotR.Contains(kmp);
+            bool sel = piloting && i < 6 && i < spells.Count && _selectedSpell == i;
+            if (Mono.On) Mono.Slot(_sb, _prim, slotR, hover: hov, selected: sel);
             else
             {
-                _ew.Well(_sb, well);
-                if (hov || sel) _prim.StrokeRect(_sb, well, sel ? 2 : 1, Ew.AccentBright);
+                _ew.Well(_sb, slotR);
+                if (hov || sel) _prim.StrokeRect(_sb, slotR, sel ? 2 : 1, Ew.AccentBright);
             }
-            // The classic Dofus spell tile when the icon set is baked; the letter otherwise.
-            string? skey = TitheContent.SkillKeyById(spell.Id);
-            if (_dof.Loaded && skey != null
-                && _dof.SpellIcon(_sb, skey, new Rectangle(well.X + 3, well.Y + 3, 40, 40)))
+            if (i < 6 && i < spells.Count)
             {
-                _prim.FillRect(_sb, new Rectangle(well.Right - 14, well.Bottom - 14, 11, 11), new Color(10, 10, 12, 200));
-                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Right - 9, well.Bottom - 12, 1, Color.White);
-            }
-            else
-            {
+                var spell = spells[i];
+                if (hov) { tip = spell; tipX = slotR.X; }
+                bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
                 var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
                 var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
-                if (!canPay) col = Mono.On ? Mono.Faint : Ew.InkMuted;   // too costly THIS turn
-                _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
-                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1,
+                if (!canPay) col = Mono.On ? Mono.Faint : Ew.InkMuted;
+                _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), slotR.Center.X, slotR.Y + 9, 2, col);
+                _font.DrawCentered(_sb, $"{spell.ApCost}", slotR.Center.X, slotR.Bottom - 13, 1,
                     canPay ? Ew.InkSoft : Mono.On ? Mono.Danger : Ew.Danger);
             }
-            wi++;
+            else if (i == 6 && _campaign?.Draughts > 0)
+            {
+                _font.DrawCentered(_sb, "DR", slotR.Center.X, slotR.Y + 9, 2, Mono.On ? Mono.Faint : Ew.InkMuted);
+                _font.Draw(_sb, $"x{_campaign.Draughts}", slotR.X + 3, slotR.Y + 1, 1, Ew.InkSoft);
+            }
         }
+
+        // THE TEAM, right edge — Dofus keeps your group where your eyes already are.
+        int ty = HudTop + 10;
+        _font.Draw(_sb, "TEAM", 1080, ty, 1, Ew.InkSoft); ty += 14;
+        foreach (var f in _engine.Fighters.Where(x => x.Team == Team.Player && !x.IsSummon))
+        {
+            float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f);
+            _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 13), 1080, ty, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
+            var tb = new Rectangle(1080, ty + 11, 120, 6);
+            Mono.Bar(_sb, _prim, tb, f.IsAlive ? frac : 0f,
+                !f.IsAlive || frac > 0.3f ? Mono.Ink : Mono.Danger);
+            _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 1206, ty + 7, 1,
+                f.IsAlive ? Ew.InkSoft : Ew.Danger);
+            ty += 26;
+        }
+
+        // Piloting controls: END TURN under the team, the how-to on the band's left.
         if (piloting)
         {
-            // END TURN + the 30s clock + the how-to line: your whole turn UI in one corner.
             bool etHov = TitheEndTurn.Contains(kmp);
             if (Mono.On) Mono.Button(_sb, _prim, TitheEndTurn, hover: etHov);
             else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
             _font.DrawCentered(_sb, $"END TURN  ·  {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S",
-                TitheEndTurn.Center.X, TitheEndTurn.Y + 12, 1,
+                TitheEndTurn.Center.X, TitheEndTurn.Y + 11, 1,
                 Mono.On ? (_turnClock <= 10f && !etHov ? Mono.Danger : Mono.ButtonInk(etHov)) : Color.White);
-            _font.Draw(_sb, "CLICK: MOVE   ·   SPACE: AUTO   ·   ENTER: END",
-                934, TitheEndTurn.Y - 18, 1, Ew.InkMuted);
+            _font.Draw(_sb, "1-6: ARM A SPELL", 16, HudTop + 24, 1, Ew.InkSoft);
+            _font.Draw(_sb, "CLICK: MOVE / CAST", 16, HudTop + 40, 1, Ew.InkSoft);
+            _font.Draw(_sb, "SPACE: AUTO   ·   ENTER: END", 16, HudTop + 56, 1, Ew.InkSoft);
         }
+        else
+            _font.Draw(_sb, "WATCHING — HOVER UNITS AND SPELLS", 16, HudTop + 24, 1, Ew.InkMuted);
+
+        // The avatar's LEVEL strip, plate-wide like the demo's bottom gauge.
+        var av = _campaign?.Avatar;
+        if (av != null)
+        {
+            int need = CampaignUnit.XpForNextLevel(av.Level);
+            Mono.Bar(_sb, _prim, new Rectangle(350, HudTop + 120, 580, 8),
+                Math.Clamp(need <= 0 ? 1f : (float)av.Xp / need, 0f, 1f), Mono.Dim);
+            _font.Draw(_sb, $"LVL {av.Level}", 350, HudTop + 132, 1, Ew.InkSoft);
+        }
+
         if (tip != null) DrawSpellCard(tip, Math.Min(tipX, ScreenW - 300), HudTop - 6);
     }
+
+    /// <summary>The demo HUD's slot grid: 7 columns x 2 rows inside the centred plate.</summary>
+    private static Rectangle SpellGridRect(int i) => new(560 + i % 7 * 46, HudTop + 18 + i / 7 * 46, 42, 42);
 
     /// <summary>One spell effect as a legible line ("AIR DAMAGE 11-16", "PUSHES 1 CELL"…).</summary>
     private static (string text, Color color) EffectLine(SpellEffect e) => e.Kind switch

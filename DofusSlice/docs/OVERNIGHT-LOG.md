@@ -554,3 +554,12 @@ The designer's call: reuse the Dofus-recreation test's layout wholesale, in the 
   the 5x8 stash grid (click to equip, hover for item cards); the gold row with the ink
   coin and the set progress. Same skeleton as the demo's right window.
 - Both open anywhere in the city or mid-dive (the bell keeps ticking), close on C/I/ESC/X.
+
+## v8.4: the combat band, rebuilt on the demo HUD — team goes right
+- The bottom bar is now the F10 demo's HUD skeleton: a CENTRED PLATE with the actor's
+  name, the vitals cluster (AP star · heart with punched number + HP bar · MP shield)
+  and the 7x2 SPELL GRID (your six spells + the draught stack slot; row two waits for
+  pages). The avatar's LEVEL strip runs plate-wide underneath, like the demo's gauge.
+- THE TEAM moved to the right edge, Dofus-style: name, HP bar and numbers per member,
+  with END TURN (and its clock) right below them. The piloting how-to lives on the
+  band's left; spell hover cards still pop above the plate.

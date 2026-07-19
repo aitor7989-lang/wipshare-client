@@ -257,6 +257,7 @@ public sealed class BattleAnimator
 
     internal static Color SpellColor(SpellDef spell)
     {
+        if (DofusSlice.Game.Rendering.Mono.On) return DofusSlice.Game.Rendering.Mono.Ink;
         if (spell.Effects.Any(e => e.Kind == EffectKind.Teleport)) return new Color(150, 210, 240);
         var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
         return dmg != null
@@ -451,7 +452,9 @@ internal sealed class HitAnim : IAnim
                 heal ? 0.7f : 0.85f);
             string text = (heal ? "+" : "-") + Math.Abs(_amount) + (_crit ? "!" : "");
             // 1.29 floats the number in the element's colour; crits go gold, heals green.
-            var color = heal ? new Color(120, 220, 130)
+            var color = DofusSlice.Game.Rendering.Mono.On
+                ? (_crit ? DofusSlice.Game.Rendering.Mono.Danger : DofusSlice.Game.Rendering.Mono.Ink)
+                : heal ? new Color(120, 220, 130)
                 : _crit ? new Color(255, 210, 90)
                 : DofusSlice.Game.Rendering.EwChrome.ElementColor(_element);
             int scale = _crit ? 3 : 2;
@@ -485,7 +488,8 @@ internal sealed class TeleportAnim : IAnim
         if (!_spawned)
         {
             _spawned = true;
-            var col = new Color(150, 210, 240);
+            var col = DofusSlice.Game.Rendering.Mono.On
+                ? DofusSlice.Game.Rendering.Mono.Ink : new Color(150, 210, 240);
             _a.AddOverlay(new ImpactFlash(_from + new Vector2(0, -16), col));
             _a.AddOverlay(new ImpactFlash(_to + new Vector2(0, -16), col));
         }
@@ -711,11 +715,15 @@ internal sealed class TurnTelegraph : IAnim
         {
             var pos = _a.Projector.CellCenter(_a.DisplayCellOf(_id));
             _a.AddOverlay(new BannerOverlay(pos + new Vector2(0, -52), _name.ToUpperInvariant(),
-                _player ? new Color(120, 200, 120) : new Color(214, 110, 96), _dur));
+                DofusSlice.Game.Rendering.Mono.On
+                    ? (_player ? DofusSlice.Game.Rendering.Mono.Ink : DofusSlice.Game.Rendering.Mono.Danger)
+                    : _player ? new Color(120, 200, 120) : new Color(214, 110, 96), _dur));
         }
         var cell = _a.DisplayCellOf(_id);
         float pulse = 0.35f + 0.25f * MathF.Sin(_t * 9f);
-        _a.AddTelegraphCell(cell, (_player ? new Color(120, 200, 120) : new Color(214, 110, 96)) * pulse);
+        _a.AddTelegraphCell(cell, (DofusSlice.Game.Rendering.Mono.On
+            ? (_player ? DofusSlice.Game.Rendering.Mono.Ink : DofusSlice.Game.Rendering.Mono.Danger)
+            : _player ? new Color(120, 200, 120) : new Color(214, 110, 96)) * pulse);
         _t += dt;
     }
 
@@ -739,7 +747,8 @@ internal sealed class PathTelegraph : IAnim
         // Cells light up one by one along the path, then hold — the plan, then the walk.
         int lit = Math.Min(_path.Length, 1 + (int)(_t / 0.05f));
         for (int i = 0; i < lit; i++)
-            _a.AddTelegraphCell(_path[i], new Color(96, 190, 96) * 0.45f);
+            _a.AddTelegraphCell(_path[i], (DofusSlice.Game.Rendering.Mono.On
+                ? DofusSlice.Game.Rendering.Mono.Ink : new Color(96, 190, 96)) * 0.45f);
         _t += dt;
     }
 
@@ -772,7 +781,8 @@ internal sealed class CastTelegraph : IAnim
         {
             var pos = _a.Projector.CellCenter(_a.DisplayCellOf(_id));
             _a.AddOverlay(new BannerOverlay(pos + new Vector2(0, -52), _spell.Name.ToUpperInvariant(),
-                new Color(150, 190, 240), _dur));
+                DofusSlice.Game.Rendering.Mono.On ? DofusSlice.Game.Rendering.Mono.Ink
+                    : new Color(150, 190, 240), _dur));
             _a.Sfx?.Invoke("click", 0.5f);
         }
         var from = _a.DisplayCellOf(_id);
@@ -782,10 +792,13 @@ internal sealed class CastTelegraph : IAnim
                 int d = Math.Abs(dx) + Math.Abs(dy);
                 if (d < _spell.MinRange || d > _spell.MaxRange) continue;
                 if (_spell.LineOnly && dx != 0 && dy != 0) continue;
-                _a.AddTelegraphCell(new CellCoord(from.X + dx, from.Y + dy), new Color(90, 120, 220) * 0.35f);
+                _a.AddTelegraphCell(new CellCoord(from.X + dx, from.Y + dy),
+                    (DofusSlice.Game.Rendering.Mono.On ? DofusSlice.Game.Rendering.Mono.Dim
+                        : new Color(90, 120, 220)) * 0.35f);
             }
         float pulse = 0.4f + 0.3f * MathF.Sin(_t * 10f);
-        _a.AddTelegraphCell(_target, new Color(224, 60, 40) * pulse);
+        _a.AddTelegraphCell(_target, (DofusSlice.Game.Rendering.Mono.On
+            ? DofusSlice.Game.Rendering.Mono.Danger : new Color(224, 60, 40)) * pulse);
         _t += dt;
     }
 

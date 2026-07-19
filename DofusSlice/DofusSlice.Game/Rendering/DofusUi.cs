@@ -25,6 +25,7 @@ public sealed class DofusUi
 
     public DofusUi(GraphicsDevice gd)
     {
+        if (Mono.On) return; // ONE-BIT reset: the Dofus theme layer stays off, Loaded = false
         try
         {
             string dir = new[] { "assets", "assets-default" }

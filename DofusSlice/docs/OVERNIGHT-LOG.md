@@ -437,3 +437,28 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - The spell-range telegraph painted its blue diamonds over IN-BOUNDS void cells — on the
   generated island maps that meant range shading floating on the black sea beyond the map's
   edge ("something going out of the screen"). Telegraph cells now land on real ground only.
+
+## THE ONE-BIT RESET (v7.0)
+The complete UI + graphics restyle the playtest asked for: "delete and start anew all the
+art, 1 bit style, minimal UI" — built from Hexany's Roguelike Tiles (CC0) and Batuhan
+Karagol's 1-bit UI pack, both local-only in gitignored assets/ like every kit before them.
+- `Rendering/Mono.cs` is the whole visual language: near-black panels, ONE ink, ONE dim
+  grey, ONE red accent (enemies/danger/alarms), 1px sharp frames, hover = inversion. A
+  compile-time `Mono.On` switch routes every chrome chokepoint; flipping it off restores
+  the previous look untouched.
+- The Ew and Palette token sets collapse to the mono inks at their SOURCE, so the combat
+  band, log, timeline, gauges, floats and every window fell in line without touching call
+  sites. The Dofus oldUI theme layer stays dormant under Mono (DofusUi never loads).
+- Every archetype now has its OWN silhouette (tools/bake_onebit.py): hero, bow archer,
+  wizard cannon, mummy husk, hound, cobra spitter, spider mite, robed piper, ghost wraith,
+  skull ghoul, horned warden — and the Sexton is a hooded monk drawn at 2x in pure Danger
+  red. Single static frames ride the SpriteBank name chain; the old animation strips are
+  gone locally.
+- Batuhan's heart/star/shield replace the glossy vitals gems (HP bar under the heart, ink
+  numbers ON the white icons); his kit also seeded the button/frame language.
+- Obstacles: dim rubble sprites on grey blocks, bare ink trees; floors are two near-black
+  tones with a visible seam; buildings are ink-outlined huts; the lychgate a white arch.
+- QA'd screen by screen under Xvfb: placement, watched combat, spell-card hovers, city,
+  NPC shop, kit (points + RANK UP), graveyard, pack hover, fight report, sexton court.
+  Fixed en route: SPEED label under the timeline cards, AUTO-SPEND off the WIS row,
+  mono unit rollover plate, and "THE SEXTON" truncating to seven letters on its card.

@@ -368,7 +368,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private static Rectangle EquipTabRect(int i) => new(260 + i * 130, KitY + 18, 124, 22);
     private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, KitY + 76, 20, 18);
-    private static Rectangle AutoSpendRect => new(896, KitY + 76, 124, 18);
+    private static Rectangle AutoSpendRect => new(896, KitY + 44, 124, 18); // on the POINTS line, clear of the WIS row
 
     private CampaignUnit? EquipShownUnit =>
         _campaign.Crew.Count == 0 ? null : _campaign.Crew[Math.Clamp(_equipUnit, 0, _campaign.Crew.Count - 1)];
@@ -408,11 +408,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (a == null) return;
         var r = new Rectangle(236, KitY, 800, KitH);
         bool skin = _dof.Loaded;
-        if (skin) _dof.Window(_sb, r);
+        if (Mono.On) Mono.Frame(_sb, _prim, r, emphasis: true, fillAlpha: 0.97f);
+        else if (skin) _dof.Window(_sb, r);
         else { _prim.FillRect(_sb, r, new Color(22, 24, 30)); _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing); }
         var ink = skin ? WinInk : Palette.Text;
         var inkDim = skin ? WinInkDim : Palette.TextDim;
-        var accent = skin ? WinGold : new Color(240, 208, 120);
+        var accent = skin ? WinGold : (Mono.On ? Mono.Ink : new Color(240, 208, 120));
         var mp = new Point(_mouse.X, _mouse.Y);
 
         // Crew tabs: the kit screen manages every unit's points, gear stays avatar-only.
@@ -424,7 +425,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else
             {
                 _prim.FillRect(_sb, t, sel ? Palette.HudPanelLight : (t.Contains(mp) ? new Color(40, 42, 50) : Palette.HudPanel));
-                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : new Color(60, 64, 72));
+                _prim.StrokeRect(_sb, t, 1, sel ? Palette.CurrentRing : (Mono.On ? Mono.Faint : new Color(60, 64, 72)));
             }
             _font.DrawCentered(_sb, Trunc(_campaign.Crew[i].Name.ToUpperInvariant(), 12), t.Center.X, t.Y + 7, 1,
                 skin ? (sel ? Color.White : ink) : (sel ? Palette.Text : Palette.TextDim));
@@ -433,17 +434,20 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // Level + XP bar + banked points.
         int need = CampaignUnit.XpForNextLevel(a.Level);
         _font.Draw(_sb, $"LVL {a.Level}", 260, r.Y + 48, 2, ink);
-        if (skin)
+        if (Mono.On)
+            Mono.Bar(_sb, _prim, new Rectangle(340, r.Y + 48, 260, 13),
+                Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f), Mono.Dim);
+        else if (skin)
             _dof.Gauge(_sb, new Rectangle(340, r.Y + 48, 260, 13),
                 Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f), "gauge_blue");
         else
         {
             _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, 260, 10), Palette.HpBack);
-            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), new Color(120, 170, 230));
+            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
         }
         _font.Draw(_sb, $"{a.Xp} / {need} XP", 610, r.Y + 48, 1, inkDim);
         _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
-            820, r.Y + 48, 1, a.StatPoints > 0 ? accent : inkDim);
+            700, r.Y + 48, 1, a.StatPoints > 0 ? accent : inkDim);
 
         // The six characteristics with [+] spend buttons (1.29's manual allocation).
         for (int i = 0; i < StatRows.Length; i++)
@@ -465,21 +469,24 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (a.StatPoints > 0)
             {
                 var b = StatPlusRect(i);
-                if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
+                if (Mono.On) Mono.Button(_sb, _prim, b, hover: b.Contains(mp));
+                else if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
                 else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1, skin ? new Color(46, 26, 10) : Color.White);
+                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1,
+                    Mono.On ? Mono.ButtonInk(b.Contains(mp)) : skin ? new Color(46, 26, 10) : Color.White);
             }
         }
         if (a.StatPoints > 0)
         {
-            if (skin) _dof.Button(_sb, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
+            if (Mono.On) Mono.Button(_sb, _prim, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
+            else if (skin) _dof.Button(_sb, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
             else
             {
                 _prim.FillRect(_sb, AutoSpendRect, AutoSpendRect.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, AutoSpendRect, 1, new Color(96, 150, 96));
+                _prim.StrokeRect(_sb, AutoSpendRect, 1, (Mono.On ? Mono.Faint : new Color(96, 150, 96)));
             }
             _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1,
-                skin ? new Color(46, 26, 10) : Palette.Text);
+                Mono.On ? Mono.ButtonInk(AutoSpendRect.Contains(mp)) : skin ? new Color(46, 26, 10) : Palette.Text);
         }
 
         // SPELLS: the unit's kit — the class signature plus taught essences — with the 1.29
@@ -496,7 +503,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else
             {
                 _prim.FillRect(_sb, row, Palette.HudPanel);
-                _prim.StrokeRect(_sb, row, 1, new Color(60, 64, 72));
+                _prim.StrokeRect(_sb, row, 1, (Mono.On ? Mono.Faint : new Color(60, 64, 72)));
             }
             var sp = TitheContent.UnitSkill(a, skillKeys[i]);
             int rank = a.RankOf(skillKeys[i]), maxR = TitheContent.MaxRank(skillKeys[i]);
@@ -513,9 +520,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (a.SpellPoints > 0 && rank < maxR)
             {
                 var b = RankUpRect(i);
-                if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
+                if (Mono.On) Mono.Button(_sb, _prim, b, hover: b.Contains(mp));
+                else if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
                 else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1, skin ? new Color(46, 26, 10) : Color.White);
+                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1,
+                    Mono.On ? Mono.ButtonInk(b.Contains(mp)) : skin ? new Color(46, 26, 10) : Color.White);
             }
             else if (rank >= maxR)
                 _font.Draw(_sb, "MAX", row.Right - 36, row.Y + 9, 1, inkDim);
@@ -539,7 +548,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else
             {
                 _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, b, 1, new Color(96, 150, 96));
+                _prim.StrokeRect(_sb, b, 1, (Mono.On ? Mono.Faint : new Color(96, 150, 96)));
             }
             string id = a.Equipment[i];
             int ix = b.X + 8;
@@ -557,7 +566,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else
             {
                 _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, b, 1, new Color(150, 140, 96));
+                _prim.StrokeRect(_sb, b, 1, (Mono.On ? Mono.Faint : new Color(150, 140, 96)));
             }
             string id = _campaign.Stash[i];
             int ix = b.X + 8;
@@ -581,7 +590,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             $"{s.MaxHp} HP   {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}   AGI {s.Agility}   WIS {s.Wisdom}   POW {s.Power}"
             + (s.ApBonus != 0 ? $"   +{s.ApBonus} AP" : "") + (s.MpBonus != 0 ? $"   +{s.MpBonus} MP" : "")
             + $"   ADV {set}/7",
-            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? WinGold : new Color(240, 208, 120));
+            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? WinGold : (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1,
             _dof.Loaded ? WinInkDim : Palette.TextDim);
     }
@@ -1263,7 +1272,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawFloor();
         if (_placing) DrawPlacementCells(); else DrawFloorOverlays();
         if (_timelineHover is { IsAlive: true } tlf)   // timeline card hover -> ring its cell
-            _prim.HaloAt(_sb, _proj.CellCenter(tlf.Pos) + new Vector2(0, 2), new Color(240, 220, 120));
+            _prim.HaloAt(_sb, _proj.CellCenter(tlf.Pos) + new Vector2(0, 2),
+                Mono.On ? Mono.Ink : new Color(240, 220, 120));
         DrawEntities();                        // rocks + fighters, one depth-sorted pass
         _anim.DrawEffects(_sb, _prim, _font, _sprites);  // corpses, impact flashes, floating numbers
         _sb.End();
@@ -1308,12 +1318,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var center = _proj.CellCenter(c);
         var (light, dark) = TacticalTones(fam);
         _prim.DiamondAt(_sb, center, (c.X + c.Y) % 2 == 0 ? light : dark);
-        DrawTileOutline(center, new Color(0, 0, 0, 30));
+        DrawTileOutline(center, Mono.On ? Mono.Seam * 0.8f : new Color(0, 0, 0, 30));
     }
 
     /// <summary>The tactical floor checker per family, sampled from the 1.29 references
     /// (Astrub ~(155,143,105)/(141,131,96)); the yard leans mossy, the crypt cold.</summary>
-    private static (Color light, Color dark) TacticalTones(PixFam fam) => fam switch
+    private static (Color light, Color dark) TacticalTones(PixFam fam) => Mono.On
+        ? (Mono.Floor, Mono.FloorAlt)
+        : fam switch
     {
         PixFam.City => (new Color(155, 143, 105), new Color(141, 131, 96)),
         PixFam.Yard => (new Color(133, 133, 96), new Color(120, 121, 88)),
@@ -1367,16 +1379,17 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private static readonly Color UiInkOnGreen = new(26, 54, 32);
 
     /// <summary>True when a UI skin is available — window text follows the skin's body tone.</summary>
-    private bool UiSkinned => _dof.Loaded || _ui.Loaded;
+    private bool UiSkinned => Mono.On || _dof.Loaded || _ui.Loaded;
 
     // The oldUI theme's windows are DARK (white ink, silver frames); the old cream pixel skin
     // is light (dark ink). These pick the right ink for whatever body UiPanelBg just drew.
-    private Color WinInk => _dof.Loaded ? new Color(232, 230, 224) : UiInk;
-    private Color WinInkDim => _dof.Loaded ? new Color(164, 158, 148) : UiInkDim;
-    private Color WinGold => _dof.Loaded ? new Color(240, 202, 96) : new Color(146, 96, 22);
+    private Color WinInk => Mono.On ? Mono.Ink : _dof.Loaded ? new Color(232, 230, 224) : UiInk;
+    private Color WinInkDim => Mono.On ? Mono.Dim : _dof.Loaded ? new Color(164, 158, 148) : UiInkDim;
+    private Color WinGold => Mono.On ? Mono.Ink : _dof.Loaded ? new Color(240, 202, 96) : new Color(146, 96, 22);
 
     private void UiPanelBg(Rectangle r)
     {
+        if (Mono.On) { Mono.Frame(_sb, _prim, r, emphasis: true, fillAlpha: 0.97f); return; }
         if (_dof.Loaded) { _dof.Window(_sb, r); return; }              // the 1.29 parchment block
         if (_ui.Panel != null) { _ui.Panel.Draw(_sb, r, Color.White); return; }
         _prim.FillRect(_sb, r, new Color(22, 24, 30));
@@ -1385,6 +1398,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void UiButtonBg(Rectangle r, bool down, Color? tint = null)
     {
+        if (Mono.On) // 1-bit button: box + border; "down"/hover inverts to solid ink
+        { Mono.Button(_sb, _prim, r, hover: down, disabled: tint.HasValue && tint != Color.White); return; }
         if (_dof.Loaded) // the orange pill; a non-white tint means "greyed out" -> disabled art
         { _dof.Button(_sb, r, pressed: down, disabled: tint.HasValue && tint != Color.White); return; }
         var slice = down ? _ui.ButtonDown ?? _ui.Button : _ui.Button;
@@ -1436,7 +1451,25 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     /// the pack's humans, the dead wear the orc and slime in rust/bone tints — a level of
     /// abstraction the watched fight reads instantly. Scale multiplies the base 2× density.
     /// </summary>
-    private static (string sprite, Color tint, int scale) PixActor(string archetype) => archetype switch
+    private static (string sprite, Color tint, int scale) PixActor(string archetype) => Mono.On
+        // ONE-BIT cast (Hexany kit singles): every archetype gets its own ink silhouette.
+        ? archetype switch
+        {
+            "archer" => ("archer", Color.White, 1),
+            "bulwark" => ("hero", Color.White, 1),
+            "cannon" => ("cannon", Color.White, 1),
+            "barrow_husk" => ("husk", Color.White, 1),
+            "gravehound" => ("hound", Color.White, 1),
+            "marrow_spitter" => ("spitter", Color.White, 1),
+            "grave_mite" => ("mite", Color.White, 1),
+            "bone_piper" => ("piper", Color.White, 1),
+            "tomb_wraith" => ("wraith", Color.White, 1),
+            "grave_ghoul" => ("ghoul", Color.White, 1),
+            "crypt_warden" => ("warden", Color.White, 1),
+            "sexton" => ("sexton", Color.White, 2),
+            _ => ("hero", Color.White, 1),
+        }
+        : archetype switch
     {
         // archer = the pack's bowman (Soldier's Attack03 IS a bow shot); bulwark = the
         // sword-and-shield hero (a tank's silhouette); cannon = the hero re-forged in
@@ -1515,12 +1548,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawPlacementCells()
     {
-        // 1.29 shows both teams' ground: red for your side, blue under the enemy.
+        // 1.29 shows both teams' ground: your side vs the enemy's (mono: ink vs danger).
         foreach (var cell in _map.PlayerStartCells)
             if (_engine.FighterAt(cell) is null)
-                _prim.DiamondAt(_sb, _proj.CellCenter(cell), new Color(196, 44, 22) * 0.55f);
+                _prim.DiamondAt(_sb, _proj.CellCenter(cell),
+                    Mono.On ? Mono.Ink * 0.30f : new Color(196, 44, 22) * 0.55f);
         foreach (var f in _engine.Fighters.Where(x => x.IsAlive && x.Team != Team.Player))
-            _prim.DiamondAt(_sb, _proj.CellCenter(f.Pos), new Color(96, 104, 190) * 0.5f);
+            _prim.DiamondAt(_sb, _proj.CellCenter(f.Pos),
+                Mono.On ? Mono.Danger * 0.40f : new Color(96, 104, 190) * 0.5f);
 
         if (_engine.Field.InBounds(_hover) && _hover.Y >= 0)
             DrawTileOutline(_proj.CellCenter(_hover), Color.White);
@@ -1551,13 +1586,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         bool hover = r.Contains(new Point(_mouse.X, _mouse.Y));
         var pill = new Rectangle(r.X, r.Y + 20, r.Width, 56);
         _ew.Pill(_sb, pill, gold: true, pressed: hover);
-        _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3, Color.White);
+        _font.DrawCentered(_sb, "FIGHT!", pill.Center.X, pill.Y + 16, 3,
+            Mono.On ? Mono.ButtonInk(hover) : Color.White);
         _font.DrawCentered(_sb, "(SPACE)", r.Center.X, pill.Bottom + 10, 1, Ew.InkSoft);
 
         // The 1.29 ready countdown: the fight starts itself when the clock runs out.
         int left = (int)MathF.Ceiling(Math.Max(0f, _placeClock));
         _font.DrawCentered(_sb, $"{left}", pill.Center.X, pill.Y - 26, 3,
-            left <= 10 ? new Color(226, 96, 76) : Ew.Gold);
+            left <= 10 ? (Mono.On ? Mono.Danger : new Color(226, 96, 76)) : Ew.Gold);
         DrawHoverUnitInfo();
     }
 
@@ -1608,6 +1644,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     /// </summary>
     private void DrawObstacleKind(Vector2 center, TileKind kind)
     {
+        if (Mono.On) { DrawObstacleMono(center, kind); return; }
         var (light, _) = TacticalTones(PixFamNow());
         var top = kind == TileKind.Tree
             ? new Color(light.R * 52 / 100, light.G * 62 / 100, light.B * 46 / 100)
@@ -1642,6 +1679,48 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -6), 7f, new Color(18, 18, 20));
             _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -6), 6f, dark);
             _prim.DiscAt(_sb, blockTop + new Vector2(3 - (h >> 4 & 3), -9), 2.5f, lit);
+        }
+    }
+
+    /// <summary>
+    /// A 1-bit obstacle: a Hexany kit sprite when baked (onebit_tree / onebit_rock singles),
+    /// else a plain grey raised block with an ink silhouette on top — trees a bare trunk and
+    /// branch fork, rocks two hollow lumps. Same footprint, no colour.
+    /// </summary>
+    private void DrawObstacleMono(Vector2 center, TileKind kind)
+    {
+        var top = new Color(34, 34, 33);
+        var faceL = new Color(22, 22, 21);
+        var faceR = new Color(27, 27, 26);
+        _prim.BlockAt(_sb, center, top, faceL, faceR);
+
+        var blockTop = center + new Vector2(0, -Primitives.BlockH);
+        int h = (int)center.X * 73856093 ^ (int)center.Y * 19349663;
+        var sheet = _sprites.GetSheet(kind == TileKind.Tree ? "onebit_tree" : "onebit_rock", "idle", "se");
+        if (sheet != null)
+        {
+            // Dim, not ink — props must never outshine the cast.
+            float hpx = sheet.FrameHeight * ChamberSet.PxScale * 0.75f;
+            SpriteDraw.Feet(_sb, sheet, blockTop + new Vector2(0, 2), Mono.Dim, hpx, 0);
+            return;
+        }
+        if (kind == TileKind.Tree)
+        {
+            // Bare ink tree: trunk + two branch strokes + a sparse crown of dots.
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X - 1, (int)blockTop.Y - 26, 3, 26), Mono.Ink);
+            _prim.Line(_sb, blockTop + new Vector2(0, -16), blockTop + new Vector2(-8, -25), 2f, Mono.Ink);
+            _prim.Line(_sb, blockTop + new Vector2(0, -20), blockTop + new Vector2(8, -30), 2f, Mono.Ink);
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X - 9 + (h & 3), (int)blockTop.Y - 33, 2, 2), Mono.Ink);
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X + 5 - (h >> 2 & 3), (int)blockTop.Y - 35, 2, 2), Mono.Ink);
+            _prim.FillRect(_sb, new Rectangle((int)blockTop.X - 2, (int)blockTop.Y - 38 + (h >> 4 & 3), 2, 2), Mono.Ink);
+        }
+        else
+        {
+            // Hollow rock lumps: dark discs ringed in ink.
+            _prim.DiscAt(_sb, blockTop + new Vector2(-5 + (h & 3), -4), 6.5f, Mono.Ink);
+            _prim.DiscAt(_sb, blockTop + new Vector2(-5 + (h & 3), -4), 5f, new Color(24, 24, 23));
+            _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -7), 5f, Mono.Ink);
+            _prim.DiscAt(_sb, blockTop + new Vector2(5 - (h >> 2 & 3), -7), 3.5f, new Color(30, 30, 29));
         }
     }
 
@@ -1718,10 +1797,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (Pix)
         {
             if (_placing && f == _selCrew)                  // highlight the crew member being placed
-                _prim.DiamondAt(_sb, center, new Color(245, 224, 120) * 0.35f);
+                _prim.DiamondAt(_sb, center, (Mono.On ? Mono.Ink : new Color(245, 224, 120)) * 0.35f);
             // 1.29 rule: no UI above heads. The only marker is the team halo at the feet —
             // red for the crew, blue for the dead — brighter while it is this unit's turn.
-            var halo = crew ? new Color(214, 40, 22) : new Color(64, 92, 208);
+            var halo = Mono.On ? (crew ? Mono.Ink : Mono.Danger)
+                : crew ? new Color(214, 40, 22) : new Color(64, 92, 208);
             bool active = !_placing && _engine.Outcome == FightOutcome.Ongoing && f == _engine.Current;
             _prim.HaloAt(_sb, center + new Vector2(0, 2), halo * (active ? 1f : 0.62f));
             var pose = _anim.PoseFor(f);
@@ -1733,7 +1813,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _ => "idle",
             };
             var (spriteName, stint, scl) = PixActor(f.Archetype);
-            if (flash > 0f) stint = Color.Lerp(stint, new Color(255, 90, 90), flash);
+            if (Mono.On) stint = f.Archetype == "sexton" ? Mono.Danger : Mono.Ink;
+            if (flash > 0f) stint = Color.Lerp(stint, Mono.On ? Mono.Danger : new Color(255, 90, 90), flash);
             var sheet = _sprites.GetSheet(spriteName, state, pose.Dir.ToKey());
             var feet = center + new Vector2(0, TileH / 4f);
             if (sheet != null)
@@ -1771,7 +1852,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawStatusPips(f, center.X, topY - 2);
     }
 
-    private static Color TitheTokenColor(string archetype) => archetype switch
+    private static Color TitheTokenColor(string archetype) => Mono.On
+        ? archetype switch
+        {
+            "archer" or "bulwark" or "cannon" => Mono.Ink,
+            "sexton" => Mono.Danger,
+            _ => Mono.Dim,
+        }
+        : archetype switch
     {
         "archer" => new Color(110, 194, 112),
         "bulwark" => new Color(108, 150, 224),
@@ -1808,7 +1896,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         }
     }
 
-    private static Color StatusColor(StatusKind k) => k switch
+    private static Color StatusColor(StatusKind k) => Mono.On
+        ? k == StatusKind.Poison ? Mono.Danger : Mono.Ink
+        : k switch
     {
         StatusKind.DamageBuff => new Color(240, 160, 60),
         StatusKind.Shield => new Color(90, 180, 240),
@@ -1824,6 +1914,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         return pose.State == AnimState.Hurt
             ? Math.Min((int)(pose.Clock * 12f), sheet.FrameCount - 1)
             : (int)(pose.Clock * AnimFps) % sheet.FrameCount;
+    }
+
+    /// <summary>Draw a single-frame UI sprite centred on a point; false when it isn't baked.</summary>
+    private bool DrawUiSprite(string name, Vector2 center, float targetH, Color tint)
+    {
+        var sheet = _sprites.GetSheet(name, "idle", "se");
+        if (sheet == null) return false;
+        SpriteDraw.Feet(_sb, sheet, center + new Vector2(0, targetH / 2f), tint, targetH, 0);
+        return true;
     }
 
     /// <summary>Draw a sprite anchored at its feet (bottom-centre) on the cell centre.</summary>
@@ -1843,7 +1942,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle(x, (int)y, barW, 5), Palette.HpBack);
         int fill = (int)MathF.Round(barW * Math.Clamp(dhp / f.MaxHp, 0f, 1f));
         _prim.FillRect(_sb, new Rectangle(x, (int)y, fill, 5),
-            f.Team == Team.Player ? Palette.HpFill : new Color(214, 96, 88));
+            f.Team == Team.Player ? Palette.HpFill : Mono.On ? Mono.Danger : new Color(214, 96, 88));
         _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)centerX, (int)y - 10, 1, Palette.Text);
     }
 
@@ -1934,16 +2033,22 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var lines = new List<(string text, Color color)>
         {
             ($"{f.Name.ToUpperInvariant()}  LVL {f.Level}", Palette.Text),
-            ($"{f.Hp} / {f.MaxHp} HP", new Color(150, 214, 130)),
-            ($"{f.BaseAp} AP   {f.BaseMp} MP", new Color(214, 196, 120)),
+            ($"{f.Hp} / {f.MaxHp} HP", Mono.On ? Mono.Ink : new Color(150, 214, 130)),
+            ($"{f.BaseAp} AP   {f.BaseMp} MP", Mono.On ? Mono.Dim : new Color(214, 196, 120)),
         };
         foreach (var st in f.Statuses.Where(st => st.Kind != StatusKind.None))
-            lines.Add((StatusLine(st), new Color(196, 150, 214)));
+            lines.Add((StatusLine(st), Mono.On ? Mono.Dim : new Color(196, 150, 214)));
 
         int w = lines.Max(l => _font.Measure(l.text, 1)) + 16;
         int h = 8 + lines.Count * 13;
         var r = new Rectangle(Math.Min(x, ScreenW - w - 4), Math.Max(4, Math.Min(y, HudTop - h - 4)), w, h);
-        if (_dof.Loaded)
+        if (Mono.On)
+        {
+            // 1-bit rollover: ink frame for the crew, the ONE red accent for the dead.
+            _prim.FillRect(_sb, r, Mono.Panel * 0.97f);
+            _prim.StrokeRect(_sb, r, 1, f.Team == Team.Player ? Mono.Ink : Mono.Danger);
+        }
+        else if (_dof.Loaded)
         {
             _dof.Panel(_sb, r);
             _prim.StrokeRect(_sb, r, 1,
@@ -2006,8 +2111,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _font.Draw(_sb, _loop ? "1/2/3 = SPEED   ·   M = SOUND" : "1/2/3 = SPEED   ·   R = NEW FIGHT   ·   B = SEXTON   ·   M = SOUND",
             16, HudTop - 22, 1, Palette.TextDim);
 
-        // Playback speed, top-centre where the piloted mode shows the turn clock.
-        _font.DrawCentered(_sb, $"> SPEED {_speed:0}X", ScreenW / 2, 16, 2, Palette.Text);
+        // Playback speed, top-left under the watch line — the timeline owns the top-centre.
+        _font.Draw(_sb, $"> SPEED {_speed:0}X", 16, 52, 2, Palette.Text);
 
         DrawTurnTimeline();
 
@@ -2054,16 +2159,25 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         var cur = _engine.Current;
 
-        // Vitals cluster, Dofus-style bottom centre: heart = HP, star = AP, diamond = MP.
+        // Vitals cluster, Dofus-style bottom centre: heart = HP, star = AP, shield = MP.
+        // Under the 1-bit reset the Batuhan kit icons replace the glossy gems (fallback: gems in ink).
         var heartC = new Vector2(ScreenW / 2f, HudTop + 82);
-        _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 104, Ew.Hp, Ew.HpDeep,
-            cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp);
-        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, Color.White);
-        _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1, Ew.Ink * 0.85f);
-        _ew.Badge(_sb, EwChrome.Gem.Star, new Vector2(ScreenW / 2f - 92, HudTop + 96), 62, Ew.Ap, Ew.ApDeep);
-        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, Color.White);
-        _ew.Badge(_sb, EwChrome.Gem.Diamond, new Vector2(ScreenW / 2f + 92, HudTop + 96), 58, Ew.Mp, Ew.MpDeep);
-        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, Color.White);
+        var apC = new Vector2(ScreenW / 2f - 92, HudTop + 96);
+        var mpC = new Vector2(ScreenW / 2f + 92, HudTop + 96);
+        float hpFrac = cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp;
+        if (!(Mono.On && DrawUiSprite("onebit_heart", heartC, 66, Mono.Ink)))
+            _ew.Badge(_sb, EwChrome.Gem.Heart, heartC, 104, Ew.Hp, Ew.HpDeep, hpFrac);
+        var onIcon = Mono.On ? Mono.Panel : Color.White;   // ink numbers sit ON solid white icons
+        _font.DrawCentered(_sb, cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 14, 2, onIcon);
+        _font.DrawCentered(_sb, cur.MaxHp.ToString(), (int)heartC.X, (int)heartC.Y + 6, 1,
+            Mono.On ? Mono.Panel : Ew.Ink * 0.85f);
+        if (Mono.On) Mono.Bar(_sb, _prim, new Rectangle((int)heartC.X - 52, HudTop + 122, 104, 6), hpFrac);
+        if (!(Mono.On && DrawUiSprite("onebit_star", apC, 46, Mono.Ink)))
+            _ew.Badge(_sb, EwChrome.Gem.Star, apC, 62, Ew.Ap, Ew.ApDeep);
+        _font.DrawCentered(_sb, cur.CurrentAp.ToString(), ScreenW / 2 - 92, HudTop + 90, 2, onIcon);
+        if (!(Mono.On && DrawUiSprite("onebit_shield", mpC, 44, Mono.Ink)))
+            _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 58, Ew.Mp, Ew.MpDeep);
+        _font.DrawCentered(_sb, cur.CurrentMp.ToString(), ScreenW / 2 + 92, HudTop + 90, 2, onIcon);
         _font.DrawCentered(_sb, cur.Name.ToUpperInvariant(), ScreenW / 2, HudTop + 12, 1,
             cur.Team == Team.Player ? Ew.AccentBright : Ew.Danger);
 
@@ -2257,7 +2371,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _prim.DiscAt(_sb, mid, 11, new Color(18, 18, 22));
             _prim.DiscAt(_sb, mid, 9, token);
 
-            _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 7), r.X + 32, r.Y + 9, 1,
+            // "The Sexton" must never truncate to something unfortunate — drop the article first.
+            string cardName = f.Name.ToUpperInvariant();
+            if (cardName.StartsWith("THE ")) cardName = cardName[4..];
+            _font.Draw(_sb, Trunc(cardName, 7), r.X + 32, r.Y + 9, 1,
                 shownAlive ? Ew.Ink : Ew.InkMuted);
             _font.Draw(_sb, shownAlive ? $"{(int)MathF.Max(1, _anim.DisplayHp(f))} HP" : "DEAD",
                 r.X + 32, r.Y + 25, 1,
@@ -2289,7 +2406,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         Color fill = !playerTurn ? new Color(70, 74, 84)
             : f > 0.5f ? Palette.HpFill
             : f > 0.25f ? new Color(230, 200, 70)
-            : new Color(224, 80, 64);
+            : (Mono.On ? Mono.Danger : new Color(224, 80, 64));
         _prim.FillRect(_sb, new Rectangle(bx, by, (int)(barW * f), barH), fill);
         _prim.StrokeRect(_sb, new Rectangle(bx, by, barW, barH), 1, new Color(80, 86, 98));
 
@@ -2445,7 +2562,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _sb.Begin(samplerState: SamplerState.PointClamp);
         _font.Draw(_sb, "CLICK A BUILDING TO TRADE   ·   E: STASH & KIT   ·   CLICK THE LYCHGATE TO DIVE", 16, 44, 1, Palette.TextDim);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
-            _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, new Color(240, 208, 120));
+            _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignHud();
         if (_openNpc >= 0 && !_equipOpen) DrawNpcPanel(_openNpc);
         if (_equipOpen) DrawEquipPanel();
@@ -2456,29 +2573,31 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawBuilding(CellCoord c, Color col, string glyph, string label, string? pixProp = null)
     {
         var center = _proj.CellCenter(c);
-        var outline = new Color(16, 16, 20);
+        var outline = Mono.On ? Mono.Ink : new Color(16, 16, 20);
+        if (Mono.On) col = new Color(22, 22, 21);   // 1-bit: ink-outlined dark hut, glyph carries the identity
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 14, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 34, 28, 36), outline);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 32), col);
-        _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 7), col * 1.25f);
+        _prim.FillRect(_sb, new Rectangle((int)center.X - 12, (int)center.Y - 32, 24, 7), Mono.On ? new Color(34, 34, 33) : col * 1.25f);
         _font.DrawCentered(_sb, glyph, (int)center.X, (int)center.Y - 22, 2, Color.White);
         _font.DrawCentered(_sb, label, (int)center.X, (int)center.Y - 48, 1, Palette.Text);
         if (c == _hover)
-            _font.DrawCentered(_sb, "CLICK TO TRADE", (int)center.X, (int)center.Y - 60, 1, new Color(232, 202, 92));
+            _font.DrawCentered(_sb, "CLICK TO TRADE", (int)center.X, (int)center.Y - 60, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawLychgate(CellCoord c)
     {
         var center = _proj.CellCenter(c);
-        var col = new Color(120, 120, 140);
+        var col = Mono.On ? Mono.Ink : new Color(120, 120, 140);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 8, 42), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X + 10, (int)center.Y - 42, 8, 42), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 20, (int)center.Y - 48, 40, 8), col);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 10, (int)center.Y - 40, 20, 40), new Color(8, 8, 12));
-        _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 62, 1, new Color(200, 200, 220));
+        _font.DrawCentered(_sb, "LYCHGATE", (int)center.X, (int)center.Y - 62, 1,
+            Mono.On ? Mono.Ink : new Color(200, 200, 220));
         if (c == _hover)
-            _font.DrawCentered(_sb, "CLICK TO DIVE", (int)center.X, (int)center.Y - 74, 1, new Color(232, 202, 92));
+            _font.DrawCentered(_sb, "CLICK TO DIVE", (int)center.X, (int)center.Y - 74, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawNpcPanel(int npc)
@@ -2497,12 +2616,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             {
                 UiButtonBg(b, hover, acts[i].ok ? Color.White : new Color(148, 148, 144));
                 _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1,
-                    acts[i].ok ? (_dof.Loaded ? new Color(46, 26, 10) : UiInkOnGreen) : WinInkDim);
+                    !acts[i].ok ? WinInkDim
+                    : Mono.On ? Mono.ButtonInk(hover)
+                    : _dof.Loaded ? new Color(46, 26, 10) : UiInkOnGreen);
             }
             else
             {
                 _prim.FillRect(_sb, b, acts[i].ok ? (hover ? Palette.HudPanelLight : Palette.HudPanel) : new Color(30, 30, 34));
-                _prim.StrokeRect(_sb, b, 1, acts[i].ok ? new Color(96, 150, 96) : new Color(60, 60, 66));
+                _prim.StrokeRect(_sb, b, 1, acts[i].ok ? (Mono.On ? Mono.Faint : new Color(96, 150, 96)) : new Color(60, 60, 66));
                 _font.Draw(_sb, acts[i].label, b.X + 14, b.Y + 16, 1, acts[i].ok ? Palette.Text : Palette.TextDim);
             }
         }
@@ -2512,7 +2633,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void DrawGameOver()
     {
         _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(0, 0, 0, 190));
-        _font.DrawCentered(_sb, "THE AVATAR HAS FALLEN", ScreenW / 2, 250, 5, Palette.HeroColor);
+        _font.DrawCentered(_sb, "THE AVATAR HAS FALLEN", ScreenW / 2, 250, 5,
+            Mono.On ? Mono.Danger : Palette.HeroColor);
         _font.DrawCentered(_sb, "the labyrinth keeps what it takes", ScreenW / 2, 320, 2, Palette.TextDim);
         _font.DrawCentered(_sb, "PRESS R TO BEGIN A NEW CAMPAIGN", ScreenW / 2, 400, 2, Palette.Text);
     }
@@ -2526,7 +2648,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         // Path preview + hover highlight.
         foreach (var c in _partyPath)
-            _prim.DiscAt(_sb, _proj.CellCenter(c), 4, new Color(232, 222, 140, 150));
+            _prim.DiscAt(_sb, _proj.CellCenter(c), 4,
+                Mono.On ? Mono.Ink * 0.55f : new Color(232, 222, 140, 150));
         if (_graveField != null && _graveField.InBounds(_hover))
         {
             bool interactive = _hover == _cryptCell
@@ -2558,7 +2681,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawCampaignHud();
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
-            _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
+            _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 96)));
         if (_equipOpen) DrawEquipPanel();
         _sb.End();
     }
@@ -2570,7 +2693,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             if (c == CellCoord.Invalid) return;
             var center = _proj.CellCenter(c);
-            var glow = deeper ? new Color(204, 150, 96) : new Color(140, 170, 210);
+            var glow = Mono.On ? (deeper ? Mono.Ink : Mono.Dim)
+                : deeper ? new Color(204, 150, 96) : new Color(140, 170, 210);
             if (c == _hover) _prim.DiamondAt(_sb, center, glow * 0.4f);
             _prim.DiamondAt(_sb, center, glow * (0.22f + 0.1f * MathF.Sin(_time * 3f)));
             _prim.FillRect(_sb, new Rectangle((int)center.X - 14, (int)center.Y - 36, 28, 36), new Color(14, 14, 18));
@@ -2589,9 +2713,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var center = _proj.CellCenter(_survivorCell);
         if (Pix)
         {
-            _prim.DiscAt(_sb, center + new Vector2(0, 7), 11, new Color(120, 190, 150) * 0.55f);
-            DrawPixActorIdle("hero", center, new Color(196, 214, 200));
-            _font.DrawCentered(_sb, "?", (int)center.X + 14, (int)center.Y - 44, 2, new Color(232, 220, 140));
+            _prim.DiscAt(_sb, center + new Vector2(0, 7), 11,
+                (Mono.On ? Mono.Ink : new Color(120, 190, 150)) * 0.55f);
+            DrawPixActorIdle("hero", center, Mono.On ? Mono.Ink : new Color(196, 214, 200));
+            _font.DrawCentered(_sb, "?", (int)center.X + 14, (int)center.Y - 44, 2,
+                Mono.On ? Mono.Ink : new Color(232, 220, 140));
         }
         else
         {
@@ -2601,7 +2727,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
         }
         _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
-            (int)center.X, (int)center.Y - 30, 1, new Color(150, 210, 170));
+            (int)center.X, (int)center.Y - 30, 1, Mono.On ? Mono.Ink : new Color(150, 210, 170));
     }
 
     private void DrawCrypt()
@@ -2609,18 +2735,21 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_cryptCell == CellCoord.Invalid) return; // the Crypt waits in the DEEP yard
         var center = _proj.CellCenter(_cryptCell);
         bool locked = (_campaign.Avatar?.Level ?? 1) < CryptLevel;
-        var col = _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
+        var col = Mono.On
+            ? _cryptCleared ? Mono.Faint : locked ? Mono.Dim : Mono.Danger
+            : _cryptCleared ? new Color(70, 70, 80) : locked ? new Color(96, 84, 108) : new Color(158, 96, 178);
         _prim.DiscAt(_sb, center + new Vector2(0, 2), 18, Palette.Shadow);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 18, (int)center.Y - 42, 36, 44), new Color(14, 14, 18));
         _prim.FillRect(_sb, new Rectangle((int)center.X - 15, (int)center.Y - 38, 30, 38), col * 0.55f);
         _prim.FillRect(_sb, new Rectangle((int)center.X - 9, (int)center.Y - 32, 18, 32), new Color(6, 6, 10));
         _font.DrawCentered(_sb, "THE CRYPT", (int)center.X, (int)center.Y - 56, 1,
-            _cryptCleared ? Palette.TextDim : new Color(204, 172, 224));
+            _cryptCleared ? Palette.TextDim : Mono.On ? Mono.Ink : new Color(204, 172, 224));
         string sub = _cryptCleared ? "cleared" : locked ? $"LVL {CryptLevel}+" : "OPEN — THE SEXTON";
         _font.DrawCentered(_sb, sub, (int)center.X, (int)center.Y - 44, 1,
-            locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
+            Mono.On ? (locked ? Mono.Dim : Mono.Danger)
+            : locked ? new Color(222, 122, 92) : new Color(200, 160, 120));
         if (_cryptCell == _hover && !locked && !_cryptCleared)
-            _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - 68, 1, new Color(232, 202, 92));
+            _font.DrawCentered(_sb, "CLICK TO DESCEND", (int)center.X, (int)center.Y - 68, 1, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
     }
 
     private void DrawPartyToken(Vector2 center)
@@ -2661,7 +2790,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             // A huddle of the dead in the pack leader's skin, greyed when out of reach.
             var (sprite, tint, _) = PixActor(p.Def.Comp[0]);
-            var mobTint = afford ? tint : new Color(120, 120, 128);
+            if (Mono.On) tint = Mono.Ink;
+            var mobTint = afford ? tint : Mono.On ? Mono.Dim : new Color(120, 120, 128);
             int n = Math.Min(size, 3);
             for (int i = 0; i < n; i++)
                 DrawPixActorIdle(sprite, center + new Vector2((i - (n - 1) / 2f) * 16, (i % 2) * 6 - 3), mobTint);
@@ -2688,7 +2818,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             int w = groups.Max(t => _font.Measure(t, 1)) + 16;
             var box = new Rectangle((int)center.X - w / 2, (int)center.Y - 46 - groups.Count * 13,
                 w, 8 + groups.Count * 13);
-            if (_dof.Loaded) _dof.Panel(_sb, box);
+            if (Mono.On) Mono.Frame(_sb, _prim, box);
+            else if (_dof.Loaded) _dof.Panel(_sb, box);
             else
             {
                 _prim.FillRect(_sb, box, new Color(12, 13, 17, 235));
@@ -2696,11 +2827,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             }
             for (int i = 0; i < groups.Count; i++)
                 _font.Draw(_sb, groups[i], box.X + 8, box.Y + 5 + i * 13, 1,
-                    i < p.Def.Comp.GroupBy(a => a).Count() ? Palette.Text : new Color(214, 150, 96));
+                    i < p.Def.Comp.GroupBy(a => a).Count() ? Palette.Text
+                    : Mono.On ? Mono.Danger : new Color(214, 150, 96));
         }
         // A hunting pack with the crew in its aggro radius is actively closing — flag it.
         if (p.Def.Hunts && c.DistanceTo(_partyCell) <= HuntAggroRadius)
-            _font.DrawCentered(_sb, "!", (int)center.X + 20, (int)center.Y - 44, 3, new Color(224, 80, 64));
+            _font.DrawCentered(_sb, "!", (int)center.X + 20, (int)center.Y - 44, 3, (Mono.On ? Mono.Danger : new Color(224, 80, 64)));
     }
 
     private void DrawDiveClock(int cx, int y, int w, int h)
@@ -2708,7 +2840,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_dive == null) return;
         float frac = Math.Clamp(_dive.Clock / Math.Max(1, TitheContent.Graveyard.ClockSeconds), 0f, 1f);
         int bx = cx - w / 2;
-        if (_dof.Loaded)
+        if (Mono.On)
+            Mono.Bar(_sb, _prim, new Rectangle(bx, y, w, h), frac,
+                frac > 0.25f ? Mono.Ink : Mono.Danger);
+        else if (_dof.Loaded)
             _dof.Gauge(_sb, new Rectangle(bx, y, w, h), frac, "gauge_timer");
         else
         {
@@ -2730,13 +2865,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         if (_dof.Loaded) _dof.Slice(_sb, "float_bg", new Rectangle(-8, HudTop, ScreenW + 16, ScreenH - HudTop + 14));
         else _prim.FillRect(_sb, new Rectangle(0, HudTop, ScreenW, ScreenH - HudTop), Palette.HudPanel);
-        _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, new Color(232, 202, 92));
+        _font.Draw(_sb, $"GOLD {_campaign.Gold}", 16, HudTop + 14, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 92)));
         _font.Draw(_sb, $"BREAD {_campaign.Bread}    DRAUGHTS {_campaign.Draughts}    ESSENCES {_campaign.Essences.Count}",
             16, HudTop + 42, 1, Palette.TextDim);
         int per = TitheContent.Prices.TitheEveryNDives;
         string tithe = _campaign.TitheDue ? $"TITHE DUE: {_campaign.TitheAmount}g"
             : $"tithe in {per - (_campaign.Dives % per)} dive(s)";
-        _font.Draw(_sb, tithe, 16, HudTop + 58, 1, _campaign.TitheDue ? new Color(226, 122, 82) : Palette.TextDim);
+        _font.Draw(_sb, tithe, 16, HudTop + 58, 1,
+            _campaign.TitheDue ? (Mono.On ? Mono.Danger : new Color(226, 122, 82)) : Palette.TextDim);
 
         int x = 560, y = HudTop + 12;
         _font.Draw(_sb, "CREW", x, y, 1, Palette.TextDim);
@@ -2750,12 +2886,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             int xpNeed = CampaignUnit.XpForNextLevel(u.Level);
             _prim.FillRect(_sb, new Rectangle(x + 24, y + 24, 120, 4), new Color(38, 40, 48));
             _prim.FillRect(_sb, new Rectangle(x + 24, y + 24,
-                (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), new Color(120, 170, 230));
+                (int)(120 * Math.Clamp(xpNeed <= 0 ? 1f : (float)u.Xp / xpNeed, 0f, 1f)), 4), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
             if (u.StatPoints > 0)
-                _font.Draw(_sb, $"+{u.StatPoints} PTS (E)", x + 152, y + 21, 1, new Color(240, 208, 120));
+                _font.Draw(_sb, $"+{u.StatPoints} PTS (E)", x + 152, y + 21, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
             string tag = u.IsAvatar ? "AVATAR" : "MERC";
             _font.Draw(_sb, $"{u.Name.ToUpperInvariant()}  {tag}  L{u.Level}{(u.Wounded ? "  WOUNDED" : "")}",
-                x + 22, y + 3, 1, u.Wounded ? new Color(230, 200, 70) : Palette.Text);
+                x + 22, y + 3, 1, u.Wounded ? (Mono.On ? Mono.Danger : new Color(230, 200, 70)) : Palette.Text);
             // Effective Dofus stats (grown by level + gear) — the class's own damage element leads
             // (Fire Cannon reads INT, Air Archer AGI, Earth Bulwark STR), then the utility stats.
             var s = TitheContent.StatsOf(u);
@@ -2784,7 +2920,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             // A slim, always-visible bell bar at the very top so the floor clock reads during a fight.
             float frac = Math.Clamp(_dive.Clock / Math.Max(1, TitheContent.Graveyard.ClockSeconds), 0f, 1f);
             _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, 5), Palette.HpBack);
-            var col = frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
+            var col = Mono.On ? (frac > 0.25f ? Mono.Ink : Mono.Danger)
+                : frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
             _prim.FillRect(_sb, new Rectangle(0, 0, (int)(ScreenW * frac), 5), col);
         }
         if (_cryptRun && !_placing)  // which sealing-door room you're in
@@ -2824,8 +2961,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             : _cryptRun ? "ROOM CLEARED"
             : _jumpedFight ? "THE AMBUSH IS BEATEN" : "PACK CLEARED";
         _font.DrawCentered(_sb, title, panel.Center.X, panel.Y + 18, 3,
-            win ? (_dof.Loaded ? new Color(118, 200, 108) : UiSkinned ? new Color(52, 108, 54) : Palette.HpFill)
-                : new Color(206, 84, 70));
+            !win ? (Mono.On ? Mono.Danger : new Color(206, 84, 70))
+            : Mono.On ? Mono.Ink
+            : _dof.Loaded ? new Color(118, 200, 108) : UiSkinned ? new Color(52, 108, 54) : Palette.HpFill);
 
         int y = panel.Y + 60;
         if (win)
@@ -2841,14 +2979,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     _font.Draw(_sb, Trunc(ur.Name.ToUpperInvariant(), 14), panel.X + 28, y, 1, ink);
                     _font.Draw(_sb, ur.Died ? "LOST" : ur.Wounded ? "WOUNDED" : $"+{ur.XpGained} XP",
                         panel.X + 170, y, 1,
-                        ur.Died ? new Color(184, 70, 60) : ur.Wounded ? new Color(190, 140, 40) : inkDim);
+                        ur.Died ? (Mono.On ? Mono.Danger : new Color(184, 70, 60))
+                        : ur.Wounded ? (Mono.On ? Mono.Danger : new Color(190, 140, 40)) : inkDim);
                     if (cu != null)
                     {
                         int need = CampaignUnit.XpForNextLevel(cu.Level);
                         _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2, 180, 8), new Color(60, 56, 50));
                         _prim.FillRect(_sb, new Rectangle(panel.X + 300, y + 2,
                             (int)(180 * Math.Clamp(need <= 0 ? 1f : (float)cu.Xp / need, 0f, 1f)), 8),
-                            new Color(120, 170, 230));
+                            (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
                         _font.Draw(_sb, $"LVL {cu.Level}", panel.X + 492, y, 1, inkDim);
                     }
                     y += 20;
@@ -2859,25 +2998,25 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             {
                 _font.DrawCentered(_sb,
                     $"* {(name == "You" ? "YOU REACH" : name.ToUpperInvariant() + " REACHES")} LEVEL {level}! +5 POINTS +1 SPELL *",
-                    panel.Center.X, y, 1, new Color(190, 140, 20)); y += 18;
+                    panel.Center.X, y, 1, Mono.On ? Mono.Ink : new Color(190, 140, 20)); y += 18;
             }
             if (_levelUps.Count > 0)
             { _font.DrawCentered(_sb, "press E anywhere: spend stat points and RANK UP your spell", panel.Center.X, y, 1, inkDim); y += 22; }
 
             if (r.Gear.Count > 0)
             { _font.DrawCentered(_sb, "FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(),
-                panel.Center.X, y, 1, new Color(150, 110, 20)); y += 18; }
+                panel.Center.X, y, 1, Mono.On ? Mono.Ink : new Color(150, 110, 20)); y += 18; }
             if (r.Drops.Count > 0)
             { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(),
-                panel.Center.X, y, 1, new Color(120, 80, 160)); y += 18; }
+                panel.Center.X, y, 1, Mono.On ? Mono.Dim : new Color(120, 80, 160)); y += 18; }
             if (r.Lost.Count > 0)
             { _font.DrawCentered(_sb, "LOST: " + string.Join(", ", r.Lost).ToUpperInvariant(),
-                panel.Center.X, y, 1, new Color(184, 70, 60)); y += 18; }
+                panel.Center.X, y, 1, (Mono.On ? Mono.Danger : new Color(184, 70, 60))); y += 18; }
         }
         else
         {
             _font.DrawCentered(_sb, _campaign.Over ? "CAMPAIGN OVER" : "the bell drags the survivors out",
-                panel.Center.X, y, 2, new Color(184, 70, 60)); y += 36;
+                panel.Center.X, y, 2, (Mono.On ? Mono.Danger : new Color(184, 70, 60))); y += 36;
         }
 
         string next = _dive!.Ended

@@ -10,51 +10,54 @@ namespace DofusSlice.Game.Rendering;
 /// </summary>
 public static class Ew
 {
+    // Under the ONE-BIT reset every Emberwick token collapses to the Mono inks, so the whole
+    // combat HUD re-reads as ink-on-black without touching a single call site.
+
     // Slate surfaces (the combat variant of the moss-glass system).
-    public static readonly Color SurfaceDeep = new(0x2b, 0x2d, 0x35);
-    public static readonly Color Surface = new(0x32, 0x34, 0x3d);
-    public static readonly Color SurfaceRaised = new(0x46, 0x4a, 0x56);
-    public static readonly Color SurfaceSunken = new(0x24, 0x26, 0x2d);
-    public static readonly Color Outline = new(0x1c, 0x1e, 0x24);
+    public static readonly Color SurfaceDeep = Mono.On ? Mono.Bg : new Color(0x2b, 0x2d, 0x35);
+    public static readonly Color Surface = Mono.On ? Mono.Panel : new Color(0x32, 0x34, 0x3d);
+    public static readonly Color SurfaceRaised = Mono.On ? new Color(20, 20, 20) : new Color(0x46, 0x4a, 0x56);
+    public static readonly Color SurfaceSunken = Mono.On ? new Color(10, 10, 10) : new Color(0x24, 0x26, 0x2d);
+    public static readonly Color Outline = Mono.On ? Mono.Faint : new Color(0x1c, 0x1e, 0x24);
 
     // Panel gradient stops (--grad-panel) and header stops (--grad-header).
-    public static readonly Color PanelTop = new(0x37, 0x3a, 0x45);
-    public static readonly Color PanelBottom = new(0x2d, 0x2f, 0x38);
-    public static readonly Color HeaderTop = new(0x57, 0x5c, 0x6a);
-    public static readonly Color HeaderBottom = new(0x3a, 0x3d, 0x47);
+    public static readonly Color PanelTop = Mono.On ? Mono.Panel : new Color(0x37, 0x3a, 0x45);
+    public static readonly Color PanelBottom = Mono.On ? Mono.Panel : new Color(0x2d, 0x2f, 0x38);
+    public static readonly Color HeaderTop = Mono.On ? new Color(22, 22, 21) : new Color(0x57, 0x5c, 0x6a);
+    public static readonly Color HeaderBottom = Mono.On ? new Color(22, 22, 21) : new Color(0x3a, 0x3d, 0x47);
 
     // Ink.
-    public static readonly Color Ink = new(0xf2, 0xef, 0xdc);
-    public static readonly Color InkSoft = new(0xbd, 0xbc, 0xa6);
-    public static readonly Color InkMuted = new(0x83, 0x85, 0x6c);
-    public static readonly Color InkInverse = new(0x23, 0x26, 0x1a);
+    public static readonly Color Ink = Mono.On ? Mono.Ink : new Color(0xf2, 0xef, 0xdc);
+    public static readonly Color InkSoft = Mono.On ? Mono.Dim : new Color(0xbd, 0xbc, 0xa6);
+    public static readonly Color InkMuted = Mono.On ? new Color(84, 84, 82) : new Color(0x83, 0x85, 0x6c);
+    public static readonly Color InkInverse = Mono.On ? Mono.Panel : new Color(0x23, 0x26, 0x1a);
 
-    // Dark-amber accent (combat) + gold + danger.
-    public static readonly Color Accent = new(0xc0, 0x81, 0x45);
-    public static readonly Color AccentBright = new(0xdf, 0xa5, 0x62);
-    public static readonly Color AccentTop = new(0xdd, 0xa4, 0x5c);
-    public static readonly Color AccentBottom = new(0x9d, 0x66, 0x30);
-    public static readonly Color Gold = new(0xff, 0xd0, 0x42);
-    public static readonly Color GoldTop = new(0xf0, 0xc7, 0x5e);
-    public static readonly Color GoldBottom = new(0xb7, 0x84, 0x28);
-    public static readonly Color Danger = new(0xe9, 0x4b, 0x58);
+    // Dark-amber accent (combat) + gold + danger. Mono keeps ONE accent: Danger red.
+    public static readonly Color Accent = Mono.On ? Mono.Ink : new Color(0xc0, 0x81, 0x45);
+    public static readonly Color AccentBright = Mono.On ? Mono.Ink : new Color(0xdf, 0xa5, 0x62);
+    public static readonly Color AccentTop = Mono.On ? new Color(20, 20, 20) : new Color(0xdd, 0xa4, 0x5c);
+    public static readonly Color AccentBottom = Mono.On ? new Color(20, 20, 20) : new Color(0x9d, 0x66, 0x30);
+    public static readonly Color Gold = Mono.On ? Mono.Ink : new Color(0xff, 0xd0, 0x42);
+    public static readonly Color GoldTop = Mono.On ? new Color(20, 20, 20) : new Color(0xf0, 0xc7, 0x5e);
+    public static readonly Color GoldBottom = Mono.On ? new Color(20, 20, 20) : new Color(0xb7, 0x84, 0x28);
+    public static readonly Color Danger = Mono.On ? Mono.Danger : new Color(0xe9, 0x4b, 0x58);
 
-    // Resource gems: Vim / Spark / Stride.
-    public static readonly Color Hp = new(0xe9, 0x4b, 0x58);
-    public static readonly Color HpDeep = new(0x8e, 0x27, 0x33);
-    public static readonly Color Ap = new(0x4f, 0x8f, 0xf0);
-    public static readonly Color ApDeep = new(0x2a, 0x55, 0xa8);
-    public static readonly Color Mp = new(0x59, 0xc1, 0x4e);
-    public static readonly Color MpDeep = new(0x2e, 0x7a, 0x2a);
+    // Resource gems: Vim / Spark / Stride (mono: white shapes, dim depths).
+    public static readonly Color Hp = Mono.On ? Mono.Ink : new Color(0xe9, 0x4b, 0x58);
+    public static readonly Color HpDeep = Mono.On ? Mono.Faint : new Color(0x8e, 0x27, 0x33);
+    public static readonly Color Ap = Mono.On ? Mono.Ink : new Color(0x4f, 0x8f, 0xf0);
+    public static readonly Color ApDeep = Mono.On ? Mono.Faint : new Color(0x2a, 0x55, 0xa8);
+    public static readonly Color Mp = Mono.On ? Mono.Ink : new Color(0x59, 0xc1, 0x4e);
+    public static readonly Color MpDeep = Mono.On ? Mono.Faint : new Color(0x2e, 0x7a, 0x2a);
 
-    // Elements: ember / brook / loam / gale / moon.
-    public static readonly Color Ember = new(0xf0, 0x81, 0x2e);
-    public static readonly Color Brook = new(0x52, 0xa7, 0xe8);
-    public static readonly Color Loam = new(0xbd, 0x8a, 0x3c);
-    public static readonly Color Gale = new(0x86, 0xce, 0x4b);
-    public static readonly Color Moon = new(0xa9, 0x7f, 0xd6);
+    // Elements: ember / brook / loam / gale / moon (mono: all ink — the log stays legible).
+    public static readonly Color Ember = Mono.On ? Mono.Ink : new Color(0xf0, 0x81, 0x2e);
+    public static readonly Color Brook = Mono.On ? Mono.Ink : new Color(0x52, 0xa7, 0xe8);
+    public static readonly Color Loam = Mono.On ? Mono.Ink : new Color(0xbd, 0x8a, 0x3c);
+    public static readonly Color Gale = Mono.On ? Mono.Ink : new Color(0x86, 0xce, 0x4b);
+    public static readonly Color Moon = Mono.On ? Mono.Ink : new Color(0xa9, 0x7f, 0xd6);
 
-    public static readonly Color Xp = new(0x8f, 0xd1, 0x30);
+    public static readonly Color Xp = Mono.On ? Mono.Ink : new Color(0x8f, 0xd1, 0x30);
 }
 
 /// <summary>
@@ -85,6 +88,12 @@ public sealed class EwChrome
     /// <summary>A rounded slate panel with outline, gradient fill and top bevel highlight.</summary>
     public void Panel(SpriteBatch sb, Rectangle r, bool sunken = false, int radius = 12)
     {
+        if (Mono.On)
+        {
+            sb.Draw(_pixel, r, Mono.Panel * 0.94f);
+            Stroke(sb, r, sunken ? Mono.Faint : Mono.Dim);
+            return;
+        }
         if (T is { } th) { th.Panel(sb, r, light: !sunken); return; }
         var tex = RoundedTex(Math.Max(8, Math.Min(r.Width, 64)), Math.Max(8, Math.Min(r.Height, 64)),
             radius, sunken);
@@ -94,6 +103,12 @@ public sealed class EwChrome
     /// <summary>A slot well: sunken, tighter radius (the design's item slots).</summary>
     public void Well(SpriteBatch sb, Rectangle r)
     {
+        if (Mono.On)
+        {
+            sb.Draw(_pixel, r, Mono.Panel);
+            Stroke(sb, r, Mono.Faint);
+            return;
+        }
         if (T is { } th) { th.Slot(sb, r); return; }
         Panel(sb, r, sunken: true, radius: 8);
     }
@@ -101,6 +116,12 @@ public sealed class EwChrome
     /// <summary>The header band gradient inside a panel's top (drawn as a plain strip).</summary>
     public void HeaderStrip(SpriteBatch sb, Rectangle r)
     {
+        if (Mono.On)
+        {
+            sb.Draw(_pixel, r, Mono.Panel);
+            sb.Draw(_pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), Mono.Ink);
+            return;
+        }
         if (T != null)
         {
             // Themed: a flat near-black band with a gold hairline — the ornament strip art
@@ -117,6 +138,13 @@ public sealed class EwChrome
     /// <summary>An amber (or gold) pill button, design's "Pick challenges" CTA.</summary>
     public void Pill(SpriteBatch sb, Rectangle r, bool gold = false, bool pressed = false)
     {
+        if (Mono.On)
+        {
+            // 1-bit CTA: pressed/hover INVERTS. Label ink comes from Mono.ButtonInk at call sites.
+            sb.Draw(_pixel, r, pressed ? Mono.Ink : Mono.Panel);
+            Stroke(sb, r, Mono.Ink);
+            return;
+        }
         if (T is { } th) { th.Button(sb, r, pressed: pressed); return; }
         var top = gold ? Ew.GoldTop : Ew.AccentTop;
         var bottom = gold ? Ew.GoldBottom : Ew.AccentBottom;
@@ -131,8 +159,17 @@ public sealed class EwChrome
             new Rectangle(tex.Width - cap, 0, cap, tex.Height), Color.White);
     }
 
+    private void Stroke(SpriteBatch sb, Rectangle r, Color c)
+    {
+        sb.Draw(_pixel, new Rectangle(r.X, r.Y, r.Width, 1), c);
+        sb.Draw(_pixel, new Rectangle(r.X, r.Bottom - 1, r.Width, 1), c);
+        sb.Draw(_pixel, new Rectangle(r.X, r.Y, 1, r.Height), c);
+        sb.Draw(_pixel, new Rectangle(r.Right - 1, r.Y, 1, r.Height), c);
+    }
+
     public void GradientV(SpriteBatch sb, Rectangle r, Color top, Color bottom)
     {
+        if (Mono.On) { sb.Draw(_pixel, r, top); return; }   // 1-bit: gradients collapse to flat fills
         var tex = Cached($"gradv|{top.PackedValue}|{bottom.PackedValue}", () =>
         {
             var t = new Texture2D(_gd, 1, 32);
@@ -318,8 +355,9 @@ public sealed class EwChrome
         return tex;
     }
 
-    /// <summary>Element → Emberwick element color (floats, log lines, spell chips).</summary>
-    public static Color ElementColor(DofusSlice.Core.Combat.Element e) => e switch
+    /// <summary>Element → element color (floats, log lines, spell chips). The 1-bit reset
+    /// collapses the elemental rainbow to plain ink — damage is damage.</summary>
+    public static Color ElementColor(DofusSlice.Core.Combat.Element e) => Mono.On ? Mono.Ink : e switch
     {
         DofusSlice.Core.Combat.Element.Fire => Ew.Ember,
         DofusSlice.Core.Combat.Element.Water => Ew.Brook,

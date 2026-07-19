@@ -432,3 +432,8 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
   coded Dofus/Emberwick HUD. The published build ships ui/ next to the exe, and the runtime
   hot-reload watches THAT copy - so editing TITHE/ui/TitheHud.gumx in the Gum tool while the
   game runs updates it live.
+
+## Ranged-attack glitch fixed
+- The spell-range telegraph painted its blue diamonds over IN-BOUNDS void cells — on the
+  generated island maps that meant range shading floating on the black sea beyond the map's
+  edge ("something going out of the screen"). Telegraph cells now land on real ground only.

@@ -49,6 +49,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     private DiveSession.PackState? _engageOnArrive;
     private bool _jumpedFight;                        // this fight began as an aggro-catch
     private float _huntTimer;                         // cadence of the hunting packs' steps
+    private bool _hireOnArrive;                       // walking to the wandering survivor
+    private static readonly CellCoord SurvivorCell = new(9, 7);
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
     private int _cryptRoom;
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
@@ -405,6 +407,12 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
                     a.Add(($"SURGERY: STRIP {patient.EssenceSlots[0].ToUpperInvariant()} FROM {patient.Name.ToUpperInvariant()}  ({P.EssenceRemoval}g, DESTROYED)",
                            _campaign.Gold >= P.EssenceRemoval,
                            () => _campaign.RemoveEssence(patient, patient.EssenceSlots[0])));
+                // Vetting (Bible §6.12): reveal a survivor's hidden temperament for a fee.
+                var suspect = _campaign.Crew.FirstOrDefault(u => u.Temperament != Temperament.None && !u.Vetted);
+                if (suspect != null)
+                    a.Add(($"VET {suspect.Name.ToUpperInvariant()}  ({P.VetFee}g) — READ THEIR NATURE",
+                           _campaign.Gold >= P.VetFee,
+                           () => { if (_campaign.Gold >= P.VetFee) { _campaign.Gold -= P.VetFee; suspect.Vetted = true; } }));
                 break;
             default: // the Hiring Post
                 int lvl = Math.Max(1, _campaign.Avatar?.Level ?? 1);
@@ -431,6 +439,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyPath.Clear();
         _engageOnArrive = null; _cryptOnArrive = false; _cryptCleared = false; _cryptRun = false;
         _cryptRoom = 0; _cryptMsg = ""; _cryptMsgTimer = 0f; _huntTimer = 0f; _jumpedFight = false;
+        _hireOnArrive = false;
     }
 
     private static readonly CellCoord[] PackCells =
@@ -454,6 +463,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_cryptMsgTimer > 0f) _cryptMsgTimer -= dt;
 
         MovePartyAlongPath(dt);
+        if (_dive.ConsumeDeparture() is { } dep) { _cryptMsg = dep; _cryptMsgTimer = 4f; } // the Grasping exit
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
         // Number keys walk the party to packs in reach order (a quick shortcut).
@@ -468,6 +478,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         foreach (var p in _dive.Packs)
             if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell) && cell == target) { WalkToPack(p); return; }
         if (target == CryptCell) { WalkTo(CryptCell, null, crypt: true); return; }
+        if (_dive.Survivor != null && target == SurvivorCell)
+        { WalkTo(SurvivorCell, null, crypt: false); _hireOnArrive = true; return; }
         if (_graveMap.IsWalkable(target)) WalkTo(target, null, crypt: false);
     }
 
@@ -517,6 +529,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         _partyPath.Clear();
         _engageOnArrive = engage;
         _cryptOnArrive = crypt;
+        _hireOnArrive = false;
         if (path == null) return;
         foreach (var c in path.Skip(1)) _partyPath.Enqueue(c);
         if (_partyPath.Count == 0) ArriveAtTarget(); // already standing on it
@@ -547,6 +560,17 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (_engageOnArrive is { } p) { _engageOnArrive = null; EngagePack(p); }
         else if (_cryptOnArrive) { _cryptOnArrive = false; TryEnterCrypt(); }
+        else if (_hireOnArrive)
+        {
+            _hireOnArrive = false;
+            var offer = _dive!.Survivor;
+            if (offer != null)
+                _cryptMsg = _dive.HireSurvivor()
+                    ? $"The {offer.ClassId}-survivor falls in with the crew ({offer.Price}g). Their eyes are hard to read."
+                    : _campaign.Crew.Count >= 3 ? "The crew is full — the survivor watches you pass."
+                    : "You cannot afford the survivor's price.";
+            _cryptMsgTimer = 3f;
+        }
     }
 
     private void TryEnterCrypt()
@@ -1688,6 +1712,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_graveField != null && _graveField.InBounds(_hover))
         {
             bool interactive = _hover == CryptCell ||
+                (_dive?.Survivor != null && _hover == SurvivorCell) ||
                 (_dive != null && _dive.Packs.Any(p => !p.Cleared && _packCells.TryGetValue(p.Def.Id, out var pc) && pc == _hover));
             if (interactive || _graveMap.IsWalkable(_hover))
                 _prim.DiamondAt(_sb, _proj.CellCenter(_hover), Palette.CurrentRing * (interactive ? 0.35f : 0.16f));
@@ -1703,6 +1728,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             foreach (var p in _dive.Packs)
                 if (!p.Cleared && _packCells.TryGetValue(p.Def.Id, out var cell))
                     DrawPackToken(cell, p);
+        if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
         _sb.End();
 
@@ -1713,6 +1739,18 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
         if (_cryptMsgTimer > 0f)
             _font.DrawCentered(_sb, _cryptMsg, ScreenW / 2, 508, 2, new Color(232, 202, 96));
         _sb.End();
+    }
+
+    /// <summary>A survivor wandering the yard (Bible §6.12): class and price visible, nature not.</summary>
+    private void DrawSurvivorToken(DiveSession.SurvivorOffer offer)
+    {
+        var center = _proj.CellCenter(SurvivorCell);
+        _prim.DiscAt(_sb, center + new Vector2(0, 2), 11, Palette.Shadow);
+        _prim.DiscAt(_sb, center, 9, new Color(16, 16, 20));
+        _prim.DiscAt(_sb, center, 7, new Color(120, 190, 150));
+        _font.DrawCentered(_sb, "?", (int)center.X, (int)center.Y - 5, 1, Color.White);
+        _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
+            (int)center.X, (int)center.Y - 30, 1, new Color(150, 210, 170));
     }
 
     private void DrawCrypt()
@@ -1820,6 +1858,8 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             }
             if (u.EssenceSlots.Count > 0)
                 sheet += "   [" + string.Join(" + ", u.EssenceSlots.Select(e => e.ToUpperInvariant())) + "]";
+            if (u.Temperament != Temperament.None)
+                sheet += u.Vetted ? $"   ({u.Temperament.ToString().ToUpperInvariant()})" : "   (NATURE?)";
             _font.Draw(_sb, sheet, x + 22, y + 15, 1, Palette.TextDim);
             y += 34;
         }

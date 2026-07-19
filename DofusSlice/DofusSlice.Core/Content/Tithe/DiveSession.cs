@@ -25,7 +25,8 @@ public sealed class DiveSession
 
     public sealed record DiveReport(int PacksCleared, int Gold, int Xp, IReadOnlyList<string> Essences,
                                     IReadOnlyList<string> Gear, IReadOnlyList<string> Lost,
-                                    bool CampaignOver, string EndReason, IReadOnlyList<FightReport> Fights);
+                                    bool CampaignOver, string EndReason, IReadOnlyList<FightReport> Fights,
+                                    IReadOnlyList<string> Notes);
 
     // Real-time cost estimates so the headless clock paces like the watched game (Bible's 12-min
     // floor; the prototype uses a short clock). Tunable in M5.
@@ -39,12 +40,72 @@ public sealed class DiveSession
     public bool Ended { get; private set; }
     public int XpBanked { get; private set; }
 
+    /// <summary>Gold banked this dive — the "carried haul" a Grasping merc weighs (Bible §6.12).</summary>
+    public int GoldGained { get; private set; }
+
+    /// <summary>A survivor found below (Bible §6.12): class and level visible, price cheap,
+    /// temperament HIDDEN until the Temple vets them — or until they show you themselves.</summary>
+    public sealed record SurvivorOffer(string ClassId, int Level, int Price, Temperament Temperament);
+    public SurvivorOffer? Survivor { get; private set; }
+
+    /// <summary>A betrayal note ("X slips away with Ng"), set when a Grasping merc departs.</summary>
+    public string? Departure { get; private set; }
+    public string? ConsumeDeparture() { var d = Departure; Departure = null; return d; }
+
+    // The Grasping calculus (Bible §6.12), placeholders for M5: leave when the haul crosses
+    // GraspThreshold gold and the bell is under GraspClock seconds, taking GraspSharePct of it.
+    private const int GraspThreshold = 100, GraspClock = 75, GraspSharePct = 30;
+    private const int SurvivorChancePct = 30, GraspingOddsPct = 50;
+
     public DiveSession(Campaign campaign, IRng rng)
     {
         _campaign = campaign;
         _rng = rng;
         Clock = TitheContent.Graveyard.ClockSeconds;
         Packs = TitheContent.Graveyard.Packs.Select(p => new PackState { Def = p }).ToList();
+
+        // A survivor may be wandering the floor: cheap help, hidden knife.
+        if (rng.Roll(1, 100) <= SurvivorChancePct)
+        {
+            var classes = new[] { "bulwark", "archer", "cannon" };
+            string cls = classes[rng.Roll(1, classes.Length) - 1];
+            int level = Math.Max(1, (campaign.Avatar?.Level ?? 1) + rng.Roll(-1, 1));
+            Survivor = new SurvivorOffer(cls, level,
+                Math.Max(10, TitheContent.Prices.HireBasePerLevel * level / 3),
+                rng.Roll(1, 100) <= GraspingOddsPct ? Temperament.Grasping : Temperament.Loyal);
+        }
+    }
+
+    /// <summary>Hire the wandering survivor mid-dive (cheap; temperament stays hidden).</summary>
+    public bool HireSurvivor()
+    {
+        if (Survivor == null || Ended || _campaign.Crew.Count >= 3 || _campaign.Gold < Survivor.Price)
+            return false;
+        _campaign.Gold -= Survivor.Price;
+        _campaign.Crew.Add(new CampaignUnit
+        {
+            Id = $"surv_{_campaign.Crew.Count}_{Survivor.ClassId}", ClassId = Survivor.ClassId,
+            Name = $"{Survivor.ClassId}-survivor", Level = Survivor.Level,
+            SpellPoints = Survivor.Level - 1, Temperament = Survivor.Temperament,
+        });
+        Survivor = null;
+        return true;
+    }
+
+    /// <summary>
+    /// The Grasping exit (Bible §6.12): a Grasping merc leaves the party with a cut of the haul
+    /// when the take is heavy and the bell is low — a simple despawn plus ledger note in the
+    /// slice (the huntable chase is a later flourish). Betrayal reveals the temperament for free.
+    /// </summary>
+    private void CheckBetrayal()
+    {
+        if (Ended || GoldGained < GraspThreshold || Clock > GraspClock) return;
+        var traitor = _campaign.Crew.FirstOrDefault(u => !u.IsAvatar && u.Temperament == Temperament.Grasping);
+        if (traitor == null) return;
+        int cut = GoldGained * GraspSharePct / 100;
+        _campaign.Gold = Math.Max(0, _campaign.Gold - cut);
+        _campaign.Crew.Remove(traitor);
+        Departure = $"{traitor.Name} slips away toward the Lychgate with {cut}g of the haul";
     }
 
     public float FightCost(TitheContent.PackDef p) => FightBaseSeconds + FightPerEnemy * p.Comp.Length;
@@ -57,6 +118,7 @@ public sealed class DiveSession
     {
         if (Ended) return;
         Clock -= seconds;
+        CheckBetrayal(); // the bell sinking below the threshold can trigger the exit on its own
         if (Clock <= 0) { Clock = 0; Eject("the bell — clock expired"); }
     }
 
@@ -136,6 +198,7 @@ public sealed class DiveSession
             int gold = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
                 .Sum(TitheContent.MobGoldOf); // grade-aware: deep packs pay their risk premium
             _campaign.Gold += gold;
+            GoldGained += gold;
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;
 
@@ -157,6 +220,7 @@ public sealed class DiveSession
                 if (u.Wounded) { cu.Wounded = true; wounded.Add(cu.Name); }
             }
 
+            CheckBetrayal(); // a heavy haul under a low bell is when a Grasping merc walks
             if (Clock <= 0) Eject("the bell — clock expired");
             return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded);
         }
@@ -204,6 +268,7 @@ public sealed class DiveSession
         var fights = new List<FightReport>();
         var lostAll = new List<string>();
         var gearAll = new List<string>();
+        var notes = new List<string>();
 
         while (!Ended)
         {
@@ -221,13 +286,20 @@ public sealed class DiveSession
             var fr = Engage(pack);
             if (fr != null) { fights.Add(fr); lostAll.AddRange(fr.Lost); gearAll.AddRange(fr.Gear); }
 
+            // A short-handed crew takes the wandering survivor's cheap help (found mid-dive —
+            // typically right after a funeral). Class and level visible; nature not.
+            if (Survivor is { } offer && _campaign.Crew.Count < 3 && HireSurvivor())
+                notes.Add($"hired a wandering {offer.ClassId}-survivor (L{offer.Level}, {offer.Price}g, temperament unknown)");
+
             // The hunting packs answer the noise: a hunter near that fight may catch the crew JUMPED.
             var caught = fr != null ? RollHunters(pack.Def) : null;
             if (caught != null) { fights.Add(caught); lostAll.AddRange(caught.Lost); gearAll.AddRange(caught.Gear); }
+
+            if (ConsumeDeparture() is { } dep) notes.Add(dep); // the Grasping exit, if it happened
         }
 
         return new DiveReport(
             Packs.Count(p => p.Cleared) - cleared0, _campaign.Gold - gold0, XpBanked,
-            _campaign.Essences.Skip(ess0).ToList(), gearAll, lostAll, _campaign.Over, EndReason, fights);
+            _campaign.Essences.Skip(ess0).ToList(), gearAll, lostAll, _campaign.Over, EndReason, fights, notes);
     }
 }

@@ -89,8 +89,17 @@ dotnet run --project DofusSlice.Sim campaign survey 40
       (2709 vs 2581) — Pillar 4's gamble finally exists. Still open for M5:
       cautious play has 0% risk (hunting packs that actually hunt — item 7 —
       is the intended fix), and the real Dofus 5-grade tables come with §9.
-- [ ] **6. Temple, survivors & temperament (M4 social).** Vetting, essence removal,
-      Grasping survivors that leave with loot when the haul is heavy and clock low.
+- [x] **6. Temple services + survivors & temperament (M4 social).** DONE in two
+      commits. 6a: Temple exclusives (Blood Pact = SelfHpCost engine effect +
+      self-economy AI; Blink = targetsGround skills + escape AI; both proven in
+      effects tests, 17/17), the rotating shelf at painful prices, surgery
+      (essence destroyed). 6b: survivors — 30% of dives spawn one on the yard
+      (walk to hire, cheap, nature hidden), Temple VET row reveals Loyal/Grasping,
+      and the Grasping exit fires when haul ≥100g with bell ≤75s (30% cut; toast
+      in the game, ~ notes headless). Proof mode: `campaign survivors 60` →
+      17 offered / 17 hired / 5 betrayals. Threshold tuned 120→100 because a
+      full cautious clear banks 116g — the exact arithmetic is in the log.
+      Open flourish for later: the huntable traitor chase.
 - [x] **7. Hunting packs hunt + the Jumped tier.** DONE. Visual: "hunts" packs step
       toward the crew every 2s inside a 6-cell aggro radius (red "!" on the token
       when closing); adjacency = CATCH → a Jumped fight (scattered mid-map crew,

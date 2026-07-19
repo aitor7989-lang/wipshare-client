@@ -52,7 +52,7 @@ public static class TitheContent
                                             int ApBonus, int MpBonus);
 
     public sealed record PriceTable(int HardBread, int BreadHeal, int Draught, int HireBasePerLevel,
-                                    int EssenceSell, int EssenceBuy, int EssenceRemoval,
+                                    int EssenceSell, int EssenceBuy, int EssenceRemoval, int VetFee,
                                     int TitheEveryNDives, int TitheBase, int TitheGrowth);
     public sealed record PackDef(string Id, string[] Comp, int Reach, bool Hunts, int Grade = 1);
     public sealed record GraveyardDef(int ClockSeconds, int CryptReach, PackDef[] Packs);

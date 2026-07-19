@@ -17,6 +17,8 @@ if (args.Length > 0 && args[0] == "campaign")
             .FirstOrDefault(v => v != null) ?? 40);
     if (args.Contains("crypt"))
         return CampaignSim.Crypt(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7);
+    if (args.Contains("survivors"))
+        return CampaignSim.Survivors(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 60);
     if (args.Contains("progression") || args.Contains("gear") || args.Contains("stats"))
         return CampaignSim.Progression(args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7);
     int cseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 7;

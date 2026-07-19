@@ -134,6 +134,7 @@ public static class CampaignSim
             + (r.Essences.Count > 0 ? $", essences: {string.Join("/", r.Essences)}" : "")
             + (r.Gear.Count > 0 ? $"  GEAR: {string.Join("/", r.Gear)}" : "")
             + (r.Lost.Count > 0 ? $"  LOST: {string.Join(", ", r.Lost)}" : ""));
+        foreach (var n in r.Notes) Console.WriteLine($"  ~ {n}");
     }
 
     /// <summary>Run a level-3 crew through the Crypt's sealing-door room chain to the Sexton.</summary>
@@ -273,6 +274,36 @@ public static class CampaignSim
         Console.WriteLine($"  Temple exclusives in a jumped g3 fight: Blood Pact sacrifices {pacts}, "
             + $"Blink escapes {blinks} (situational — deterministic proof lives in `effects`), outcome {engine.Outcome}.");
         return 0;
+    }
+
+    /// <summary>
+    /// Prove the survivor system (Bible §6.12) on paper: a short-handed crew dives; when the floor
+    /// has a wandering survivor they're hired mid-dive cheap with their nature hidden — and the
+    /// Grasping ones walk off with a cut when the haul is heavy and the bell is low.
+    /// </summary>
+    public static int Survivors(int tries)
+    {
+        int offered = 0, hired = 0, betrayed = 0;
+        var samples = new List<string>();
+        for (int seed = 1; seed <= tries; seed++)
+        {
+            var c = Campaign.NewGame("cannon");
+            c.Crew.Remove(c.Crew.Last()); // short-handed on purpose — the survivor's opening
+            c.Gold += 100;
+            var dive = new DiveSession(c, new SystemRng(seed * 977 + 5));
+            if (dive.Survivor != null) offered++;
+            var r = dive.RunAuto(greedy: false);
+            foreach (var n in r.Notes)
+            {
+                if (n.Contains("hired")) hired++;
+                if (n.Contains("slips away")) betrayed++;
+                if (samples.Count < 6) samples.Add($"seed {seed}: {n}");
+            }
+        }
+        Console.WriteLine($"TITHE — survivors over {tries} short-handed dives:");
+        Console.WriteLine($"  offered {offered}, hired {hired}, betrayals {betrayed}\n");
+        foreach (var s in samples) Console.WriteLine("  " + s);
+        return hired > 0 ? 0 : 1; // the hire path must actually run
     }
 
     /// <summary>

@@ -262,7 +262,7 @@ public static class TitheTables
       "hardBread": 15,      "breadHeal": 22,
       "draught": 130,
       "hireBasePerLevel": 45,
-      "essenceSell": 45,   "essenceBuy": 300,   "essenceRemoval": 350,
+      "essenceSell": 45,   "essenceBuy": 300,   "essenceRemoval": 350,   "vetFee": 60,
       "titheEveryNDives": 3, "titheBase": 120, "titheGrowth": 70
     }
     """;

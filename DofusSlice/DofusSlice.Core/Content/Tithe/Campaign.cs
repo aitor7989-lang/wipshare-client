@@ -1,5 +1,10 @@
 namespace DofusSlice.Core.Content.Tithe;
 
+/// <summary>A survivor's hidden nature (Bible §6.12). Regular hires are None; survivors found
+/// below are Loyal or Grasping — and a Grasping one leaves with a cut of the haul when the take
+/// is heavy and the bell is low. The Temple vets it for a fee; betrayal reveals it for free.</summary>
+public enum Temperament { None, Loyal, Grasping }
+
 /// <summary>
 /// A player-managed unit that persists across dives (Bible §6.1): the avatar or a hired
 /// mercenary. Carries level/XP and the meta-persistent <see cref="Wounded"/> flag (-1 PA / -1 PM
@@ -28,6 +33,12 @@ public sealed class CampaignUnit
 
     public const int MaxEssenceSlots = 2;
     public bool HasFreeEssenceSlot => EssenceSlots.Count < MaxEssenceSlots;
+
+    /// <summary>A survivor's hidden nature; None for the avatar and regular hires (Bible §6.12).</summary>
+    public Temperament Temperament { get; set; } = Temperament.None;
+
+    /// <summary>Has the Temple vetted this unit (temperament revealed to the player)?</summary>
+    public bool Vetted { get; set; }
 
     /// <summary>Unspent spell points (Bible §6.3: +1 per level; ranks change shape/economics).</summary>
     public int SpellPoints { get; set; }

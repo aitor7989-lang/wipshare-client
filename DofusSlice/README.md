@@ -140,6 +140,17 @@ Cannon *Ironhide* and *Pounce* and its watched combat kit becomes `Ruin Bolt, Ir
 Bite`. Selling an essence is always possible — but the stand-in city AI never sells what someone
 could learn.
 
+The **Temple Sister** is the full essence vendor: her shelf sells one catalog essence per city
+return at a painful price (the drop table is the discount path), her **surgery** strips a filled
+slot (essence destroyed), and she sells two **Temple exclusives** that never drop — *Blood Pact*
+(1 AP + 10 HP → +3 AP, blood for action) and *Blink* (a once-a-fight escape leap the AI uses to
+slip a melee lock). **Survivors** (Bible §6.12) wander ~a third of dives: walk to the green "?" to
+hire one cheap — class and level visible, **temperament hidden**. The Temple can VET them
+(Loyal/Grasping)… or you find out when the haul is heavy, the bell is low, and your Grasping
+merc *slips away toward the Lychgate with a cut of the take*. Loot also hides two **behavior-rule
+uniques** — **Gravewalkers** (+1 MP) and the **Piper's Whistle** (+1 AP) — rare finds that compete
+with set pieces for their slot: breaking the panoply for the unique is yours to decide.
+
 **Spell ranks** (Bible §6.3): every level grants **1 spell point**, and points buy ranks that
 change a spell's *economics or shape, never just damage* — Dofus spell levels in miniature. Ranks
 are data (`"ranks"` rows in the skill table, cumulative overrides): Ruin Bolt II reaches 7 cells,

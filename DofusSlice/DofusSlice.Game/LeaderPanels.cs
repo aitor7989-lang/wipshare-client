@@ -17,6 +17,13 @@ public partial class SliceGame
     private string? _panelMsg;          // one-line feedback ("ate bread", "essence learned")
     private float _panelMsgUntil;       // shown while _time is before this
 
+    // Drag & drop between the stash and the doll (Pass 4). A press ARMS a drag; moving
+    // past a small threshold makes it real; releasing without moving is a plain click.
+    private string? _dragItem;
+    private bool _dragFromDoll, _dragging;
+    private bool _bagPress;             // the press began while the bag was open (else its release is not ours)
+    private Point _dragStart;
+
     private static readonly (string key, string label)[] StatRows =
     {
         ("vit", "VIT"), ("str", "STR"), ("int", "INT"), ("cha", "CHA"), ("agi", "AGI"), ("wis", "WIS"),
@@ -356,13 +363,69 @@ public partial class SliceGame
 
         _font.DrawCentered(_sb, "(I OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
         DrawPanelMsg(w);
-        if (hoverCardTitle != null) DrawItemCard(hoverCardTitle, hoverCard1 ?? "", hoverCard2, mp);
+        if (hoverCardTitle != null && !_dragging) DrawItemCard(hoverCardTitle, hoverCard1 ?? "", hoverCard2, mp);
+
+        // The piece in flight rides the cursor; its landing zone glows walk-green.
+        if (_dragging && _dragItem != null)
+        {
+            string dSlot = TitheContent.ItemSlot(_dragItem);
+            if (!_dragFromDoll)
+                foreach (var d in DollSlots)
+                { if (d.slot == dSlot) _prim.StrokeRect(_sb, DollSlotRect(d), 2, Mono.Walk); }
+            else
+                _prim.StrokeRect(_sb, new Rectangle(w.X + 390, w.Y + 62, 5 * 45, 8 * 45), 2, Mono.Walk);
+            var at = new Rectangle(mp.X - 18, mp.Y - 18, 36, 36);
+            if (!DrawIconRect("icon_slot_" + dSlot, at, Mono.Ink, pad: 0))
+                _prim.StrokeRect(_sb, at, 1, Mono.Ink);
+            OutlinedCentered(Trunc(TitheContent.ItemName(_dragItem).ToUpperInvariant(), 9), mp.X, mp.Y + 22, 1, Mono.Ink);
+        }
     }
 
     private void DrawPanelMsg(Rectangle w)
     {
         if (_time >= _panelMsgUntil || _panelMsg == null) return;
         _font.DrawCentered(_sb, _panelMsg.ToUpperInvariant(), w.Center.X, w.Bottom - 40, 1, Mono.Ink);
+    }
+
+    /// <summary>The bag's input, Pass 4: press arms a drag from a stash cell or a worn doll
+    /// slot, movement makes it real, release drops (stash -> doll equips, doll -> stash
+    /// unequips). A release that never travelled is the old click, unchanged.</summary>
+    private void UpdateInventoryDrag()
+    {
+        var a = _campaign.Avatar;
+        var m = new Point(_mouse.X, _mouse.Y);
+        bool released = _mouse.LeftButton == ButtonState.Released && _prevMouse.LeftButton == ButtonState.Pressed;
+
+        if (LeftClicked() && a != null)
+        {
+            _bagPress = true;
+            _dragStart = m; _dragItem = null; _dragFromDoll = false; _dragging = false;
+            for (int idx = 0; idx < _campaign.Stash.Count && idx < 40; idx++)
+                if (GridRect(idx).Contains(m)) { _dragItem = _campaign.Stash[idx]; break; }
+            if (_dragItem == null)
+            {
+                var bySlot = a.Equipment.ToDictionary(TitheContent.ItemSlot, id => id);
+                foreach (var d in DollSlots)
+                    if (DollSlotRect(d).Contains(m) && bySlot.TryGetValue(d.slot, out string? worn))
+                    { _dragItem = worn; _dragFromDoll = true; break; }
+            }
+        }
+        if (_mouse.LeftButton == ButtonState.Pressed && _dragItem != null && !_dragging
+            && Math.Abs(m.X - _dragStart.X) + Math.Abs(m.Y - _dragStart.Y) > 6)
+            _dragging = true;
+
+        if (!released) return;
+        if (!_bagPress) return;          // the press opened the bag elsewhere — not our click
+        _bagPress = false;
+        var grid = new Rectangle(InvWin.X + 390, InvWin.Y + 62, 5 * 45, 8 * 45);
+        if (_dragging && _dragItem != null && a != null)
+        {
+            if (!_dragFromDoll && DollRect.Contains(m)) { _campaign.Equip(a, _dragItem); _sfx.Play("coin"); }
+            else if (_dragFromDoll && grid.Contains(m)) { _campaign.Unequip(a, _dragItem); _sfx.Play("click"); }
+        }
+        else if ((_scene == Scene.City || _scene == Scene.Graveyard) && ClickMenuButtons(m)) { }
+        else ClickInventoryWindow(m);   // a plain click keeps every old behavior
+        _dragging = false; _dragItem = null;
     }
 
     private void ClickInventoryWindow(Point m)
@@ -399,14 +462,14 @@ public partial class SliceGame
         if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = false; _openNpc = -1; return true; }
         if (!_charOpen && !_invOpen && !_spellOpen) return false;
         if (Pressed(Keys.Escape)) { _charOpen = _invOpen = _spellOpen = false; return true; }
+        if (_invOpen) { UpdateInventoryDrag(); return true; }   // the bag speaks press/drag/release
         if (LeftClicked())
         {
             var m = new Point(_mouse.X, _mouse.Y);
             // The corner menu keeps working while a window is open (click = toggle shut).
             if ((_scene == Scene.City || _scene == Scene.Graveyard) && ClickMenuButtons(m)) return true;
             if (_charOpen) ClickCharacterWindow(m);
-            else if (_spellOpen) ClickSpellPanel(m);
-            else ClickInventoryWindow(m);
+            else ClickSpellPanel(m);
         }
         return true;
     }

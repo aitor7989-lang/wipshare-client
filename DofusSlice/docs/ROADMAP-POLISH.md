@@ -53,9 +53,9 @@ The vitals color code, applied EVERYWHERE (bars, numbers, floats, icons, rows):
 
 ## PASS 4 — "TOUCH THE LOOT" (inventory feel + drops)
 
-- [ ] 4.1 DRAG & DROP in the inventory: pick a piece up from the stash and drop
+- [x] 4.1 DRAG & DROP in the inventory: pick a piece up from the stash and drop
       it on the doll (and back). Click-to-equip stays as the fallback.
-- [ ] 4.2 ESSENCE DROPS IN THE WORLD: when an essence falls, it appears on the
+- [x] 4.2 ESSENCE DROPS IN THE WORLD: when an essence falls, it appears on the
       field — shiny, animated, unmistakably not gear — before it goes to the bag.
 
 ## Ordering rationale

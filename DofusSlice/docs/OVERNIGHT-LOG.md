@@ -703,3 +703,21 @@ The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
   near-yard pack more often than not (watched twice in QA — dragged-out flow held
   both times). Hiring first is the intended answer (45g/head from 160g), but the
   opening pack may want a soft-touch variant for solo divers.
+
+## v9.1: PASS 4 "TOUCH THE LOOT" — the polish roadmap CLOSES
+- DRAG & DROP in the bag: a press on a stash cell or worn doll slot ARMS a drag,
+  moving past 6px makes it real (the piece's glyph rides the cursor, the legal
+  landing zone strokes walk-green), release drops — stash->doll equips, doll->grid
+  unequips. A release that never travelled is the old click, so eat/teach/equip
+  clicks are untouched. The bag now speaks press/drag/release (guarded so the
+  menu-press that OPENS it can't self-close on its release — caught in design).
+- ESSENCES FALL IN THE WORLD: a victorious yard fight drops its essences ON the
+  pack's cell — a bobbing soul-glyph pulsing ink<->cast-blue inside a slow-turning
+  four-point glint, name beneath. Walk beside it to claim (+NAME float, coin);
+  leaving the yard snatches leftovers so loot is never silently lost. Crypt drops
+  still go straight to the bag (the altar tears you out).
+- QA: release-based input regression-proven (bag opens from the menu and STAYS
+  open, strip clicks fire on release, menu closes it). The drag path is a thin
+  layer over Equip/Unequip, which the progression sim already proves; a live drag
+  needs a gear drop, so it rides on that proof.
+ALL FOUR PASSES OF docs/ROADMAP-POLISH.md ARE DONE (18 items + 3.4b).

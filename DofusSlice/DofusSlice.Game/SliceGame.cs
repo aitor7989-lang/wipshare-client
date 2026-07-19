@@ -44,6 +44,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private int _openNpc = -1;                        // which City building's panel is open
     private MapData _cityMap = null!, _graveMap = null!;
     private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
+    private readonly List<(string essence, CellCoord cell, float born)> _groundEssences = new(); // shiny drops on the dirt
 
     // Graveyard roaming: real click-to-move party + a level-gated Crypt entrance.
     private Battlefield _graveField = null!;
@@ -313,6 +314,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void EnterCity()
     {
+        // Leaving the yard snatches any essence still shining on the dirt — the loot is
+        // yours from the kill; the ground is only its stage, never a silent grave.
+        foreach (var g in _groundEssences) _campaign.Essences.Add(g.essence);
+        _groundEssences.Clear();
         _scene = Scene.City;
         _openNpc = -1;
         _dive = null;
@@ -533,6 +538,17 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         MovePartyAlongPath(dt);
         if (_dive.ConsumeDeparture() is { } dep) { _yardMsg = dep; _yardMsgTimer = 4f; } // the Grasping exit
         if (_dive.ConsumeRespawn() is { } rs) { _yardMsg = rs; _yardMsgTimer = 3.5f; }   // the grave refills
+
+        // Walking beside a fallen essence claims it (Pass 4): into the bag, with a flourish.
+        for (int gi = _groundEssences.Count - 1; gi >= 0; gi--)
+            if (_groundEssences[gi].cell.DistanceTo(_partyCell) <= 1)
+            {
+                var g = _groundEssences[gi]; _groundEssences.RemoveAt(gi);
+                _campaign.Essences.Add(g.essence);
+                SpawnWorldFloat($"+{g.essence.ToUpperInvariant()}", Mono.Cast,
+                    _proj.CellCenter(g.cell) + new Vector2(0, -40));
+                _sfx.Play("coin", 0.9f);
+            }
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
         // Number keys walk the party to THIS yard's packs in reach order (a quick shortcut).
@@ -778,6 +794,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             else { _cryptRoom++; BeginCryptRoom(); }     // the next sealing door grinds open
             return;
         }
+
+        // Pass 4: essences don't teleport into the bag — they FALL where the pack died,
+        // shining on the dirt until the crew walks them over (leaving snatches leftovers).
+        if (_fightReport is { Outcome: FightOutcome.Victory } fr && fr.Drops.Count > 0
+            && _packCells.TryGetValue(fr.PackId, out var dropCell))
+            foreach (var e in fr.Drops)
+                if (_campaign.Essences.Remove(e))
+                    _groundEssences.Add((e, dropCell, _time));
 
         _cryptRun = false;                               // a yard pack cleared
         _scene = Scene.Graveyard; SetupView(_graveMap);
@@ -2787,6 +2811,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawCrypt(); // after the packs so its label is never buried under a huddle
         if (_dive?.Survivor is { } offer) DrawSurvivorToken(offer);
         DrawPartyToken(_partyWorld);
+        DrawGroundEssences();          // fallen essences shine where their pack died
         DrawFloatList(_worldFloats);   // "+15" over the party when bread lands
         EndWorld();
 
@@ -2801,6 +2826,29 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
         _sb.End();
+    }
+
+    /// <summary>Fallen essences shine on the dirt (Pass 4): a bobbing soul-glyph pulsing
+    /// between ink and cast-blue inside a slow-turning four-point glint, with its name
+    /// beneath — unmistakably not gear, unmistakably worth the detour.</summary>
+    private void DrawGroundEssences()
+    {
+        foreach (var (ess, cell, born) in _groundEssences)
+        {
+            float t = _time - born;
+            var at = _proj.CellCenter(cell) + new Vector2(0, -14 + MathF.Sin(t * 3f) * 3f);
+            for (int k = 0; k < 4; k++)
+            {
+                float ang = t * 1.3f + k * MathF.PI / 2f;
+                var dir = new Vector2(MathF.Cos(ang), MathF.Sin(ang) * 0.55f);
+                _prim.Line(_sb, at + dir * 9, at + dir * (17 + 3 * MathF.Sin(t * 5f + k)), 2f,
+                    Mono.Cast * 0.75f);
+            }
+            var pulse = Color.Lerp(Mono.Ink, Mono.Cast, 0.5f + 0.5f * MathF.Sin(t * 5f));
+            if (!DrawUiSprite("icon_ui_essence", at, 24, pulse))
+                _prim.DiscAt(_sb, at, 6, pulse);
+            _font.DrawCentered(_sb, Trunc(ess.ToUpperInvariant(), 10), (int)at.X, (int)at.Y + 16, WT, Mono.Cast);
+        }
     }
 
     /// <summary>The edge gates between the three yards: raised doorframes with a direction read.</summary>

@@ -492,3 +492,24 @@ under Xvfb, plus one run with NO assets folder at all.
 - Flows exercised: temple + hiring panels (bought two mercs, gold math right), kit tabs
   across three crew members, NEAR->MID yard gate transit, pack rollovers, hire-button
   inversion on hover. Building/gate cells confirmed clickable at their computed centers.
+
+## v8.0: YOU PLAY NOW — the P0 fun slice
+The Make It Fun brief's pivot, built: your avatar is piloted Dofus-style; the crew are
+companions with their own turns. Decisions locked with the designer: pure-AI companions,
+30s timer from day one, SPACE hands your turn to the AI, avatar death = dragged out.
+- YOUR TURN: move-range shading, castable cells + AoE + hover damage estimates, spell bar
+  (the band's kit wells are now clickable, 1-6 hotkeys, selection inverts, unaffordable
+  spells dim), END TURN button with the ticking 30s clock, ENTER ends, SPACE = auto.
+  The whole piloted grammar was already in the engine from the standalone mode — the
+  slice wired it to the avatar's turn inside tithe fights (campaign AND standalone).
+- REAL KITS: every class starts with THREE spells, not one. Archer: Piercing Shot ·
+  Crippling Arrow · Blink. Bulwark: Slam · Seize · Bastion. Cannon: Ruin Bolt ·
+  Flashfire · Blood Pact. Merc AI already chains them (piercing -> crippling kills).
+- RANK-UP PREVIEW: hovering RANK UP shows the NEXT rank's full line in the row.
+- DRAGGED OUT: a downed avatar no longer ends the campaign — wounded, HP 1, the dive
+  over, that fight's spoils lost. Dead mercs stay dead.
+- Fight log narrates your turn lifecycle (hand-off, end, clock-out, cast refusals).
+- QA'd end to end under Xvfb on both paths: arm-by-hotkey -> click-cast (Ruin Bolt 24
+  dmg confirmed in the log), SPACE hand-off mid-turn, timer auto-end, campaign dive
+  piloting on a generated island. (The flaky-looking "turn skips" were the harness
+  dropping keys; the game-side trace exonerated the dispatcher.)

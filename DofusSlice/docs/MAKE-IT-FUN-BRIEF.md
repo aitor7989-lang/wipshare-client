@@ -112,16 +112,16 @@ A 20-minute session where the player can honestly answer YES to all three:
 2. *"Am I working toward a build?"* (can name the next spell/rank/gear they want)
 3. *"Did I want one more dive when the bell rang?"*
 
-## 6. Open questions before we build
+## 6. Decisions (locked with the designer)
 
-1. **Party cap** — stay at 3 (you + 2) for readability, or allow 4?
-2. **Turn timer** — 30s Dofus-style, or untimed while prototyping?
-3. **Merc control** — pure stance-based AI (recommended), or allow ONE "ping" command per
-   round (focus target / fall back)?
-4. **Autoresolve** — keep a "resolve fight automatically" button for trash packs once
-   you're overleveled, or force piloting always?
-5. **Avatar death** — currently campaign over. Keep the hardcore stake, or downgrade to
-   "dragged out wounded, lose the dive's loot"?
+1. **Merc control**: PURE AI, no input at all — companions are their own people; their
+   kit and personality carry them. (No stances, no pings.)
+2. **Turn timer**: 30s Dofus-style from day one; end-turn auto-fires at zero.
+3. **Autoresolve**: YES — SPACE during your turn hands it to the AI (the zen-grind mode
+   survives as a per-turn choice).
+4. **Avatar death**: dragged out wounded — the dive ends on the spot and its unbanked
+   loot is lost; the campaign continues. (Hardcore mode can return as an option later.)
+5. **Party cap**: stays at 3 (you + 2) for board readability.
 
 *Recommended build order: P0 (1→2→3) as one vertical slice on the current save format,
 playtest, then P1 items 4–5 before anything else. P2/P3 only after the turn puzzle is fun

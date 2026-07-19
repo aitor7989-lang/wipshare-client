@@ -221,26 +221,40 @@ public sealed class DiveSession
                 if (piece != null && _campaign.AddGear(piece)) gearGot.Add(TitheContent.ItemName(piece));
             }
 
+            bool avatarDown = false;
             foreach (var u in res.Units)
             {
                 var cu = _campaign.Crew.FirstOrDefault(x => x.Id == u.Id);
                 if (cu == null) continue;
                 cu.GainXp(u.XpGained); // spell + stat points bank; the PLAYER spends them (kit screen)
-                if (u.Died) { _campaign.Crew.Remove(cu); lost.Add(cu.Name); continue; }
+                if (u.Died)
+                {
+                    // Downed MERCS die for good. A downed AVATAR is dragged out: wounded,
+                    // at death's door, the dive over — but the campaign continues.
+                    if (!cu.IsAvatar) { _campaign.Crew.Remove(cu); lost.Add(cu.Name); continue; }
+                    cu.Wounded = true; cu.CurrentHp = 1; wounded.Add(cu.Name); avatarDown = true;
+                    continue;
+                }
                 cu.CurrentHp = engine.Fighters.First(f => f.Id == u.Id).Hp; // carry damage into the next fight
                 if (u.Wounded) { cu.Wounded = true; wounded.Add(cu.Name); }
             }
 
             CheckBetrayal(); // a heavy haul under a low bell is when a Grasping merc walks
-            if (Clock <= 0) Eject("the bell — clock expired");
+            if (avatarDown) Eject("you are carried out cold — the dive ends");
+            else if (Clock <= 0) Eject("the bell — clock expired");
             return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded);
         }
 
-        // A fight lost outright: the whole party is gone. No player-managed unit remains → over.
-        foreach (var u in _campaign.DiveParty.ToList()) { _campaign.Crew.Remove(u); lost.Add(u.Name); }
-        Eject("the crew fell — campaign over");
+        // A fight lost outright. Dead mercenaries are gone for good; the AVATAR is dragged
+        // out of the graveyard instead of dying — wounded, HP 1, this fight's spoils lost.
+        foreach (var u in _campaign.DiveParty.ToList())
+        {
+            if (u.IsAvatar) { u.Wounded = true; u.CurrentHp = 1; wounded.Add(u.Name); }
+            else { _campaign.Crew.Remove(u); lost.Add(u.Name); }
+        }
+        Eject("the crew fell — your body is dragged to the lychgate");
         return new FightReport(pack.Def.Id, res.Outcome, 0, 0,
-            Array.Empty<string>(), Array.Empty<string>(), lost, Array.Empty<string>());
+            Array.Empty<string>(), Array.Empty<string>(), lost, wounded);
     }
 
     private string? _mendMsg;

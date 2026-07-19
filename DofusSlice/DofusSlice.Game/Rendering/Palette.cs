@@ -19,11 +19,12 @@ public static class Palette
 
     // Functional cell colours, matching the usual tactical convention (as in Dofus):
     // green = movement (PM), red = spell/attack range (PA), orange = area of effect.
+    // Mono keeps the grammar with two inks: walk = pale ink, strike = the red accent.
     public static readonly Color PlacementCell = new(86, 148, 240, 150); // pre-fight placement zone
-    public static readonly Color MoveRange = new(90, 205, 100, 150);
-    public static readonly Color CastReach = new(214, 74, 62, 78);    // spell's full geometric reach (dim)
-    public static readonly Color CastRange = new(236, 92, 74, 168);   // cells that are valid targets right now
-    public static readonly Color Aoe = new(240, 160, 60, 180);
+    public static readonly Color MoveRange = Mono.On ? new Color(236, 236, 230, 48) : new Color(90, 205, 100, 150);
+    public static readonly Color CastReach = Mono.On ? new Color(122, 122, 118, 58) : new Color(214, 74, 62, 78);
+    public static readonly Color CastRange = Mono.On ? new Color(224, 60, 48, 140) : new Color(236, 92, 74, 168);
+    public static readonly Color Aoe = Mono.On ? new Color(224, 60, 48, 205) : new Color(240, 160, 60, 180);
     public static readonly Color Hover = new(255, 255, 255, 90);
     public static readonly Color CurrentRing = Mono.On ? Mono.Ink : new Color(255, 220, 120);
 

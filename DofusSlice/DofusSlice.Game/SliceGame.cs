@@ -117,6 +117,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private const float TurnSeconds = 30f;
     private float _turnClock = TurnSeconds;
     private string _turnOwner = "";
+    private bool _autoTurn;              // SPACE during YOUR turn: hand this one turn to the AI
 
     private Rectangle[] _spellButtons = Array.Empty<Rectangle>();
     private Rectangle _endTurnButton;
@@ -516,10 +517,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (skin && _dof.SpellIcon(_sb, skillKeys[i], new Rectangle(row.X + 2, row.Y + 1, 26, 26)))
                 tx = row.X + 34;
             _font.Draw(_sb, $"{sp.Name.ToUpperInvariant()}   RANK {rank}/{maxR}", tx, row.Y + 4, 1, col);
-            string info = string.Join("  ·  ", sp.Effects.Select(e => EffectLine(e).text))
-                + $"  ·  AP {sp.ApCost}  ·  RANGE {sp.MinRange}-{sp.MaxRange}"
-                + (sp.Cooldown > 0 ? $"  ·  CD {sp.Cooldown}" : "");
-            _font.Draw(_sb, Trunc(info, 84), tx, row.Y + 16, 1, skin ? ink : Palette.TextDim);
+            string InfoOf(SpellDef s) => string.Join("  ·  ", s.Effects.Select(e => EffectLine(e).text))
+                + $"  ·  AP {s.ApCost}  ·  RANGE {s.MinRange}-{s.MaxRange}"
+                + (s.Cooldown > 0 ? $"  ·  CD {s.Cooldown}" : "");
+            // BEFORE -> AFTER: hovering RANK UP previews the next rank right in the row.
+            bool rankHover = a.SpellPoints > 0 && rank < maxR && RankUpRect(i).Contains(mp);
+            _font.Draw(_sb,
+                rankHover ? Trunc($"NEXT: {InfoOf(TitheContent.SkillAtRank(skillKeys[i], rank + 1))}", 84)
+                          : Trunc(InfoOf(sp), 84),
+                tx, row.Y + 16, 1, rankHover ? ink : skin ? ink : Palette.TextDim);
             if (a.SpellPoints > 0 && rank < maxR)
             {
                 var b = RankUpRect(i);
@@ -950,9 +956,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void UpdateCampaignCombat(float dt)
     {
-        if (Pressed(Keys.D1)) _speed = 1f;
-        if (Pressed(Keys.D2)) _speed = 2f;
-        if (Pressed(Keys.D3)) _speed = 4f;
+        // While YOU are piloting, 1-6 belong to the spell bar — speed keys only rule AI turns.
+        bool piloting = !_placing && AvatarTurn && !_autoTurn;
+        if (!piloting)
+        {
+            if (Pressed(Keys.D1)) _speed = 1f;
+            if (Pressed(Keys.D2)) _speed = 2f;
+            if (Pressed(Keys.D3)) _speed = 4f;
+        }
         float sdt = dt * _speed;
 
         _anim.Update(sdt, _engine.Fighters);
@@ -987,8 +998,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             _turnOwner = _engine.Current.Id;
             _turnClock = TurnSeconds; _enemyTimer = 0f; _enemyActed = false;
+            _autoTurn = false; _selectedSpell = -1;
         }
-        UpdateWatchedTurn(sdt);
+        if (AvatarTurn && !_autoTurn) UpdateAvatarTurn(dt);   // YOUR turn, by hand
+        else UpdateWatchedTurn(sdt);                          // everyone else plays themselves
     }
 
     /// <summary>After a fight resolves: eject, chain to the next Crypt room, or return to the yard.</summary>
@@ -1036,12 +1049,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         if (Pressed(Keys.R)) { _seed++; StartFight(); return; }
 
-        // Watched-mode playback speed + encounter toggle.
+        // Watched-mode playback speed + encounter toggle (spell keys own 1-6 while piloting).
         if (_tithe)
         {
-            if (Pressed(Keys.D1)) _speed = 1f;
-            if (Pressed(Keys.D2)) _speed = 2f;
-            if (Pressed(Keys.D3)) _speed = 4f;
+            bool piloting = !_placing && AvatarTurn && !_autoTurn;
+            if (!piloting)
+            {
+                if (Pressed(Keys.D1)) _speed = 1f;
+                if (Pressed(Keys.D2)) _speed = 2f;
+                if (Pressed(Keys.D3)) _speed = 4f;
+            }
             if (Pressed(Keys.B)) { _boss = !_boss; StartFight(); return; } // swap pack <-> Sexton's court
         }
 
@@ -1075,10 +1092,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _turnClock = TurnSeconds;
             _enemyTimer = 0f;
             _enemyActed = false;
+            _autoTurn = false; _selectedSpell = -1;
         }
 
-        if (_tithe)
-            UpdateWatchedTurn(sdt);        // every unit acts by AI policy
+        if (_tithe && AvatarTurn && !_autoTurn)
+            UpdateAvatarTurn(dt);          // YOUR turn, by hand — the P0 pivot
+        else if (_tithe)
+            UpdateWatchedTurn(sdt);        // every other unit acts by AI policy
         else if (_engine.Current.PlayerControlled)
             UpdatePlayerTurn(dt);
         else
@@ -1247,6 +1267,81 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
+    }
+
+    /// <summary>The P0 pivot: it is YOUR turn — the avatar acts by hand, everyone else by AI.
+    /// Mercenaries and summons are their own people; only the avatar is piloted.</summary>
+    private bool AvatarTurn => _engine.Outcome == FightOutcome.Ongoing
+        && _engine.Current is { PlayerControlled: true, IsSummon: false, IsMercenary: false };
+
+    /// <summary>The actor's spell wells in the combat band (drawn AND clicked from here).</summary>
+    private static Rectangle KitWellRect(int i) => new(934 + i * 52, HudTop + 32, 46, 46);
+
+    private static readonly Rectangle TitheEndTurn = new(1080, HudTop + 96, 184, 36);
+
+    /// <summary>Your Dofus turn: 1-6 select a spell, click ground to move/cast, SPACE hands
+    /// the turn to the AI, ENTER (or the button) ends it, and the 30s clock always runs.</summary>
+    private void UpdateAvatarTurn(float dt)
+    {
+        var me = _engine.Current;
+        _moveRange = _engine.MovementRange(me);
+
+        if (_anim.IsBusy) return;            // input + clock hold while an action replays
+
+        _turnClock -= dt;
+        if (_turnClock <= 0f) { _log.Add("the clock ends your turn."); EndAvatarTurn(); return; }
+
+        var spells = me.Spells;
+        for (int i = 0; i < 6 && i < spells.Count; i++)
+            if (Pressed(Keys.D1 + i)) { ToggleAvatarSpell(i); return; }
+        if (Pressed(Keys.Escape)) _selectedSpell = -1;
+        if (Pressed(Keys.Space))
+        {
+            _log.Add("you let the crew's rhythm take this turn (SPACE).");
+            _autoTurn = true; _selectedSpell = -1; return;   // let them play it
+        }
+        if (Pressed(Keys.Enter)) { _log.Add("you end your turn."); EndAvatarTurn(); return; }
+        if (RightClicked()) _selectedSpell = -1;
+
+        if (!LeftClicked()) return;
+        var m = new Point(_mouse.X, _mouse.Y);
+        for (int i = 0; i < 6 && i < spells.Count; i++)
+            if (KitWellRect(i).Contains(m)) { ToggleAvatarSpell(i); return; }
+        if (TitheEndTurn.Contains(m)) { _log.Add("you end your turn."); EndAvatarTurn(); return; }
+        if (m.Y >= HudTop) return;           // clicked empty band space
+
+        if (_selectedSpell >= 0 && _selectedSpell < spells.Count)
+        {
+            var spell = spells[_selectedSpell];
+            if (_engine.CanCast(me, spell, _hover, out string? why))
+            {
+                _engine.TryCast(me, spell, _hover);
+                if (!_engine.CanCast(me, spell, _hover, out _)) _selectedSpell = -1;
+            }
+            else if (why != null)
+                _log.Add($"  can't cast {spell.Name.ToLowerInvariant()}: {why.ToLowerInvariant()}");
+        }
+        else if (_moveRange.ContainsKey(_hover))
+        {
+            _engine.TryMove(me, _hover);
+        }
+    }
+
+    private void ToggleAvatarSpell(int index)
+    {
+        var spells = _engine.Current.Spells;
+        if (index >= spells.Count) return;
+        _selectedSpell = _selectedSpell == index ? -1 : index;
+        _sfx.Play("click", 0.4f);
+    }
+
+    private void EndAvatarTurn()
+    {
+        if (_anim.IsBusy) return;
+        _selectedSpell = -1;
+        _engine.EndTurn();
+        _enemyTimer = 0f;
+        _enemyActed = false;
     }
 
     private bool Pressed(Keys k) => _keys.IsKeyDown(k) && _prevKeys.IsKeyUp(k);
@@ -1548,12 +1643,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_engine.Current.IsAlive)
             _prim.DiamondAt(_sb, _anim.CenterFor(_engine.Current), Palette.CurrentRing * 0.28f);
 
-        if (_tithe) return;       // watched combat isn't piloted — no move/spell range hints
+        // Watched turns show no piloting hints — but YOUR turn is a real Dofus turn.
+        if (_tithe && !(AvatarTurn && !_autoTurn)) return;
 
         if (_anim.IsBusy) return; // hide range hints mid-action
 
-        var hero = Hero;
-        bool playerTurn = _engine.Current.PlayerControlled && hero != null;
+        var hero = _tithe ? _engine.Current : Hero;
+        bool playerTurn = hero != null && (_tithe || _engine.Current.PlayerControlled);
+        var spellList = _tithe ? hero!.Spells : HeroSpells;
+        if (_selectedSpell >= spellList.Count) _selectedSpell = -1;
 
         if (playerTurn && _selectedSpell < 0)
         {
@@ -1562,12 +1660,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
             // Hover preview: MP cost to reach the hovered cell.
             if (_moveRange.TryGetValue(_hover, out int cost))
-                DrawCellLabel($"{cost} MP", _hover, Palette.MpPip);
+                DrawCellLabel($"{cost} MP", _hover, Mono.On ? Mono.Ink : Palette.MpPip);
         }
 
         if (playerTurn && _selectedSpell >= 0)
         {
-            var spell = HeroSpells[_selectedSpell];
+            var spell = spellList[_selectedSpell];
             foreach (var cell in _engine.SpellReachCells(hero!, spell))
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell), Palette.CastReach);
 
@@ -1582,7 +1680,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
                 // Hover preview: estimated damage to the target on the hovered cell.
                 if (_engine.EstimateDamage(hero!, spell, _hover) is (int min, int max))
-                    DrawCellLabel(min == max ? $"{min}" : $"{min}-{max}", _hover, new Color(255, 210, 120));
+                    DrawCellLabel(min == max ? $"{min}" : $"{min}-{max}", _hover,
+                        Mono.On ? Mono.Ink : new Color(255, 210, 120));
             }
         }
 
@@ -2148,8 +2247,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (!_gum.Active)
         {
             _font.Draw(_sb, $"ROUND {_engine.Round}   {place}", 16, 12, 2, Palette.Text);
-            _font.Draw(_sb, $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
-                _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
+            bool piloting = AvatarTurn && !_autoTurn;
+            _font.Draw(_sb,
+                piloting ? $"YOUR TURN — {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S"
+                : $"WATCHING — {_engine.Current.Name.ToUpperInvariant()}", 16, 32, 2,
+                piloting ? Palette.Text
+                : _engine.Current.Team == Team.Player ? Palette.HpFill : Palette.EnemyColor);
         }
         // Only advertise keys that work here: R/B restart or swap the STANDALONE fight and would
         // mislead during a campaign fight, where the dive owns the flow.
@@ -2266,19 +2369,28 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         }
 
         // The actor's spells as slot wells, right side. HOVER a well for the full spell card.
-        _font.Draw(_sb, $"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT", 934, HudTop + 14, 1, Ew.InkSoft);
-        _font.Draw(_sb, "(hover)", 934 + _font.Measure($"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT", 1) + 8,
-            HudTop + 14, 1, Ew.InkMuted);
-        int sx = 934;
+        // On YOUR turn this IS the spell bar: 1-6 or click to arm, dimmed when unaffordable.
+        bool piloting = _tithe && AvatarTurn && !_autoTurn;
+        string kitTitle = piloting ? "YOUR KIT" : $"{Trunc(cur.Name.ToUpperInvariant(), 14)}'S KIT";
+        _font.Draw(_sb, kitTitle, 934, HudTop + 14, 1, piloting ? Ew.Ink : Ew.InkSoft);
+        _font.Draw(_sb, piloting ? "(1-6 · click)" : "(hover)",
+            934 + _font.Measure(kitTitle, 1) + 8, HudTop + 14, 1, Ew.InkMuted);
         SpellDef? tip = null; int tipX = 0;
         var kmp = new Point(_mouse.X, _mouse.Y);
+        int wi = 0;
         foreach (var spell in cur.Spells.Take(6))
         {
-            var well = new Rectangle(sx, HudTop + 32, 46, 46);
+            var well = KitWellRect(wi);
             bool hov = well.Contains(kmp);
+            bool sel = piloting && _selectedSpell == wi;
+            bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
             if (hov) { tip = spell; tipX = well.X; }
-            _ew.Well(_sb, well);
-            if (hov) _prim.StrokeRect(_sb, well, 1, Ew.AccentBright);
+            if (Mono.On) Mono.Slot(_sb, _prim, well, hover: hov, selected: sel);
+            else
+            {
+                _ew.Well(_sb, well);
+                if (hov || sel) _prim.StrokeRect(_sb, well, sel ? 2 : 1, Ew.AccentBright);
+            }
             // The classic Dofus spell tile when the icon set is baked; the letter otherwise.
             string? skey = TitheContent.SkillKeyById(spell.Id);
             if (_dof.Loaded && skey != null
@@ -2291,10 +2403,24 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             {
                 var dmg = spell.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
                 var col = dmg != null ? EwChrome.ElementColor(dmg.Element) : Ew.Moon;
+                if (!canPay) col = Mono.On ? Mono.Faint : Ew.InkMuted;   // too costly THIS turn
                 _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), well.Center.X, well.Y + 12, 2, col);
-                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1, Ew.InkSoft);
+                _font.DrawCentered(_sb, $"{spell.ApCost}", well.Center.X, well.Bottom - 14, 1,
+                    canPay ? Ew.InkSoft : Mono.On ? Mono.Danger : Ew.Danger);
             }
-            sx += 52;
+            wi++;
+        }
+        if (piloting)
+        {
+            // END TURN + the 30s clock + the how-to line: your whole turn UI in one corner.
+            bool etHov = TitheEndTurn.Contains(kmp);
+            if (Mono.On) Mono.Button(_sb, _prim, TitheEndTurn, hover: etHov);
+            else _ew.Pill(_sb, TitheEndTurn, pressed: etHov);
+            _font.DrawCentered(_sb, $"END TURN  ·  {(int)MathF.Ceiling(Math.Max(0f, _turnClock))}S",
+                TitheEndTurn.Center.X, TitheEndTurn.Y + 12, 1,
+                Mono.On ? Mono.ButtonInk(etHov) : Color.White);
+            _font.Draw(_sb, "CLICK: MOVE   ·   SPACE: AUTO   ·   ENTER: END",
+                934, TitheEndTurn.Y - 18, 1, Ew.InkMuted);
         }
         if (tip != null) DrawSpellCard(tip, Math.Min(tipX, ScreenW - 300), HudTop - 6);
     }
@@ -3095,7 +3221,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         }
         else
         {
-            _font.DrawCentered(_sb, _campaign.Over ? "CAMPAIGN OVER" : "the bell drags the survivors out",
+            _font.DrawCentered(_sb, _campaign.Over ? "CAMPAIGN OVER"
+                    : "you are dragged out cold — the dive is over, its spoils stay in the dirt",
                 panel.Center.X, y, 2, (Mono.On ? Mono.Danger : new Color(184, 70, 60))); y += 36;
         }
 

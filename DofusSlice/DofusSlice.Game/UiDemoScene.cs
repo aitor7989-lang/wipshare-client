@@ -26,21 +26,26 @@ public sealed partial class SliceGame
         "blood_pact", "blink",
     };
 
-    // ----- Dofus-2-style text: the baked DejaVu Sans Bold atlas, pixel font as fallback -----
+    // ----- Dofus-2-style text: baked DejaVu Sans Bold. Headings use the TRUE 26px atlas
+    // (never integer-doubled 13px), so every size renders with the same crispness. -----
 
     private void DT(string t, int x, int y, int scale, Color c)
     {
+        if (scale >= 2 && _dfontBig.Loaded) { _dfontBig.Draw(_sb, t, x, y, 1, c); return; }
         if (_dfont.Loaded) _dfont.Draw(_sb, t, x, y, scale, c);
         else _font.Draw(_sb, t, x, y, scale, c);
     }
 
     private void DTC(string t, int cx, int y, int scale, Color c)
     {
+        if (scale >= 2 && _dfontBig.Loaded) { _dfontBig.DrawCentered(_sb, t, cx, y, 1, c); return; }
         if (_dfont.Loaded) _dfont.DrawCentered(_sb, t, cx, y, scale, c);
         else _font.DrawCentered(_sb, t, cx, y, scale, c);
     }
 
-    private int DM(string t, int scale) => _dfont.Loaded ? _dfont.Measure(t, scale) : _font.Measure(t, scale);
+    private int DM(string t, int scale) =>
+        scale >= 2 && _dfontBig.Loaded ? _dfontBig.Measure(t, 1)
+        : _dfont.Loaded ? _dfont.Measure(t, scale) : _font.Measure(t, scale);
 
     private void DrawUiDemo()
     {
@@ -227,8 +232,17 @@ public sealed partial class SliceGame
         if (hero != null)
             SpriteDraw.Feet(_sb, hero, new Vector2(doll.Center.X, doll.Bottom - 72), Color.White, 150f,
                 (int)(_time * 5) % hero.FrameCount);
-        _dof.Draw(_sb, "turn_l", new Rectangle(doll.Center.X - 82, doll.Bottom - 72, 30, 28));
-        _dof.Draw(_sb, "turn_r", new Rectangle(doll.Center.X + 52, doll.Bottom - 72, 30, 28));
+        // The rotate arrows from the user's sprite sheet, flanking the FEET like the original.
+        if (_dof.Texture("rot_l") != null)
+        {
+            _dof.Draw(_sb, "rot_l", new Rectangle(doll.Center.X - 64, doll.Bottom - 106, 26, 42));
+            _dof.Draw(_sb, "rot_r", new Rectangle(doll.Center.X + 38, doll.Bottom - 106, 26, 42));
+        }
+        else
+        {
+            _dof.Draw(_sb, "turn_l", new Rectangle(doll.Center.X - 64, doll.Bottom - 100, 30, 28));
+            _dof.Draw(_sb, "turn_r", new Rectangle(doll.Center.X + 36, doll.Bottom - 100, 30, 28));
+        }
 
         // The pet / consumable strip: eggs, one locked, one item.
         for (int i = 0; i < 7; i++)

@@ -372,3 +372,11 @@ gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for 
 - The HUD is flat black; the chat corner and the minimap are deleted per the user's call;
   the yellow LEVEL strip runs flush along the very bottom, full width.
 - The scene backdrop is black like the original's.
+
+## Demo pass 4 (user notes + their sprite sheet)
+- Unified typography: bake_assets now writes a TRUE 26px ui_font_big atlas alongside the 13px
+  one; headings and big values draw from it (never integer-doubled), so all text carries the
+  same rendering quality. UiFont learned named atlases.
+- The character-rotate arrows are now the orange arrow pair from the user's uploaded UI sheet
+  (keyed from the JPEG into the local theme assets), placed flanking the doll like the
+  original layout.

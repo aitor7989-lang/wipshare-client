@@ -129,7 +129,7 @@ def bake_ui(ui_png_dir):
     print(f"  ui_button(+down): split at row {mid}")
 
 
-def bake_font(ttf_path, size=16):
+def bake_font(ttf_path, size=16, out_name="ui_font"):
     font = ImageFont.truetype(ttf_path, size)
     chars = [chr(c) for c in range(32, 127)]
     pad = 1
@@ -151,10 +151,10 @@ def bake_font(ttf_path, size=16):
         gx, gy = i % cols * cw + pad, i // cols * chh + pad
         d.text((gx - b[0], gy - b[1]), ch, font=font, fill=(255, 255, 255, 255))
         meta["glyphs"][ch] = [gx, gy, w, h, b[0], b[1], adv]
-    atlas.save(os.path.join(OUT, "ui_font.png"))
-    with open(os.path.join(OUT, "ui_font.json"), "w") as f:
+    atlas.save(os.path.join(OUT, out_name + ".png"))
+    with open(os.path.join(OUT, out_name + ".json"), "w") as f:
         json.dump(meta, f)
-    print(f"  ui_font: {len(entries)} glyphs at {size}px, atlas {atlas.size}")
+    print(f"  {out_name}: {len(entries)} glyphs at {size}px, atlas {atlas.size}")
 
 
 def main():
@@ -189,6 +189,8 @@ def main():
     if a.font:
         print("font:")
         bake_font(a.font, a.font_size)
+        # A true large atlas for headings/values, so nothing integer-doubles into chunkiness.
+        bake_font(a.font, a.font_size * 2, "ui_font_big")
 
 
 if __name__ == "__main__":

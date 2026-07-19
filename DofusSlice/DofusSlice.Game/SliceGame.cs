@@ -85,7 +85,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private ChamberSet _tiles = null!;                // legacy Chamber props (fallback tokens only)
     private UiSkin _ui = null!;                       // pixel UI panels/buttons (local-only art)
     private DofusUi _dof = null!;                     // Dofus oldUI theme (local-only art)
-    private UiFont _dfont = null!;                    // baked dungeon font (local-only art)
+    private UiFont _dfont = null!;                    // baked UI sans, 13px (local-only art)
+    private UiFont _dfontBig = null!;                 // same face at 26px for headings/values
     private Ui.GumHud _gum = null!;                   // Gum-editor HUD skin (ui/TitheHud.gumx)
     private Audio.SoundBank _sfx = null!;             // synthesized chiptune SFX (no asset files)
     private EwChrome _ew = null!;                     // Emberwick combat chrome (all procedural)
@@ -167,6 +168,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _tiles = new ChamberSet(_sprites);
         _ui = new UiSkin(_sprites);
         _dfont = new UiFont(_sprites);
+        _dfontBig = new UiFont(_sprites, "ui_font_big");
         _pixSprites = _sprites.GetSheet("hero", "idle", "se") != null;
         _gum = new Ui.GumHud(this);
         _sfx = new Audio.SoundBank();

@@ -146,14 +146,14 @@ public sealed class UiFont
     public bool Loaded => _tex != null;
     public int LineHeight(int scale) => _lineHeight * scale;
 
-    public UiFont(SpriteBank bank)
+    public UiFont(SpriteBank bank, string name = "ui_font")
     {
-        _tex = bank.Get("ui_font");
+        _tex = bank.Get(name);
         if (_tex == null) return;
         try
         {
             var metaPath = new[] { "assets", "assets-default" }
-                .Select(d => Path.Combine(AppContext.BaseDirectory, d, "ui_font.json"))
+                .Select(d => Path.Combine(AppContext.BaseDirectory, d, name + ".json"))
                 .FirstOrDefault(File.Exists);
             if (metaPath == null) { _tex = null; return; }
             using var doc = JsonDocument.Parse(File.ReadAllText(metaPath));

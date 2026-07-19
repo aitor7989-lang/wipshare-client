@@ -29,7 +29,7 @@ public static class TitheTables
       { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 48, "ap": 6, "mp": 3,
         "vitality": 52, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
         "growth": { "vitality": 3, "strength": 2 },
-        "skills": ["slam", "seize", "bastion"], "blurb": "An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage." },
+        "skills": ["slam", "seize", "bastion", "blood_price"], "blurb": "An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage." },
       { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "element": "fire", "baseHp": 34, "ap": 7, "mp": 3,
         "vitality": 24, "strength": 6, "intelligence": 30, "chance": 4, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
         "growth": { "vitality": 2, "intelligence": 3 },
@@ -126,7 +126,10 @@ public static class TitheTables
         "effects": [ { "kind": "teleport" } ] },
       { "key": "deadeye", "name": "Deadeye", "ap": 5, "min": 5, "max": 8, "los": true, "cooldown": 1,
         "ranks": [ { "max": 9 }, { "cooldown": 0 } ],
-        "effects": [ { "kind": "damage", "element": "air", "min": 16, "max": 22 } ] }
+        "effects": [ { "kind": "damage", "element": "air", "min": 16, "max": 22 } ] },
+      { "key": "blood_price", "name": "Blood Price", "ap": 4, "min": 1, "max": 1, "los": true, "cooldown": 1,
+        "ranks": [ { "cooldown": 0 } ],
+        "effects": [ { "kind": "lifesteal", "element": "earth", "min": 14, "max": 20 } ] }
     ]
     """;
 

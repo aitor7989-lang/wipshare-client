@@ -36,9 +36,11 @@ public static class TitheResolution
                 if (essence != null && rate > 0 && engine.Rng.Roll(1, 100) <= rate)
                     drops.Add(essence);
 
+                // Gear rolls carry the FAMILY now (the fold resolves against its pool);
+                // the Sexton always gives up a piece — the drop-table peak.
                 int gearRate = TitheContent.MobGear(f.Archetype);
-                if (gearRate > 0 && engine.Rng.Roll(1, 100) <= gearRate)
-                    gear.Add(TitheContent.GraveyardSet);
+                if (f.Archetype == "sexton" || (gearRate > 0 && engine.Rng.Roll(1, 100) <= gearRate))
+                    gear.Add(f.Archetype);
             }
 
         // Only crew that survived or were merely downed (not permanently dead mercs) share XP.

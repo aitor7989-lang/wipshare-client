@@ -585,3 +585,25 @@ The designer's call: reuse the Dofus-recreation test's layout wholesale, in the 
 - Window consolidation: the old E kit screen retired — E now opens the bag (alias of I),
   the companions roster lives at the bottom of the character sheet, and every level-up
   hint points at C (stats) and S (spells).
+
+## v8.6: the roadmap closes — drops, the full set, Blood Price — and a hardening pass
+ROADMAP COMPLETE (docs/ROADMAP-LEADER.md):
+- DROP TABLES with FAMILY POOLS: each mob's gear roll now draws from what its family
+  carries to the grave (husks: belts/boots · hounds: boots/rings · spitters and pipers:
+  amulets · wraiths: capes · ghouls and wardens: blades...). ~15% of finds are uniques;
+  exhausted pools fall through to any unowned piece. THE SEXTON ALWAYS gives up a piece.
+- SUNDRIES: the dead carry supplies — bread from the shambling (10-15%), healing draughts
+  from the learned (8-10%, the Sexton always) — folded into the FOUND line and your bag.
+- THE PANOPLY LADDER: the bag shows the tier you HOLD in ink and the next rung as a goal
+  line ("AT 3 PC: +18 VIT +3 STR..."), up to the full-set +1 MP scream.
+- BLOOD PRICE lands: the bulwark's level-4 unlock — 4 AP, range 1 face-to-face, 14-20
+  earth, and you drink HALF the damage back (the engine's Lifesteal, now parseable from
+  data). Class kits are LEVEL-GATED: three signatures at 1, the fourth at 4.
+HARDENING (fresh angles):
+- Lifesteal engine support VERIFIED before shipping the spell (it was already there).
+- The retired kit screen is DELETED — ~250 lines of dead panel, rects and click plumbing
+  gone; StatRows moved to the Leader panels that still use it.
+- Art-free boot re-proven post-purge; FOUND lines truncation-guarded; ItemName confirmed
+  pass-through-safe for sundry names; solo fights show no bogus "SPLIT 1 WAYS" line.
+- Live campaign QA: solo piloted dive, auto-turn chaining Flashfire kills, survived at
+  11/58 with the heart nearly hollow and the number in red — every v8.x system in frame.

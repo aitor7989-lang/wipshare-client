@@ -17,6 +17,11 @@ public partial class SliceGame
     private string? _panelMsg;          // one-line feedback ("ate bread", "essence learned")
     private float _panelMsgUntil;       // shown while _time is before this
 
+    private static readonly (string key, string label)[] StatRows =
+    {
+        ("vit", "VIT"), ("str", "STR"), ("int", "INT"), ("cha", "CHA"), ("agi", "AGI"), ("wis", "WIS"),
+    };
+
     private static readonly Rectangle CharWin = new(465, 60, 350, 588);
     private static readonly Rectangle InvWin = new(316, 60, 648, 588);
     private static readonly Rectangle SpellWin = new(380, 60, 520, 588);
@@ -306,6 +311,15 @@ public partial class SliceGame
         _font.Draw(_sb, $"{_campaign.Gold} GOLD", w.X + 414, w.Y + 521, 2, Mono.Ink);
         int adv = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
         _font.Draw(_sb, $"ADVENTURER {adv}/7", w.X + 414, w.Y + 545, 1, adv > 0 ? Mono.Ink : Mono.Faint);
+        // The panoply ladder: the tier you HOLD in ink, the next rung as the goal line.
+        var tiers = TitheContent.SetTierSummaries(TitheContent.GraveyardSet).ToList();
+        var held = tiers.LastOrDefault(t => t.Pieces <= adv);
+        var goal = tiers.FirstOrDefault(t => t.Pieces > adv);
+        int sy = w.Y + 559;
+        if (held.Pieces > 0)
+        { _font.Draw(_sb, Trunc($"{held.Pieces} PC: {held.Text}", 40), w.X + 414, sy, 1, Mono.Ink); sy += 12; }
+        if (goal.Pieces > 0)
+            _font.Draw(_sb, Trunc($"AT {goal.Pieces} PC: {goal.Text}", 40), w.X + 414, sy, 1, Mono.Faint);
 
         _font.DrawCentered(_sb, "(I OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
         DrawPanelMsg(w);
@@ -347,9 +361,9 @@ public partial class SliceGame
     /// a window swallowed this frame's input (the scene below should ignore it).</summary>
     private bool UpdateLeaderPanels()
     {
-        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = _spellOpen = _equipOpen = false; _openNpc = -1; return true; }
-        if (Pressed(Keys.I) || Pressed(Keys.E)) { _invOpen = !_invOpen; _charOpen = _spellOpen = _equipOpen = false; _openNpc = -1; return true; }
-        if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = _equipOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = _spellOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.I) || Pressed(Keys.E)) { _invOpen = !_invOpen; _charOpen = _spellOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = false; _openNpc = -1; return true; }
         if (!_charOpen && !_invOpen && !_spellOpen) return false;
         if (Pressed(Keys.Escape)) { _charOpen = _invOpen = _spellOpen = false; return true; }
         if (LeftClicked())

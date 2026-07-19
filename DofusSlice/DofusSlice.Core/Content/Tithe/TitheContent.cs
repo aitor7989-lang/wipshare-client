@@ -136,9 +136,13 @@ public static class TitheContent
     public static string? SkillKeyById(int id) =>
         SkillIds.FirstOrDefault(kv => kv.Value == id).Key;
 
+    /// <summary>The class kit at a given level: three signatures, the fourth at level 4.</summary>
+    public static IEnumerable<string> ClassSkillsAt(string classId, int level) =>
+        Classes[classId].Skills.Take(level >= 4 ? 4 : 3);
+
     /// <summary>A unit's spell keys in kit order: the class signature, then taught essences.</summary>
     public static IEnumerable<string> UnitSkillKeys(CampaignUnit u) =>
-        Classes[u.ClassId].Skills
+        ClassSkillsAt(u.ClassId, u.Level)
             .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>());
 
     /// <summary>Build a unit's skill at its current bought rank (the kit screen's view).</summary>
@@ -168,7 +172,7 @@ public static class TitheContent
     public static List<string> AutoSpendSpellPoints(CampaignUnit u)
     {
         var log = new List<string>();
-        var order = Classes[u.ClassId].Skills
+        var order = ClassSkillsAt(u.ClassId, u.Level)
             .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>());
         foreach (var key in order)
         {
@@ -194,6 +198,7 @@ public static class TitheContent
         "grant_ap" => SpellEffect.GrantAp(e.Min),
         "status" => SpellEffect.ApplyStatus(ParseStatus(e.Status), e.Mag, e.Turns),
         "self_damage" => SpellEffect.SelfHpCost(e.Min),
+        "lifesteal" => SpellEffect.Lifesteal(ParseElement(e.Element), e.Min, e.Max),
         _ => throw new FormatException($"tithe: unknown effect kind '{e.Kind}'"),
     };
 
@@ -358,6 +363,62 @@ public static class TitheContent
                (uniques.Count > 0 ? uniques[rng.Roll(1, uniques.Count) - 1] : null);
     }
 
+    // Which slots each family tends to carry to its grave (Bible §5 flavor): the drop pool
+    // a mob's gear roll draws from. The Sexton draws from the whole panoply.
+    private static readonly Dictionary<string, string[]> GearPools = new()
+    {
+        ["barrow_husk"] = new[] { "adv_belt", "adv_boots" },
+        ["gravehound"] = new[] { "adv_boots", "adv_ring" },
+        ["marrow_spitter"] = new[] { "adv_amulet", "adv_ring" },
+        ["grave_mite"] = new[] { "adv_ring" },
+        ["bone_piper"] = new[] { "adv_amulet", "adv_hat" },
+        ["tomb_wraith"] = new[] { "adv_cape", "adv_amulet" },
+        ["grave_ghoul"] = new[] { "adv_blade", "adv_belt" },
+        ["crypt_warden"] = new[] { "adv_blade", "adv_hat" },
+    };
+
+    /// <summary>Resolve a gear roll AGAINST THE FAMILY'S POOL: ~15% a unique, else an unowned
+    /// piece the family carries, else any unowned Adventurer piece (pool exhausted).</summary>
+    public static string? RandomUnownedGearFor(string archetype, Func<string, bool> owned, IRng rng)
+    {
+        var uniques = UniqueIds().Where(id => !owned(id)).ToList();
+        if (uniques.Count > 0 && rng.Roll(1, 100) <= 15)
+            return uniques[rng.Roll(1, uniques.Count) - 1];
+        var pool = (GearPools.TryGetValue(archetype, out var p) ? p : SetPieceIds(GraveyardSet).ToArray())
+            .Where(id => !owned(id)).ToList();
+        if (pool.Count > 0) return pool[rng.Roll(1, pool.Count) - 1];
+        return RandomUnownedGear(GraveyardSet, owned, rng);
+    }
+
+    /// <summary>Consumable drop rates per family (bread% , draught%): the dead carry supplies.</summary>
+    public static (int Bread, int Draught) MobSundries(string archetype) => archetype switch
+    {
+        "barrow_husk" => (15, 0), "gravehound" => (10, 0), "grave_mite" => (12, 0),
+        "grave_ghoul" => (10, 0), "marrow_spitter" => (0, 8), "bone_piper" => (0, 10),
+        "tomb_wraith" => (0, 8), "crypt_warden" => (0, 10), "sexton" => (0, 100),
+        _ => (0, 0),
+    };
+
+    /// <summary>The set's tier table as display lines ("3 PC: +18 VIT +3 STR ...").</summary>
+    public static IEnumerable<(int Pieces, string Text)> SetTierSummaries(string setId)
+    {
+        if (!Sets.TryGetValue(setId, out var set)) yield break;
+        foreach (var t in set.Tiers.OrderBy(t => t.Pieces))
+        {
+            var parts = new List<string>();
+            if (t.Vitality != 0) parts.Add($"+{t.Vitality} VIT");
+            if (t.Strength != 0) parts.Add($"+{t.Strength} STR");
+            if (t.Intelligence != 0) parts.Add($"+{t.Intelligence} INT");
+            if (t.Chance != 0) parts.Add($"+{t.Chance} CHA");
+            if (t.Agility != 0) parts.Add($"+{t.Agility} AGI");
+            if (t.Wisdom != 0) parts.Add($"+{t.Wisdom} WIS");
+            if (t.Power != 0) parts.Add($"+{t.Power} POW");
+            if (t.Ap != 0) parts.Add($"+{t.Ap} AP");
+            if (t.Mp != 0) parts.Add($"+{t.Mp} MP");
+            yield return (t.Pieces, string.Join(" ", parts));
+        }
+    }
+
     /// <summary>All item ids belonging to a set (the drop pool for that panoply).</summary>
     public static IReadOnlyList<string> SetPieceIds(string setId) =>
         Items.Values.Where(i => i.Set == setId).Select(i => i.Id).ToList();
@@ -485,7 +546,7 @@ public static class TitheContent
             Pos = pos,
             // Combat kit = class skills + everything taught by consumed essences (Bible §6.5),
             // each at the unit's bought rank (Bible §6.3 spell points).
-            Spells = c.Skills
+            Spells = ClassSkillsAt(u.ClassId, u.Level)
                 .Concat(u.EssenceSlots.Select(EssenceSkill).Where(k => k != null).Cast<string>())
                 .Select(k => BuildSkill(k, u.RankOf(k))).ToArray(),
         };

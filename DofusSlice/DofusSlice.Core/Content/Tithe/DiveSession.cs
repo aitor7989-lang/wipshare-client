@@ -228,11 +228,21 @@ public sealed class DiveSession
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;
 
-            // Fold each gear roll into a concrete unowned set piece; the avatar auto-equips upgrades.
-            foreach (var setId in res.GearDrops)
+            // Fold each gear roll into a concrete unowned piece FROM THE KILLER'S FAMILY POOL
+            // (husks carry belts and boots, wardens weapons...); the avatar auto-equips upgrades.
+            foreach (var family in res.GearDrops)
             {
-                var piece = TitheContent.RandomUnownedGear(setId, _campaign.OwnsGear, _rng);
+                var piece = TitheContent.RandomUnownedGearFor(family, _campaign.OwnsGear, _rng);
                 if (piece != null && _campaign.AddGear(piece)) gearGot.Add(TitheContent.ItemName(piece));
+            }
+
+            // Sundries: the dead carry supplies too — bread from the shambling, bottles from
+            // the learned. They surface in the report's FOUND line alongside gear.
+            foreach (var f in engine.Fighters.Where(x => x.Team == Team.Enemy && !x.IsAlive))
+            {
+                var (bPct, dPct) = TitheContent.MobSundries(f.Archetype);
+                if (bPct > 0 && _rng.Roll(1, 100) <= bPct) { _campaign.Bread++; gearGot.Add("Hard Bread"); }
+                if (dPct > 0 && _rng.Roll(1, 100) <= dPct) { _campaign.Draughts++; gearGot.Add("Healing Draught"); }
             }
 
             bool avatarDown = false;

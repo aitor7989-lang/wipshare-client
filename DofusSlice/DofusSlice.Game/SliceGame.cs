@@ -39,8 +39,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private List<(string name, int level)> _levelUps = new(); // level-ups from the last fight
     private bool _reportSounded;                      // the loot window's one-time stings
     private int _openNpc = -1;                        // which City building's panel is open
-    private bool _equipOpen;                          // the stash & kit screen (E in the City)
-    private int _equipUnit;                           // which crew member the kit screen shows
     private MapData _cityMap = null!, _graveMap = null!;
     private readonly Dictionary<string, CellCoord> _packCells = new(); // graveyard pack positions
 
@@ -327,12 +325,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             return;
         }
         if (UpdateLeaderPanels()) return;   // C = character sheet, I = the bag
-        if (Pressed(Keys.Escape)) { _openNpc = -1; _equipOpen = false; return; }
+        if (Pressed(Keys.Escape)) { _openNpc = -1; return; }
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
-
-        if (_equipOpen) { ClickEquipPanel(m); return; }
 
         if (_openNpc >= 0)
         {
@@ -351,263 +347,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private static Rectangle PanelButton(int i) => new(360, 344 + i * 52, 560, 44);
 
     // ----- The stash & kit screen (Bible §6.13: manage the stash and equip units) -----
-
-    private const int KitY = 104, KitH = 540; // the kit panel grew a SPELLS section (rank-ups)
-
-    private static Rectangle EquipRowRect(int i) => new(260, KitY + 230 + i * 34, 372, 30);
-    private static Rectangle StashRowRect(int i) => new(648, KitY + 230 + i * 34, 372, 30);
-    private static Rectangle SpellRowRect(int i) => new(260, KitY + 120 + i * 30, 760, 28);
-    private static Rectangle RankUpRect(int i)
-    { var r = SpellRowRect(i); return new(r.Right - 96, r.Y + 4, 92, 20); }
-
-    /// <summary>Click an equipped row to strip it to the stash; click a stash row to equip it.
-    /// Only the avatar re-gears (Bible §6.6.9 — mercs keep the kit they were hired with).</summary>
-    private static readonly (string key, string label)[] StatRows =
-    {
-        ("vit", "VIT"), ("str", "STR"), ("int", "INT"), ("cha", "CHA"), ("agi", "AGI"), ("wis", "WIS"),
-    };
-
-    private static Rectangle EquipTabRect(int i) => new(260 + i * 130, KitY + 18, 124, 22);
-    private static Rectangle StatPlusRect(int i) => new(260 + i * 126 + 96, KitY + 76, 20, 18);
-    private static Rectangle AutoSpendRect => new(896, KitY + 44, 124, 18); // on the POINTS line, clear of the WIS row
-
-    // The Leader Update: the kit screen manages ONLY the avatar. Companions are their own
-    // people — they appear as a read-only roster, never as an editable tab.
-    private CampaignUnit? EquipShownUnit => _campaign.Avatar;
-
-    private void ClickEquipPanel(Point m)
-    {
-        var u = EquipShownUnit;
-        if (u == null) return;
-
-        if (u.StatPoints > 0)
-        {
-            for (int i = 0; i < StatRows.Length; i++)
-                if (StatPlusRect(i).Contains(m)) { u.SpendStat(StatRows[i].key); _sfx.Play("click"); return; }
-            if (AutoSpendRect.Contains(m)) { TitheContent.AutoSpendStats(u); _sfx.Play("coin"); return; }
-        }
-
-        // Spell rank-ups (1.29 spell points, spent by the PLAYER here).
-        var skillKeys = TitheContent.UnitSkillKeys(u).Take(3).ToList();
-        for (int i = 0; i < skillKeys.Count; i++)
-            if (RankUpRect(i).Contains(m) && TitheContent.RankUp(u, skillKeys[i]))
-            { _sfx.Play("levelup", 0.55f, jitter: false); return; }
-
-        // Only the avatar re-gears (Bible §6.10) — mercenaries keep their hire kit.
-        if (!u.IsAvatar) return;
-        for (int i = 0; i < u.Equipment.Count; i++)
-            if (EquipRowRect(i).Contains(m)) { _campaign.Unequip(u, u.Equipment[i]); _sfx.Play("click"); return; }
-        for (int i = 0; i < _campaign.Stash.Count; i++)
-            if (StashRowRect(i).Contains(m)) { _campaign.Equip(u, _campaign.Stash[i]); _sfx.Play("coin"); return; }
-    }
-
-    private void DrawEquipPanel()
-    {
-        var a = EquipShownUnit;
-        if (a == null) return;
-        var r = new Rectangle(236, KitY, 800, KitH);
-        bool skin = _dof.Loaded;
-        if (Mono.On) Mono.Frame(_sb, _prim, r, emphasis: true, fillAlpha: 0.97f);
-        else if (skin) _dof.Window(_sb, r);
-        else { _prim.FillRect(_sb, r, new Color(22, 24, 30)); _prim.StrokeRect(_sb, r, 2, Palette.CurrentRing); }
-        var ink = skin ? WinInk : Palette.Text;
-        var inkDim = skin ? WinInkDim : Palette.TextDim;
-        var accent = skin ? WinGold : (Mono.On ? Mono.Ink : new Color(240, 208, 120));
-        var mp = new Point(_mouse.X, _mouse.Y);
-
-        // The Leader Update: this screen is YOURS alone. One title plate, no crew tabs —
-        // companions ride along as a read-only roster at the bottom of the window.
-        var tt = EquipTabRect(0);
-        if (Mono.On) Mono.Button(_sb, _prim, tt, hover: true);
-        else if (skin) _dof.Tab(_sb, new Rectangle(tt.X, tt.Y - 8, tt.Width, tt.Height + 8), true, false);
-        else { _prim.FillRect(_sb, tt, Palette.HudPanelLight); _prim.StrokeRect(_sb, tt, 1, Palette.CurrentRing); }
-        _font.DrawCentered(_sb, $"{Trunc(a.Name.ToUpperInvariant(), 10)} — LEADER", tt.Center.X, tt.Y + 7, 1,
-            Mono.On ? Mono.ButtonInk(true) : skin ? Color.White : Palette.Text);
-
-        int cy0 = r.Bottom - 118;
-        var mercs = _campaign.Crew.Where(c => !c.IsAvatar).ToList();
-        if (mercs.Count > 0)
-        {
-            _font.Draw(_sb, "COMPANIONS  (they manage themselves)", 260, cy0, 1, inkDim);
-            for (int i = 0; i < mercs.Count; i++)
-            {
-                var c = mercs[i];
-                string kitLine = string.Join(" / ", TitheContent.UnitSkillKeys(c).Take(3)
-                    .Select(k => TitheContent.UnitSkill(c, k).Name.ToUpperInvariant()));
-                _font.Draw(_sb, $"{c.Name.ToUpperInvariant()}  L{c.Level}  ·  {kitLine}"
-                    + $"  ·  {TitheContent.StatsOf(c).MaxHp} HP{(c.Wounded ? "  ·  WOUNDED" : "")}",
-                    272, cy0 + 14 + i * 14, 1, c.Wounded ? (Mono.On ? Mono.Danger : inkDim) : ink);
-            }
-        }
-
-        // Level + XP bar + banked points.
-        int need = CampaignUnit.XpForNextLevel(a.Level);
-        _font.Draw(_sb, $"LVL {a.Level}", 260, r.Y + 48, 2, ink);
-        if (Mono.On)
-            Mono.Bar(_sb, _prim, new Rectangle(340, r.Y + 48, 260, 13),
-                Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f), Mono.Dim);
-        else if (skin)
-            _dof.Gauge(_sb, new Rectangle(340, r.Y + 48, 260, 13),
-                Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f), "gauge_blue");
-        else
-        {
-            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, 260, 10), Palette.HpBack);
-            _prim.FillRect(_sb, new Rectangle(340, r.Y + 50, (int)(260 * Math.Clamp(need <= 0 ? 1f : (float)a.Xp / need, 0f, 1f)), 10), (Mono.On ? Mono.Dim : new Color(120, 170, 230)));
-        }
-        _font.Draw(_sb, $"{a.Xp} / {need} XP", 610, r.Y + 48, 1, inkDim);
-        _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
-            700, r.Y + 48, 1, a.StatPoints > 0 ? accent : inkDim);
-
-        // The six characteristics with [+] spend buttons (1.29's manual allocation).
-        for (int i = 0; i < StatRows.Length; i++)
-        {
-            var (key, label) = StatRows[i];
-            int x = 260 + i * 126;
-            int shown = key switch
-            {
-                "vit" => TitheContent.StatsOf(a).MaxHp,
-                "str" => TitheContent.StatsOf(a).Strength,
-                "int" => TitheContent.StatsOf(a).Intelligence,
-                "cha" => TitheContent.StatsOf(a).Chance,
-                "agi" => TitheContent.StatsOf(a).Agility,
-                _ => TitheContent.StatsOf(a).Wisdom,
-            };
-            int lx = x;
-            if (skin && _dof.StatIcon(_sb, key, new Rectangle(x, r.Y + 74, 18, 18))) lx = x + 21;
-            _font.Draw(_sb, key == "vit" ? $"HP {shown}" : $"{label} {shown}", lx, r.Y + 80, 1, ink);
-            if (a.StatPoints > 0)
-            {
-                var b = StatPlusRect(i);
-                if (Mono.On) Mono.Button(_sb, _prim, b, hover: b.Contains(mp));
-                else if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
-                else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 5, 1,
-                    Mono.On ? Mono.ButtonInk(b.Contains(mp)) : skin ? new Color(46, 26, 10) : Color.White);
-            }
-        }
-        if (a.StatPoints > 0)
-        {
-            if (Mono.On) Mono.Button(_sb, _prim, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
-            else if (skin) _dof.Button(_sb, AutoSpendRect, hover: AutoSpendRect.Contains(mp));
-            else
-            {
-                _prim.FillRect(_sb, AutoSpendRect, AutoSpendRect.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, AutoSpendRect, 1, (Mono.On ? Mono.Faint : new Color(96, 150, 96)));
-            }
-            _font.DrawCentered(_sb, "AUTO-SPEND ALL", AutoSpendRect.Center.X, AutoSpendRect.Y + 5, 1,
-                Mono.On ? Mono.ButtonInk(AutoSpendRect.Contains(mp)) : skin ? new Color(46, 26, 10) : Palette.Text);
-        }
-
-        // SPELLS: the unit's kit — the class signature plus taught essences — with the 1.29
-        // rank-ups, spent by the PLAYER (a rank changes economics or shape, never just damage).
-        _font.Draw(_sb, "SPELLS", 260, r.Y + 106, 1, inkDim);
-        _font.Draw(_sb, a.SpellPoints > 0 ? $"SPELL POINTS: {a.SpellPoints}" : "no spell points banked",
-            330, r.Y + 106, 1, a.SpellPoints > 0 ? accent : inkDim);
-        var skillKeys = TitheContent.UnitSkillKeys(a).Take(3).ToList();
-        for (int i = 0; i < skillKeys.Count; i++)
-        {
-            var row = SpellRowRect(i);
-            if (skin) // themed list row, 1.29-style: just a hairline separator underneath
-                _prim.FillRect(_sb, new Rectangle(row.X, row.Bottom - 1, row.Width, 1), WinInk * 0.22f);
-            else
-            {
-                _prim.FillRect(_sb, row, Palette.HudPanel);
-                _prim.StrokeRect(_sb, row, 1, (Mono.On ? Mono.Faint : new Color(60, 64, 72)));
-            }
-            var sp = TitheContent.UnitSkill(a, skillKeys[i]);
-            int rank = a.RankOf(skillKeys[i]), maxR = TitheContent.MaxRank(skillKeys[i]);
-            var dmgFx = sp.Effects.FirstOrDefault(e => e.Kind == EffectKind.Damage);
-            var col = dmgFx != null ? EwChrome.ElementColor(dmgFx.Element) : ink;
-            int tx = row.X + 8;
-            if (skin && _dof.SpellIcon(_sb, skillKeys[i], new Rectangle(row.X + 2, row.Y + 1, 26, 26)))
-                tx = row.X + 34;
-            _font.Draw(_sb, $"{sp.Name.ToUpperInvariant()}   RANK {rank}/{maxR}", tx, row.Y + 4, 1, col);
-            string InfoOf(SpellDef s) => string.Join("  ·  ", s.Effects.Select(e => EffectLine(e).text))
-                + $"  ·  AP {s.ApCost}  ·  RANGE {s.MinRange}-{s.MaxRange}"
-                + (s.Cooldown > 0 ? $"  ·  CD {s.Cooldown}" : "");
-            // BEFORE -> AFTER: hovering RANK UP previews the next rank right in the row.
-            bool rankHover = a.SpellPoints > 0 && rank < maxR && RankUpRect(i).Contains(mp);
-            _font.Draw(_sb,
-                rankHover ? Trunc($"NEXT: {InfoOf(TitheContent.SkillAtRank(skillKeys[i], rank + 1))}", 84)
-                          : Trunc(InfoOf(sp), 84),
-                tx, row.Y + 16, 1, rankHover ? ink : skin ? ink : Palette.TextDim);
-            if (a.SpellPoints > 0 && rank < maxR)
-            {
-                var b = RankUpRect(i);
-                if (Mono.On) Mono.Button(_sb, _prim, b, hover: b.Contains(mp));
-                else if (skin) _dof.Button(_sb, b, hover: b.Contains(mp));
-                else _prim.FillRect(_sb, b, b.Contains(mp) ? new Color(96, 170, 96) : new Color(52, 96, 52));
-                _font.DrawCentered(_sb, "RANK UP", b.Center.X, b.Y + 6, 1,
-                    Mono.On ? Mono.ButtonInk(b.Contains(mp)) : skin ? new Color(46, 26, 10) : Color.White);
-            }
-            else if (rank >= maxR)
-                _font.Draw(_sb, "MAX", row.Right - 36, row.Y + 9, 1, inkDim);
-        }
-
-        if (!a.IsAvatar)
-        {
-            _font.DrawCentered(_sb, "MERCENARIES KEEP THEIR HIRE KIT — ONLY THE AVATAR RE-GEARS",
-                r.Center.X, r.Y + 250, 1, inkDim);
-            DrawEquipFooter(a, r);
-            return;
-        }
-
-        _font.Draw(_sb, "EQUIPPED  (click to strip)", 260, r.Y + 212, 1, inkDim);
-        _font.Draw(_sb, "STASH  (click to equip)", 648, r.Y + 212, 1, inkDim);
-
-        for (int i = 0; i < a.Equipment.Count; i++)
-        {
-            var b = EquipRowRect(i);
-            if (skin) _dof.Panel(_sb, b, light: b.Contains(mp));
-            else
-            {
-                _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, b, 1, (Mono.On ? Mono.Faint : new Color(96, 150, 96)));
-            }
-            string id = a.Equipment[i];
-            int ix = b.X + 8;
-            if (skin && _dof.ItemIcon(_sb, id, new Rectangle(b.X + 3, b.Y + 2, 26, 26))) ix = b.X + 34;
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", ix, b.Y + 4, 1, skin ? ink : Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), ix, b.Y + 17, 1, skin ? ink : Palette.TextDim);
-        }
-        if (a.Equipment.Count == 0)
-            _font.Draw(_sb, "— nothing worn —", 268, KitY + 236, 1, inkDim);
-
-        for (int i = 0; i < _campaign.Stash.Count; i++)
-        {
-            var b = StashRowRect(i);
-            if (skin) _dof.Panel(_sb, b, light: b.Contains(mp));
-            else
-            {
-                _prim.FillRect(_sb, b, b.Contains(mp) ? Palette.HudPanelLight : Palette.HudPanel);
-                _prim.StrokeRect(_sb, b, 1, (Mono.On ? Mono.Faint : new Color(150, 140, 96)));
-            }
-            string id = _campaign.Stash[i];
-            int ix = b.X + 8;
-            if (skin && _dof.ItemIcon(_sb, id, new Rectangle(b.X + 3, b.Y + 2, 26, 26))) ix = b.X + 34;
-            _font.Draw(_sb, $"{TitheContent.ItemSlot(id).ToUpperInvariant(),-7} {TitheContent.ItemName(id).ToUpperInvariant()}", ix, b.Y + 4, 1, skin ? ink : Palette.Text);
-            _font.Draw(_sb, TitheContent.ItemStatLine(id), ix, b.Y + 17, 1, skin ? ink : Palette.TextDim);
-        }
-        if (_campaign.Stash.Count == 0)
-            _font.Draw(_sb, "— the stash is empty —", 656, KitY + 236, 1, inkDim);
-
-        DrawEquipFooter(a, r);
-    }
-
-    private void DrawEquipFooter(CampaignUnit a, Rectangle r)
-    {
-        // Live effective block, so every click's consequence is visible immediately (Dofus idiom).
-        var s = TitheContent.StatsOf(a);
-        var elem = TitheContent.ClassElement(a.ClassId);
-        int set = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
-        _font.DrawCentered(_sb,
-            $"{s.MaxHp} HP   {elem.ToString().ToUpperInvariant()} {TitheContent.DamageStatFor(s, elem)}   AGI {s.Agility}   WIS {s.Wisdom}   POW {s.Power}"
-            + (s.ApBonus != 0 ? $"   +{s.ApBonus} AP" : "") + (s.MpBonus != 0 ? $"   +{s.MpBonus} MP" : "")
-            + $"   ADV {set}/7",
-            r.Center.X, r.Bottom - 44, 1, _dof.Loaded ? WinGold : (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
-        _font.DrawCentered(_sb, "(E OR ESC TO CLOSE)", r.Center.X, r.Bottom - 22, 1,
-            _dof.Loaded ? WinInkDim : Palette.TextDim);
-    }
 
     /// <summary>The clickable services at each City building (label, affordable, effect).</summary>
     private List<(string label, bool ok, Action act)> NpcActions(int npc)
@@ -2787,8 +2526,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
             _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 58, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignHud();
-        if (_openNpc >= 0 && !_equipOpen) DrawNpcPanel(_openNpc);
-        if (_equipOpen) DrawEquipPanel();
+        if (_openNpc >= 0) DrawNpcPanel(_openNpc);
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
@@ -2908,7 +2646,6 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         DrawDiveClock(ScreenW / 2, 14, 300, 18);
         if (_yardMsgTimer > 0f)
             _font.DrawCentered(_sb, _yardMsg, ScreenW / 2, 508, 2, (Mono.On ? Mono.Ink : new Color(232, 202, 96)));
-        if (_equipOpen) DrawEquipPanel();
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
@@ -3255,7 +2992,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             { _font.DrawCentered(_sb, "C: spend stat points   ·   S: RANK UP your spells", panel.Center.X, y, 1, inkDim); y += 22; }
 
             if (r.Gear.Count > 0)
-            { _font.DrawCentered(_sb, "FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(),
+            { _font.DrawCentered(_sb, Trunc("FOUND: " + string.Join(", ", r.Gear.Select(TitheContent.ItemName)).ToUpperInvariant(), 78),
                 panel.Center.X, y, 1, Mono.On ? Mono.Ink : new Color(150, 110, 20)); y += 18; }
             if (r.Drops.Count > 0)
             { _font.DrawCentered(_sb, "ESSENCES: " + string.Join(", ", r.Drops).ToUpperInvariant(),

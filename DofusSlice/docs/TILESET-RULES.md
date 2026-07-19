@@ -97,3 +97,28 @@ procedural shadows in this skin.**
    (watched combat needs the readability; the pack has no equivalent).
 6. **Pits**: `Water`/`Void` cells render as floor-holes of 26 — the examples' rooms float in
    that same darkness.
+
+## 7. The 45° iso mode (the Dofus projection)
+
+The square grid was retired for the classic 2:1 diamond view. Rules of the projection:
+
+- **Ground**: 64×32 screen diamonds baked at load (`IsoFloorBank`) — the paving art is tiled
+  axis-aligned across a 32×16 native diamond then point-doubled, exactly how 1.29 clips a flat
+  ground texture to a cell. The light/dark cell checker is a tint on alternating parity.
+  *Worn* diamonds (built only from the sheet's four detail tiles — the edge tiles streak) get
+  likelier toward the map edge: 45% on the rim ring, 22% one ring in, 7% elsewhere.
+- **No walls**: a Dofus map floats in the dark. The playfield is hemmed by a scenery ring one
+  cell outside — a dimmed worn shelf under ~2/3-density prop clutter that clusters (a second
+  scrap besides a first), families keeping their tables (city: barrels/chests/wood/gold;
+  dungeon: bones/barrels/webs' cousins). **Never a pillar on the extreme corners.** The south
+  run draws after units so it overlaps them; everything else draws before.
+- **One pixel density everywhere**: `ChamberSet.PxScale = 2` — characters, props, floors and
+  UI all put 2 screen px per texel, integer only. Landmark props (gates, services) may double
+  to 4 but never fractional; nothing is ever scaled 1.25× again.
+- **Characters over knights**: units wear the animation packs (hero/soldier/orc/slime strips
+  baked by `tools/bake_assets.py` into SpriteBank's `{name}_{state}_se_{n}` convention,
+  union-cropped so feet sit on the strip bottom). Facing mirrors for SW/NW; crew keep class
+  pads, the dead keep red pads; the sexton is the orc at double scale.
+- **UI**: cream 9-slice panels, cards and the green button from the pixel UI pack; the
+  blackletter dungeon font only on standalone titles (GOLD, scene names, NPC headers) — it is
+  too ornate for running text, which stays PixelFont. Dark ink on cream, never light.

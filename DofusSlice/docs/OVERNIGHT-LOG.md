@@ -182,3 +182,16 @@ the dungeon families, tomb blocks/pillars/barrels as obstacles, services in pack
 (open chest + gold, crown, barrel), gates as doors with flanking pillars, and every unit is
 the knight — crew silver, the dead in rust/bone tints, walk/use animations driven by the
 battle poses. Full ruleset with per-tile evidence: docs/TILESET-RULES.md.
+
+## The 45° turn (squares were boring)
+
+The pixel skin now projects like Dofus: classic 2:1 diamonds, checkered ground baked from the
+Chamber paving (axis-aligned texture clipped to the cell, exactly the 1.29 trick), no walls —
+the map floats in the dark with a dimmed scenery shelf around it, prop clutter accumulating
+against the rim (never a pillar on a corner). Units wear real animation packs now: the
+FreeCharactersAnimations hero + slime and the Tiny RPG soldier + orc, baked into SpriteBank
+strips by tools/bake_assets.py with feet-baseline union crops — idle/walk/cast/hurt/die per
+archetype, mirrored facings, class pads intact. One density rule everywhere: 2 screen px per
+texel, integer scales only (the "props feel scaled" fix). The UI wears the pixel pack: cream
+9-slice panels and cards, the green button, and the blackletter dungeon font on titles baked
+to a bitmap atlas. All of it stays local-only; the repo still runs procedural-clean.

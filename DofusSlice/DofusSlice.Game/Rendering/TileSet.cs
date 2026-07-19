@@ -82,7 +82,13 @@ public sealed class ChamberSet
 {
     public TileSet Wall { get; }
     public TileSet Floor { get; }
+    /// <summary>The raw floor sheet — the iso diamond baker samples it directly.</summary>
+    public Texture2D? FloorSheet { get; }
     public bool Loaded { get; }
+
+    /// <summary>One texel = 2 screen px, everywhere. The whole skin — characters, props,
+    /// floors — shares this density so nothing reads as "scaled" (integer 2× only).</summary>
+    public const int PxScale = 2;
 
     private readonly Dictionary<string, Texture2D> _props = new();
     private readonly Dictionary<string, Texture2D> _anim = new();
@@ -90,7 +96,8 @@ public sealed class ChamberSet
     public ChamberSet(SpriteBank bank)
     {
         Wall = new TileSet(bank.Get("chamber_wall"));
-        Floor = new TileSet(bank.Get("chamber_floor"));
+        FloorSheet = bank.Get("chamber_floor");
+        Floor = new TileSet(FloorSheet);
         Loaded = Wall.Loaded && Floor.Loaded;
         if (!Loaded) return;
 
@@ -105,23 +112,24 @@ public sealed class ChamberSet
             if (bank.Get("chamber_knight_" + state) is { } t) _anim[state] = t;
     }
 
-    /// <summary>Feet-anchored prop draw at an integer point scale (4× per unit of scale).</summary>
-    public void Prop(SpriteBatch sb, string name, Vector2 feet, Color? tint = null, float scale = 1f)
+    /// <summary>Feet-anchored prop draw. <paramref name="scale"/> multiplies the skin's base
+    /// 2× density in INTEGER steps — pass 1 for pixel-perfect, 2 for a doubled landmark.</summary>
+    public void Prop(SpriteBatch sb, string name, Vector2 feet, Color? tint = null, int scale = 1)
     {
         if (!_props.TryGetValue(name, out var t)) return;
-        float s = TileSet.Cell / (float)TileSet.Src * scale;
+        float s = PxScale * scale;
         sb.Draw(t, feet, null, tint ?? Color.White, 0f,
             new Vector2(t.Width / 2f, t.Height), s, SpriteEffects.None, 0f);
     }
 
     /// <summary>One knight frame, feet-anchored; <paramref name="flip"/> mirrors it to face west.</summary>
     public void Knight(SpriteBatch sb, string state, int frame, Vector2 feet, Color tint,
-        bool flip = false, float scale = 1f)
+        bool flip = false, int scale = 1)
     {
         if (!_anim.TryGetValue(state, out var t) && !_anim.TryGetValue("idle", out t)) return;
         int frames = Math.Max(1, t.Width / TileSet.Src);
         var rect = new Rectangle(frame % frames * TileSet.Src, 0, TileSet.Src, t.Height);
-        float s = TileSet.Cell / (float)TileSet.Src * scale;
+        float s = PxScale * scale;
         sb.Draw(t, feet, rect, tint, 0f, new Vector2(TileSet.Src / 2f, t.Height), s,
             flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None, 0f);
     }

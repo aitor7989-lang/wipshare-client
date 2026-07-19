@@ -949,6 +949,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             DrawPixWalls(_engine.Field.Width, _engine.Field.Height, fam);
             foreach (var c in CellsByDepth())
                 DrawPixCell(c, _engine.Field.TileAt(c), fam, _engine.Field.Width, _engine.Field.Height);
+            DrawPixShadows(_engine.Field.Width, _engine.Field.Height);
             return;
         }
         foreach (var c in CellsByDepth())
@@ -1087,6 +1088,35 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             : bh % 3 == 0 ? Tid.YardMoss[bh % Tid.YardMoss.Length]
             : Tid.YardBase[PixHash(c) % Tid.YardBase.Length];
         _tiles.Draw(_sb, tile, center);
+    }
+
+    /// <summary>The NW-light dither shadow discovered in the 1:1 recreation (TILESET-RULES §6):
+    /// a solid line against the wall then a two-step checker fade, colour #1E2431, cast onto the
+    /// floor row under the north wall and the floor column beside the west wall.</summary>
+    private void DrawPixShadows(int width, int height)
+    {
+        var ink = new Color(30, 36, 49);
+        int px = TileSet.Cell / TileSet.Src; // one source pixel on screen
+        for (int x = 0; x < width; x++)
+        {
+            var o = _proj.CellCenter(x, 0) - new Vector2(TileSet.Cell / 2f, TileSet.Cell / 2f);
+            _prim.FillRect(_sb, new Rectangle((int)o.X, (int)o.Y, TileSet.Cell, px), ink);
+            for (int i = 0; i < TileSet.Src; i++)
+            {
+                if (i % 2 == 1) _prim.FillRect(_sb, new Rectangle((int)o.X + i * px, (int)o.Y + px, px, px), ink);
+                else _prim.FillRect(_sb, new Rectangle((int)o.X + i * px, (int)o.Y + 2 * px, px, px), ink);
+            }
+        }
+        for (int y = 0; y < height; y++)
+        {
+            var o = _proj.CellCenter(0, y) - new Vector2(TileSet.Cell / 2f, TileSet.Cell / 2f);
+            _prim.FillRect(_sb, new Rectangle((int)o.X, (int)o.Y, px, TileSet.Cell), ink);
+            for (int i = 0; i < TileSet.Src; i++)
+            {
+                if (i % 2 == 1) _prim.FillRect(_sb, new Rectangle((int)o.X + px, (int)o.Y + i * px, px, px), ink);
+                else _prim.FillRect(_sb, new Rectangle((int)o.X + 2 * px, (int)o.Y + i * px, px, px), ink);
+            }
+        }
     }
 
     /// <summary>
@@ -1783,6 +1813,7 @@ public sealed class SliceGame : Microsoft.Xna.Framework.Game
             var fam = PixFamNow();
             DrawPixWalls(map.Width, map.Height, fam);
             foreach (var c in PlaneCellsByDepth(map)) DrawPixCell(c, map.Tile(c.X, c.Y), fam, map.Width, map.Height);
+            DrawPixShadows(map.Width, map.Height);
             return;
         }
         foreach (var c in PlaneCellsByDepth(map))

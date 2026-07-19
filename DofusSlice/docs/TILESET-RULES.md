@@ -90,3 +90,20 @@ Per family:
    tiles — pure gameplay UI with no reference equivalent.
 4. **No drop-shadow discs under props** — the pack's sprites cast no shadows; only units keep
    their team pads (rule 1).
+
+## 6. Findings from the 1:1 reference recreation
+
+The reference was rebuilt pixel-identically (0 differing pixels of 426,496) from three layers,
+which is the proof behind every rule above and adds two discoveries:
+
+1. **Tile data alone = 97.3%.** The example map uses `flipX` on 71 tiles and one rotation —
+   mirroring is part of the pack's vocabulary (not yet used by the game renderer).
+2. **The dither shadow layer (+2.3%)**: light comes from the NW. Interior north and west wall
+   edges (and hand-picked interior blocks) cast a shadow ramp onto the floor, colour `#1E2431`:
+   a SOLID 1px line against the wall, then two dithered lines fading out —
+   `########` / `.#.#.#.#` / `#.#.#.#.` (and the same rotated for west walls). Application in
+   the reference is contextual (interior edges only; exterior south faces never cast), so the
+   game applies it along the playfield's north and west edges.
+3. **The sprite layer (+0.35%)** is hand-placed: single keyed tiles plus a few multi-tile
+   composites (a 2-tile robot, a 2×2 mushroom whirl). Sprites stand mid-cell or perch ON wall
+   faces/bands — free placement, not grid law.

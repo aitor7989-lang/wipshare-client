@@ -170,6 +170,76 @@ decision type (where does this die go) — easy to learn, endlessly buildable
   fight first as its own scene (keep the old combat behind a flag until the new
   one proves out).
 
+## PART 3 — THE CONVERGENCE (owner's likes, named precisely)
+
+The owner's list: fight after fight with NO roaming · a reward pick after EVERY
+battle · gear simple enough to read in one glance (Loop Hero) · an essence system
+like The Binding of Isaac · and Mewgenics ("wow") proving tactics can carry it.
+Round-four research: Mewgenics (McMillen/Glaiel, 14 years, review consensus "the
+pinnacle of the genre") and Isaac's item philosophy.
+
+### What Mewgenics actually does (and proves)
+- GRID TACTICS STAY: "excellent turn-based tactical combat... careful balance
+  between simplicity and depth. Movement, positioning, abilities, turn order all
+  clearly communicated — welcoming even for players who don't gravitate to
+  tactics." The action economy is the key simplification: MOVE once + ATTACK
+  once per turn, spells on a slow MP trickle. No AP arithmetic.
+- FIGHT AFTER FIGHT: an Adventure is a chain of combat/event/treasure nodes.
+  No free roaming. EVERY combat win levels a cat and opens a PICK — one of
+  several randomized abilities / passives / stat boosts. The reward IS the beat.
+- ISAAC DNA: items amass continuously, are part of SETS (3+ equipped = bonus),
+  and the fun is evaluating new loot against your build after every fight.
+- Party of 1-4; falling in battle = a PERMANENT INJURY, not death (our Wounded!).
+
+### What Isaac's essence philosophy actually is
+- Items are PASSIVE and AUTOMATIC — no activation decisions, no text needed;
+  you SEE what they do (tears change, body changes).
+- SYNERGY is the game: 719 items whose combinations exceed their parts;
+  discovering a broken combo is the core joy.
+- TRANSFORMATIONS: collect 3 items of a theme -> you visibly BECOME something
+  (Guppy, Beast...) with a new power. Collection has a destination.
+
+### Swing F — "THE GAUNTLET OF THE BELL"  (the shape that hits every stated like)
+The dive is no longer a map. It is a CHAIN:
+
+    FIGHT -> pick 1 of 3 -> FIGHT -> pick 1 of 3 -> ... -> THE SEXTON
+
+- KEEP (the heart): our piloted-avatar grid fight with AI companions — Mewgenics
+  proves this is the right engine. Optionally adopt its economy: MOVE once +
+  ATTACK once + spells on MP (retiring AP arithmetic).
+- DELETE (the fat): graveyard roaming, pack maps, walking, hunting, gates, the
+  wide city hub. Between-fight time becomes ONE reward screen.
+- THE PICK (after EVERY fight), three cards, one click:
+    [ GEAR  ]  one number: "+3 damage" / "+8 HP" / "+1 MP" (Loop Hero clarity)
+    [ESSENCE]  an Isaac passive: automatic, visible, synergizing
+    [BLESSING] immediate relief: mend / bread / stones
+- ESSENCES, ISAAC-STYLE (grown from our existing system): passive and always-on;
+  they visibly change the avatar (tint, aura, grafted glyph); they SYNERGIZE
+  ("your hits poison" x "poison spreads on death" x "the poisoned fear you");
+  and 3 OF A THEME = A TRANSFORMATION — collect three bone essences and you
+  BECOME THE REVENANT, half-dead, feared by the dead. Collection has a
+  destination, builds have names.
+- THE BELL still tolls: each fight costs its seconds; the Sexton arrives when
+  it rings (He Is Coming's boss clock) — leave with the haul or meet him.
+- LEVEL-UP becomes the Mewgenics pick (1 of 3: new spell rank / passive / stat)
+  — the C and S bookkeeping panels retire from the run entirely.
+- Falling = permanent scar on that crew member (Wounded grows teeth), death of
+  the campaign only when the leader falls with no one to drag them out.
+- The city shrinks to ONE screen between dives: the Keeper (tithe, crush),
+  the Post (hire), depart.
+
+### Why F over A/B/E
+Every earlier swing traded away the grid fight. The owner's "wow" at Mewgenics
+says the OPPOSITE: the grid fight is the keeper — it's everything AROUND it
+that must compress into fight/reward/fight. F reuses the combat engine 100%,
+deletes the roaming layer, and pours the essence system (already in the
+fiction: essences, stones, the Tithe) into Isaac's proven mold.
+
+RECOMMENDATION: F is the redesign. Next artifact: a GAUNTLET design doc (reward
+tables, 20-30 Isaac-style essences with synergy rules, 3 transformations, the
+simplified gear list, the Mewgenics action economy decision), then a playable
+prototype: new run controller over the untouched combat engine.
+
 ## Sources
 - https://after-strategy.com/en/into-the-breach-complete-guide-tactical-strategy-2026/
 - https://atomicbobomb.home.blog/2020/05/17/into-the-breach-enemy-intentions/

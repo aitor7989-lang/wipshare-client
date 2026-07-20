@@ -140,7 +140,16 @@ public static class Policy
 
         var target = preferSoftest ? Softest(engine, self) : Nearest(engine, self);
         if (target == null) return false;
-        return StepToward(engine, self, target.Pos);
+        // March at an ATTACK cell, not the target's own cell: a geodesic walk to the enemy
+        // itself happily spends its last MP on a DIAGONAL neighbor — adjacent to the eye,
+        // yet outside every orthogonal melee range, so the turn's blow is wasted (QA runs:
+        // hounds, husks and the Sexton all parked diagonally for whole turns).
+        var goal = engine.Field.Orthogonal(target.Pos)
+            .Where(c => engine.Field.IsWalkable(c) && (c == self.Pos || !engine.IsOccupied(c)))
+            .OrderBy(c => c.DistanceTo(self.Pos))
+            .Cast<CellCoord?>()
+            .FirstOrDefault() ?? target.Pos;
+        return StepToward(engine, self, goal);
     }
 
     // ----- Ranged policies: hold range, shoot the softest --------------------------

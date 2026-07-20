@@ -321,13 +321,17 @@ public sealed class GauntletGame : Game
         switch (e)
         {
             case TurnStarted ts:
-                // The mana trickle replaces the AP purse — for YOUR side. The dead don't
-                // budget: mobs keep their full engine AP, or a pricey attack starves them
-                // into a stalled, unlosable, unwinnable staring contest.
+                // The mana trickle replaces the AP purse — for YOUR side.
                 if (ts.Fighter.Team == Team.Player)
                     ts.Fighter.CurrentAp = Math.Min(ts.Fighter.BaseAp,
                         _manaCarry.GetValueOrDefault(ts.Fighter.Id, 3)
                         + 2 + (ts.Fighter == _avatar ? _bonusRegen : 0));
+                // The dead swing ONCE a turn, like you: full Dofus AP let a husk land two
+                // or three blows to your one (a 2 HP hound mauled a 44 HP bulwark dead in
+                // a single phase in QA). Cap their purse at their priciest skill.
+                else
+                    ts.Fighter.CurrentAp = Math.Min(ts.Fighter.CurrentAp,
+                        ts.Fighter.Spells.Count > 0 ? ts.Fighter.Spells.Max(s => s.ApCost) : ts.Fighter.CurrentAp);
                 if (_embers.Contains(ts.Fighter.Pos) && ts.Fighter.IsAlive && ts.Fighter.Hp > 2)
                 {
                     ts.Fighter.Hp = Math.Max(1, ts.Fighter.Hp - 2);
@@ -461,9 +465,9 @@ public sealed class GauntletGame : Game
 
     private void UpdateFight(float dt)
     {
-        _bell -= dt;
+        _bell = Math.Max(0, _bell - dt);   // rung is rung — no ledger of negative seconds
         if (_bell <= 0 && !_sextonNow && _fightIndex < 3)
-        { _sextonNow = true; _bell = 0; }   // he arrives after this fight, wherever you are
+        { _sextonNow = true; }   // he arrives after this fight, wherever you are
 
         if (_engine.Outcome != FightOutcome.Ongoing)
         {
@@ -1119,7 +1123,8 @@ public sealed class GauntletGame : Game
         EffectKind.StealAp => $"STEAL {e.Min} MANA",
         EffectKind.StealMp => $"STEAL {e.Min} MOVE",
         EffectKind.GrantAp => $"GRANT {e.Min} MANA",
-        EffectKind.ApplyStatus => $"{e.Status} {e.Min}, {e.Max} TURNS".ToUpperInvariant(),
+        // Binary states (Rooted, Stabilized) have no magnitude worth printing.
+        EffectKind.ApplyStatus => (e.Min > 0 ? $"{e.Status} {e.Min}, {e.Max} TURNS" : $"{e.Status}, {e.Max} TURNS").ToUpperInvariant(),
         EffectKind.Teleport => "LEAP THERE",
         EffectKind.Swap => "TRADE PLACES",
         EffectKind.SelfHpCost => $"BLOOD PRICE {e.Min}",

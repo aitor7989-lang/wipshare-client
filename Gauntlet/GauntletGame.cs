@@ -77,7 +77,10 @@ public sealed class GauntletGame : Game
     private readonly List<(Fighter f, CellCoord at)> _corpses = new();
     private readonly HashSet<string> _fallen = new();   // took the void exit: no corpse, no blood
     private string _narration = ""; private float _narrationUntil;
+    private string _banner = ""; private float _bannerUntil; private Color _bannerInk;
     private bool _firstBlood, _firstSpike;
+    private int _kills, _falls;                          // the run's ledger, read at the end
+    private Texture2D _vignette = null!;                 // Crawl's candle-dark, baked once
     private static readonly Color Gold = new(232, 192, 88);   // the backstab's one glint of color
     private readonly Random _rng = new();
 
@@ -102,6 +105,19 @@ public sealed class GauntletGame : Game
         _font = new PixelFont(px);
         _sprites = new SpriteBank(GraphicsDevice);
         _sfx = new SoundBank();
+
+        // The vignette: the arena is lit from its middle and the dark leans in from the rim.
+        _vignette = new Texture2D(GraphicsDevice, W, H);
+        var vd = new Color[W * H];
+        float cx = W / 2f, cy = H / 2f, maxD = MathF.Sqrt(cx * cx + cy * cy);
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+            {
+                float d = MathF.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / maxD;
+                float a = Math.Clamp((d - 0.52f) / 0.48f, 0f, 1f);
+                vd[y * W + x] = Color.Black * (a * a * 0.5f);
+            }
+        _vignette.SetData(vd);
     }
 
     // ================= RUN FLOW ========================================================
@@ -110,7 +126,7 @@ public sealed class GauntletGame : Game
     {
         _runStones = 0; _bell = BellStart; _fightIndex = 0; _sextonNow = false; _runWon = false;
         _essences.Clear(); _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
-        _pendingLevels = 0;
+        _pendingLevels = 0; _kills = 0; _falls = 0;
         _you.CurrentHp = null;
         if (_mate != null) _mate.CurrentHp = null;   // the city rests everyone
         StartFight();
@@ -303,7 +319,12 @@ public sealed class GauntletGame : Game
                     Float("-2", Mono.Element(Element.Fire), Center(ts.Fighter.Pos));
                     _sfx.Play("hit_fire", 0.5f);
                 }
-                if (ts.Fighter == _avatar) _sfx.Play("yourturn", 0.55f, jitter: false);
+                if (ts.Fighter == _avatar)
+                {
+                    _sfx.Play("yourturn", 0.55f, jitter: false);
+                    Banner("YOUR TURN", Mono.Ink);
+                }
+                else if (ts.Fighter.Archetype == "sexton") Banner("HE MOVES", Mono.Danger);
                 break;
 
             case DamageDealt d:
@@ -327,6 +348,7 @@ public sealed class GauntletGame : Game
             case FighterFell ff:
                 // The void takes them whole: no blood, no corpse — just the long quiet.
                 _fallen.Add(ff.Fighter.Id);
+                if (ff.Fighter.Team == Team.Enemy) _falls++;
                 _freeze = Math.Max(_freeze, 0.26f); _shake = Math.Max(_shake, 14f);
                 Float("GONE", Mono.Danger, Center(ff.At));
                 _sfx.Play("crush", 0.9f);
@@ -346,6 +368,7 @@ public sealed class GauntletGame : Game
                 }
                 if (fd.Fighter.Team == Team.Enemy)
                 {
+                    _kills++;
                     int pay = TitheContent.MobStonesOf(fd.Fighter)
                               + (_essences.Contains("GRASP'S COIN") ? 1 : 0);
                     _runStones += pay;
@@ -599,6 +622,7 @@ public sealed class GauntletGame : Game
 
     private void Float(string t, Color c, Vector2 p) => _floats.Add((t, c, p, _time));
     private void Narrate(string line) { _narration = line; _narrationUntil = _time + 3.2f; }
+    private void Banner(string t, Color c) { _banner = t; _bannerInk = c; _bannerUntil = _time + 1.1f; }
 
     // ================= GEOMETRY ========================================================
 
@@ -649,7 +673,7 @@ public sealed class GauntletGame : Game
         }
 
         if (_time < _narrationUntil && _scene != Scene.City)
-            _font.DrawCentered(_sb, _narration.ToUpperInvariant(), W / 2, 44, 2,
+            _font.DrawCentered(_sb, _narration.ToUpperInvariant(), W / 2, 62, 2,
                 Mono.Ink * Math.Min(1f, (_narrationUntil - _time) / 0.6f));
 
         _sb.End();
@@ -662,8 +686,15 @@ public sealed class GauntletGame : Game
         _font.DrawCentered(_sb, "OF THE BELL", W / 2, 230, 3, Mono.Dim);
         _font.DrawCentered(_sb, $"BANKED: {_banked} ESSENCE STONES", W / 2, 320, 2, Mono.Ink);
         _font.DrawCentered(_sb, $"YOU — {_you.ClassId.ToUpperInvariant()}, LEVEL {_you.Level}", W / 2, 352, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 388, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "the bell gives you five minutes. he keeps the change.", W / 2, 404, 1, Mono.Faint);
+        // The road ahead, spelled out Loop Hero style: three graves, then HIM.
+        for (int i = 0; i < 4; i++)
+        {
+            var p = new Vector2(W / 2 - 54 + i * 36, 380);
+            if (i > 0) _prim.Line(_sb, p - new Vector2(26, 0), p - new Vector2(10, 0), 1f, Mono.Faint);
+            _prim.DiscAt(_sb, p, i == 3 ? 4 : 3, i == 3 ? Mono.Danger : Mono.Dim);
+        }
+        _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 394, 1, Mono.Dim);
+        _font.DrawCentered(_sb, "the bell gives you five minutes. he keeps the change.", W / 2, 408, 1, Mono.Faint);
         for (int i = 0; i < ClassIds.Length; i++)
         {
             var r = ClassRect(i);
@@ -673,6 +704,13 @@ public sealed class GauntletGame : Game
             _font.DrawCentered(_sb, ClassIds[i].ToUpperInvariant(), r.Center.X, r.Y + 9, 1,
                 sel ? Mono.Ink : Mono.Dim);
         }
+        // What the chosen hand actually does — the kit in one whispered line.
+        _font.DrawCentered(_sb, _you.ClassId switch
+        {
+            "archer" => "LOOSED ARROW free, from afar · LONG SHOT: +4 at range 6+",
+            "bulwark" => "SHOVE free — the coastline is a weapon · RAGE BELOW: +30% when bloodied",
+            _ => "SPARK free · OVERCHANNEL: unspent mana burns hotter",
+        }, W / 2, 462, 1, Mono.Dim);
         bool hov = DepartRect.Contains(MP);
         Mono.Button(_sb, _prim, DepartRect, hover: hov);
         _font.DrawCentered(_sb, "DEPART", DepartRect.Center.X, DepartRect.Y + 15, 2, Mono.ButtonInk(hov));
@@ -733,10 +771,23 @@ public sealed class GauntletGame : Game
             && _engine.Field.TileAt(hc) != TileKind.Void)
         {
             DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
-            // Flanking preview: an armed attack aimed at an exposed back promises its bonus.
-            if (myTurn && _selected >= 0 && _engine.FighterAt(hc) is { Team: Team.Enemy } prey
-                && CombatEngine.IsBackstab(_avatar.Pos, prey))
-                _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1, Gold);
+            // The promise (Mewgenics reads its numbers out loud): an armed attack over a
+            // target shows what it would do — more when you've found their back.
+            if (myTurn && _selected >= 0 && _selected < _avatar.Spells.Count
+                && _engine.FighterAt(hc) is { Team: Team.Enemy } prey)
+            {
+                var arm = _avatar.Spells[_selected];
+                bool back = CombatEngine.IsBackstab(_avatar.Pos, prey);
+                if (_engine.EstimateDamage(_avatar, arm, hc) is { } est)
+                {
+                    int lo = back ? est.min + est.min / 4 : est.min;
+                    int hi = back ? est.max + est.max / 4 : est.max;
+                    _font.DrawCentered(_sb, back ? $"{lo}-{hi} FROM BEHIND" : $"{lo}-{hi}",
+                        (int)Center(hc).X, (int)Center(hc).Y - 42, 1, back ? Gold : Mono.Ink);
+                }
+                else if (back)
+                    _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1, Gold);
+            }
         }
 
         // Entities: stones, corpses and fighters share ONE depth-sorted pass, so a
@@ -792,6 +843,11 @@ public sealed class GauntletGame : Game
                     ff.Archetype == "sexton" ? Mono.Danger : Mono.Ink, ff.Archetype == "sexton" ? 62 : 46);
                 _font.DrawCentered(_sb, ff.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
                     ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
+                // A sliver of life under the number — the state of the fight at a squint.
+                float hf = ff.Hp / (float)ff.MaxHp;
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 11, (int)cc.Y + TH / 2 + 6, 22, 2), Mono.Faint);
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 11, (int)cc.Y + TH / 2 + 6, (int)(22 * hf), 2),
+                    ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : ff.Team == Team.Player ? Mono.Ally : Mono.Ink);
             }));
         }
         foreach (var (_, draw) in pass.OrderBy(p => p.depth)) draw();
@@ -808,18 +864,48 @@ public sealed class GauntletGame : Game
             _font.DrawCentered(_sb, t, (int)p.X, (int)(p.Y - 24 - age * 30), 2, c * (1f - age / FloatLife));
         }
 
+        // Crawl's law: the dark leans in from the rim, and the candle is never quite steady.
+        _sb.Draw(_vignette, Vector2.Zero, Color.White * (0.9f + 0.1f * MathF.Sin(_time * 5.3f)));
+
+        // Turn banner — one loud breath, then gone.
+        if (_time < _bannerUntil)
+        {
+            float a = Math.Min(1f, (_bannerUntil - _time) / 0.35f);
+            _font.DrawCentered(_sb, _banner, W / 2, 148, 3, _bannerInk * a);
+        }
+
         DrawFightHud(myTurn);
     }
 
     private void DrawFightHud(bool myTurn)
     {
-        // The bell, top center — the only clock that matters.
+        // The bell, top center — the only clock that matters. Under a minute it flickers.
         float frac = Math.Clamp(_bell / BellStart, 0f, 1f);
+        bool urgent = !_sextonNow && _bell < 60f;
         Mono.Bar(_sb, _prim, new Rectangle(W / 2 - 150, 8, 300, 10), frac,
             frac > 0.25f ? Mono.Ink : Mono.Danger);
         _font.DrawCentered(_sb, $"{(int)MathF.Ceiling(Math.Max(0, _bell))}S — {FightLabel()}", W / 2, 24, 1,
-            _sextonNow ? Mono.Danger : Mono.Dim);
+            _sextonNow ? Mono.Danger
+            : urgent ? Color.Lerp(Mono.Dim, Mono.Danger, 0.5f + 0.5f * MathF.Sin(_time * 6f))
+            : Mono.Dim);
+
+        // The road (Loop Hero keeps the whole loop in view): three graves, then HIM.
+        for (int i = 0; i < 4; i++)
+        {
+            var p = new Vector2(W / 2 - 54 + i * 36, 44);
+            if (i > 0) _prim.Line(_sb, p - new Vector2(26, 0), p - new Vector2(10, 0), 1f, Mono.Faint);
+            bool here = i == Math.Min(_fightIndex, 3);
+            var ink = i == 3 ? Mono.Danger : Mono.Ink;
+            if (here) _prim.DiscAt(_sb, p, 5f + MathF.Sin(_time * 4f), ink);
+            else _prim.DiscAt(_sb, p, i < _fightIndex ? 3 : 2, i < _fightIndex ? Mono.Dim : i == 3 ? Mono.Danger * 0.5f : Mono.Faint);
+        }
+
         _font.Draw(_sb, $"{_runStones} st", 16, 12, 2, Mono.Ink);
+
+        // Whoever the cursor rests on gets a name — know your dead before you make them.
+        if (CellAt(MP) is { } tc && _engine.FighterAt(tc) is { } tf)
+            _font.Draw(_sb, $"{tf.Name.ToUpperInvariant()}  {tf.Hp}/{tf.MaxHp}", 16, 40, 1,
+                tf.Team == Team.Enemy ? Mono.Danger : Mono.Ally);
 
         // Turn order, top right.
         int ty = 10;
@@ -844,15 +930,24 @@ public sealed class GauntletGame : Game
         for (int i = 0; i < _avatar.BaseMp; i++)
             _prim.DiscAt(_sb, new Vector2(70 + i * 16, H - 47), 6,
                 i < _avatar.CurrentMp ? Mono.Mp : Mono.Faint);
-        foreach (var (e, i) in _essences.Select((e, i) => (e, i)))
-            _font.Draw(_sb, "* " + e, 20, H - 28 + i * 0, 1, Mono.Cast);
+        // Isaac wears its essences on its sleeve: one row, always visible, forever.
+        int ex = 20;
+        foreach (var e in _essences)
+        {
+            string t = "* " + e;
+            _font.Draw(_sb, t, ex, H - 26, 1, Mono.Cast);
+            ex += _font.Measure(t, 1) + 14;
+        }
 
         var spells = _avatar.Spells;
+        int hoveredWell = -1;
         for (int i = 0; i < spells.Count && i < 7; i++)
         {
             var r = WellRect(i);
             var sp = spells[i];
-            bool canPay = sp.ApCost <= _avatar.CurrentAp && _avatar.HasCastsLeft(sp);
+            bool used = !_avatar.HasCastsLeft(sp) || _avatar.IsOnCooldown(sp, _engine.Round);
+            bool canPay = !used && sp.ApCost <= _avatar.CurrentAp;
+            if (r.Contains(MP)) hoveredWell = i;
             Mono.Slot(_sb, _prim, r, hover: r.Contains(MP), selected: _selected == i);
             string? key = TitheContent.SkillKeyById(sp.Id);
             var tint = canPay ? SpellInk(sp) : Mono.Faint;
@@ -861,10 +956,12 @@ public sealed class GauntletGame : Game
                 if (sp.Id >= 950) { if (!DrawIcon("icon_slot_weapon", r, tint)) _font.DrawCentered(_sb, "S", r.Center.X, r.Y + 16, 2, tint); }
                 else _font.DrawCentered(_sb, sp.Name[..1], r.Center.X, r.Y + 16, 2, tint);
             }
-            _font.DrawCentered(_sb, sp.ApCost == 0 ? "FREE" : sp.ApCost.ToString(),
-                r.Center.X, r.Bottom + 4, 1, canPay ? Mono.Dim : Mono.Danger);
+            // Spent reads as spent, not as unaffordable: USED is quiet, a short purse is loud.
+            _font.DrawCentered(_sb, used ? "USED" : sp.ApCost == 0 ? "FREE" : sp.ApCost.ToString(),
+                r.Center.X, r.Bottom + 4, 1, used ? Mono.Faint : canPay ? Mono.Dim : Mono.Danger);
             _font.DrawCentered(_sb, (i + 1).ToString(), r.X + 6, r.Y + 2, 1, Mono.Faint);
         }
+        if (hoveredWell >= 0) DrawSpellTooltip(spells[hoveredWell], WellRect(hoveredWell));
 
         if (myTurn)
         {
@@ -888,16 +985,24 @@ public sealed class GauntletGame : Game
             W / 2, 190, 1, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)
         {
-            var r = CardRect(i);
-            bool hov = r.Contains(MP);
+            var r0 = CardRect(i);
+            bool hov = r0.Contains(MP);
+            // Hovered cards lift out of the dirt (Loop Hero's hand feel).
+            var r = hov ? new Rectangle(r0.X, r0.Y - 6, r0.Width, r0.Height) : r0;
             Mono.Frame(_sb, _prim, r, emphasis: hov);
             var (title, body, _) = _cards[i];
             bool isEss = body.Contains("ESSENCE");
-            _font.DrawCentered(_sb, title, r.Center.X, r.Y + 26, 1, isEss ? Mono.Cast : Mono.Ink);
-            int ly = r.Y + 70;
+            var kindInk = _pickIsLevel ? Gold : isEss ? Mono.Cast : Mono.Dim;
+            _prim.FillRect(_sb, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, 3), kindInk);
+            _font.DrawCentered(_sb, _pickIsLevel ? "WORD OF RUIN" : isEss ? "ESSENCE" : "SPOILS",
+                r.Center.X, r.Y + 14, 1, kindInk);
+            _font.DrawCentered(_sb, title, r.Center.X, r.Y + 36, 1, isEss ? Mono.Cast : Mono.Ink);
+            int ly = r.Y + 78;
             foreach (var line in body.Split('\n'))
             { _font.DrawCentered(_sb, line, r.Center.X, ly, 1, line.Contains("ESSENCE") ? Mono.Cast : Mono.Dim); ly += 16; }
-            _font.DrawCentered(_sb, $"({i + 1})", r.Center.X, r.Bottom - 24, 1, Mono.Faint);
+            var take = new Rectangle(r.Center.X - 46, r.Bottom - 38, 92, 24);
+            Mono.Button(_sb, _prim, take, hover: hov);
+            _font.DrawCentered(_sb, $"TAKE ({i + 1})", take.Center.X, take.Y + 8, 1, Mono.ButtonInk(hov));
         }
     }
 
@@ -910,6 +1015,10 @@ public sealed class GauntletGame : Game
                 : $"half your stones sink with you. +{_runStones / 2} banked.",
             W / 2, 320, 2, Mono.Dim);
         if (!_runWon) _font.DrawCentered(_sb, "a new leader answers the bell.", W / 2, 352, 1, Mono.Faint);
+        // The ledger, read aloud over the grave.
+        _font.DrawCentered(_sb,
+            $"the earth fed: {_kills}   ·   taken by the void: {_falls}   ·   level {_you.Level}",
+            W / 2, 384, 1, Mono.Dim);
         _font.DrawCentered(_sb, "PRESS SPACE", W / 2, 430, 1, Mono.Ink);
     }
 
@@ -952,5 +1061,62 @@ public sealed class GauntletGame : Game
         var dmg = s.Effects.FirstOrDefault(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal);
         if (dmg != null) return Mono.Element(dmg.Element);
         return s.Effects.Any(e => e.Kind == EffectKind.Heal) ? Mono.Heal : Mono.Ink;
+    }
+
+    // ----- the tooltip: everything a well knows, told over it on hover ----------------
+
+    private void DrawSpellTooltip(SpellDef sp, Rectangle well)
+    {
+        var lines = new List<(string t, Color c)>
+        {
+            (sp.Name.ToUpperInvariant(), SpellInk(sp)),
+            ((sp.ApCost == 0 ? "FREE" : $"{sp.ApCost} MANA")
+             + (sp.MaxCastsPerTurn == 1 ? " · ONCE A TURN" : "")
+             + (sp.Cooldown > 0 ? $" · REST {sp.Cooldown}" : ""), Mono.Ap),
+            ($"RANGE {sp.MinRange}-{sp.MaxRange}"
+             + (sp.LineOnly ? " · IN A LINE" : "")
+             + (sp.RequiresLineOfSight ? "" : " · NEEDS NO SIGHT"), Mono.Dim),
+        };
+        string fx = EffectsLine(sp);
+        if (fx.Length > 0) lines.Add((fx, Mono.Ink));
+        foreach (var w in Wrap(sp.Description, 36)) lines.Add((w.ToLowerInvariant(), Mono.Dim));
+
+        int wdt = Math.Max(150, lines.Max(l => _font.Measure(l.t, 1)) + 20);
+        int hgt = lines.Count * 14 + 14;
+        var r = new Rectangle(Math.Min(well.X, W - wdt - 8), well.Y - hgt - 8, wdt, hgt);
+        Mono.Frame(_sb, _prim, r, emphasis: true);
+        int y = r.Y + 8;
+        foreach (var (t, c) in lines) { _font.Draw(_sb, t, r.X + 10, y, 1, c); y += 14; }
+    }
+
+    /// <summary>One readable clause per effect — the Loop Hero promise: numbers, no fine print.</summary>
+    private static string EffectsLine(SpellDef s) => string.Join(" · ", s.Effects.Select(e => e.Kind switch
+    {
+        EffectKind.Damage => $"{e.Min}-{e.Max} {e.Element}".ToUpperInvariant(),
+        EffectKind.Lifesteal => $"LEECH {e.Min}-{e.Max} {e.Element}".ToUpperInvariant(),
+        EffectKind.Heal => $"HEAL {e.Min}-{e.Max}",
+        EffectKind.Push => $"PUSH {e.Min}",
+        EffectKind.Pull => $"PULL {e.Min}",
+        EffectKind.StealAp => $"STEAL {e.Min} MANA",
+        EffectKind.StealMp => $"STEAL {e.Min} MOVE",
+        EffectKind.GrantAp => $"GRANT {e.Min} MANA",
+        EffectKind.ApplyStatus => $"{e.Status} {e.Min}, {e.Max} TURNS".ToUpperInvariant(),
+        EffectKind.Teleport => "LEAP THERE",
+        EffectKind.Swap => "TRADE PLACES",
+        EffectKind.SelfHpCost => $"BLOOD PRICE {e.Min}",
+        EffectKind.Summon => "CALL A SERVANT",
+        _ => "",
+    }).Where(t => t.Length > 0));
+
+    private static IEnumerable<string> Wrap(string text, int width)
+    {
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+        var line = "";
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length > 0 && line.Length + 1 + word.Length > width) { yield return line; line = word; }
+            else line = line.Length == 0 ? word : line + " " + word;
+        }
+        if (line.Length > 0) yield return line;
     }
 }

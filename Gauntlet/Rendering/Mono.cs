@@ -58,15 +58,15 @@ public static class Mono
         bool emphasis = false, float fillAlpha = 0.94f)
     {
         prim.FillRect(sb, r, Panel * fillAlpha);
-        prim.StrokeRect(sb, r, 1, emphasis ? Ink : Dim);
+        prim.StrokeRect(sb, r, 2, emphasis ? Ink : Dim);
     }
 
     /// <summary>A 1-bit button: border box; hover INVERTS (white fill, black text expected).</summary>
     public static void Button(SpriteBatch sb, Primitives prim, Rectangle r,
         bool hover = false, bool disabled = false)
     {
-        if (hover && !disabled) { prim.FillRect(sb, r, Ink); prim.StrokeRect(sb, r, 1, Ink); }
-        else { prim.FillRect(sb, r, Panel); prim.StrokeRect(sb, r, 1, disabled ? Faint : Ink); }
+        if (hover && !disabled) { prim.FillRect(sb, r, Ink); prim.StrokeRect(sb, r, 2, Ink); }
+        else { prim.FillRect(sb, r, Panel); prim.StrokeRect(sb, r, 2, disabled ? Faint : Ink); }
     }
 
     /// <summary>Ink for a label sitting on a <see cref="Button"/> in the given state.</summary>
@@ -78,7 +78,7 @@ public static class Mono
         Color? fill = null)
     {
         prim.FillRect(sb, r, Panel);
-        prim.StrokeRect(sb, r, 1, Dim);
+        prim.StrokeRect(sb, r, 2, Dim);
         int w = (int)((r.Width - 4) * Math.Clamp(frac, 0f, 1f));
         if (w > 0) prim.FillRect(sb, new Rectangle(r.X + 2, r.Y + 2, w, r.Height - 4), fill ?? Ink);
     }
@@ -88,6 +88,6 @@ public static class Mono
         bool hover = false, bool selected = false)
     {
         prim.FillRect(sb, r, Panel);
-        prim.StrokeRect(sb, r, selected ? 2 : 1, selected ? Ink : hover ? Ink : Faint);
+        prim.StrokeRect(sb, r, selected ? 3 : 2, selected ? Ink : hover ? Ink : Faint);
     }
 }

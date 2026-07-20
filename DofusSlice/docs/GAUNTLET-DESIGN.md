@@ -208,6 +208,29 @@ panels during runs (the pick replaces them), the wide city.
   hit; sleep frames by the fighting-game clock (90ms hit / 160ms backstab /
   260ms kill / 300ms void-fall); lunges gained anticipation-strike-HOLD-
   settle; walks hop 3px a cell; sparks doubled to survive the downscale.
+  Then g12.5 CRAWL: bodies leave the low-res grid entirely — sprites,
+  projectiles, motes, rings and the vignette draw at NATIVE res over the
+  upscaled ground (Powerhoof exactly: low-res art, screen-res motion); F11
+  fullscreen (borderless, letterboxed, mouse unprojected, choice saved).
+- g13 THE HAND: a deep interaction/feel fix pass from a live playtest. Walk
+  speed DOUBLED (145->290 px/s). The "jitter" was three bugs: the sprite
+  mirror-flapped every zig of a zigzag iso path (now faces the walk's NET
+  direction ONCE), the hurt-tremble fired on a WALKING body (now suppressed
+  mid-stride, and a smooth wave not per-frame dice), and hit-stop fired on a
+  3-damage spike GRAZE crossing a tile (grazes now get a float+spark, never a
+  freeze or recoil). Death SEQUENCING restored (the old-project law): a
+  fighter dead in the model stays standing as a "ghost" until the killing
+  blow VISUALLY lands, so no more dying while the attacker is still walking
+  up. Previews are IN THE MOMENT: all range/path/threat/preview paint is
+  gated on !AnimBusy, so nothing draws from a body's future cell while it's
+  still walking there. Move UI is Dofus-exact: NO standing green carpet —
+  hover YOURSELF for the reach, hover any cell for just its PATH. BLOOD
+  removed (it buried the embers and the floats). Armed feedback made
+  unmistakable: the well pulses, the spell name rides the cursor, the ARMED
+  banner sits over the band. Missing-art bodies borrow the husk sprite
+  (no more placeholder letter-balls). And the whole UI joined the world's
+  scale — every label doubled to scale 2 with the band/plate/cards/tooltips
+  relaid, so the HUD no longer reads as bolted-on-crisp beside chunky pixels.
 STILL OPEN: more events/mysteries, mob walk/attack strips for the six
 unmapped mobs (husk/hound/spitter/mite/piper/wraith still single-frame),
 a mid-run sellsword offer at the trader, retiring old TITHE once the

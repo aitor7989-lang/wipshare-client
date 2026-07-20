@@ -93,6 +93,7 @@ public sealed class GauntletGame : Game
     private string _road = "";           // "" until the fork; then "quiet" or "screaming"
     private bool _extraPick, _eventDone; // the screaming row's bonus hand; one event a run
     private bool _ropePulled;            // the loose rope: fight 3 comes a grade angrier
+    private bool _bossFight, _ritualTurned;  // the Sexton's stage, and his half-health turn
 
     // ----- the covenant (g5): gear in four slots, essences in three themes -------------
     // Isaac's law: an item is a RULE on a shared verb (strike/push/kill/toll), and rules
@@ -285,8 +286,10 @@ public sealed class GauntletGame : Game
         _engine.Emitted += OnCombatEvent;
         _engine.Start();
         _scene = Scene.Fight;
-        _sfx.SetAmbient("wind", 0.12f);
+        _bossFight = boss; _ritualTurned = false;
+        _sfx.SetAmbient(boss ? "dirge" : "wind", 0.12f);
         Narrate(boss ? "the bell falls silent. HE is here." : $"the dead notice you. ({FightLabel()})");
+        if (boss) { Banner("HE IS HERE", Mono.Danger); _sfx.Play("bell", 0.8f, jitter: false); }
     }
 
     /// <summary>Bite the rectangle ragged with void from the rim, then drop 2-3 CLUSTERS
@@ -548,6 +551,26 @@ public sealed class GauntletGame : Game
                 if (!_firstBlood) { _firstBlood = true; Narrate("first blood feeds the ground."); }
                 if (!_firstSpike && _engine.Field.TileAt(d.At) == TileKind.Spikes && d.Element == Element.Neutral)
                 { _firstSpike = true; Narrate("the bones underfoot are hungry."); }
+                // THE RITUAL TURNS: at half health the Sexton stops digging your grave
+                // politely — +25% to his blows, and the graves themselves open.
+                if (_bossFight && !_ritualTurned && d.Target.Archetype == "sexton"
+                    && d.RemainingHp > 0 && d.RemainingHp * 2 <= d.Target.MaxHp)
+                {
+                    _ritualTurned = true;
+                    d.Target.Statuses.Add(new StatusEffect(StatusKind.DamageBuff, 25, 99));
+                    var rr = new Random(_seed * 7 + 1);
+                    for (int i = 0, grown = 0; i < 40 && grown < 3; i++)
+                    {
+                        var c = new CellCoord(rr.Next(Cols), rr.Next(Rows));
+                        if (_engine.Field.TileAt(c) is TileKind.Grass or TileKind.Grass2
+                            && !_engine.Fighters.Any(x => x.IsAlive && x.Pos == c))
+                        { _engine.Field.SetTile(c, TileKind.Spikes); Splatter(Center(c), 6); grown++; }
+                    }
+                    Banner("THE RITUAL TURNS", Mono.Danger);
+                    Narrate("the ground answers him. the graves open.");
+                    _freeze = Math.Max(_freeze, 0.25f); _shake = Math.Max(_shake, 12f);
+                    _sfx.Play("bell", 0.8f, jitter: false);
+                }
                 // On-strike rules (Isaac's verbs): your elemental hits carry rot and fire.
                 if (_engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar
                     && d.Target.Team == Team.Enemy && d.Target.IsAlive
@@ -841,6 +864,8 @@ public sealed class GauntletGame : Game
             ("COIN OF THE GRASP", "+25 STONES NOW\n\nit hums when\nyou hold it", "BLESSING", () => _runStones += 25),
             ("OIL FOR THE BELL", "+5 TOLLS\n\nhe waits.\nbarely.", "BLESSING", () => _tolls += 5),
         };
+        // The last supper: the hand before HIM always offers the mend.
+        if (_fightIndex >= 3 && _cards.Count < 3) _cards.Add(blessings[0]);
         while (_cards.Count < 3)
         {
             var c = blessings[rnd.Next(blessings.Count)];
@@ -1212,6 +1237,8 @@ public sealed class GauntletGame : Game
 
         // Crawl's law: the dark leans in from the rim, and the candle is never quite steady.
         _sb.Draw(_vignette, Vector2.Zero, Color.White * (0.9f + 0.1f * MathF.Sin(_time * 5.3f)));
+        // The ritual's stage: HIS fight is lit by half the candles.
+        if (_bossFight) _sb.Draw(_vignette, Vector2.Zero, Color.White * 0.55f);
 
         // Turn banner — one loud breath, then gone.
         if (_time < _bannerUntil)

@@ -1448,8 +1448,10 @@ public sealed class GauntletGame : Game, IRunFx
             var r = new Rectangle(12 + i * 44, BandTop + 20, 40, 40);
             var worn = _st.Gear.GetValueOrDefault(slots[i]);
             Mono.Slot(_sb, _prim, r, hover: r.Contains(MP));
-            _font.DrawCentered(_sb, slots[i] == "BOOTS" ? "S" : slots[i][..1], r.Center.X, r.Y + 8, 2,
-                worn != null ? Mono.Ink : Mono.Faint);
+            // The pack's slot glyph (sword/plate/boot/charm); the letter is the last resort.
+            var slotInk = worn != null ? Mono.Ink : Mono.Faint;
+            if (!DrawIcon("icon_slot_" + slots[i].ToLowerInvariant(), r, slotInk))
+                _font.DrawCentered(_sb, slots[i] == "BOOTS" ? "S" : slots[i][..1], r.Center.X, r.Y + 8, 2, slotInk);
             _font.DrawCentered(_sb, worn != null ? $"+{worn.Power}" : "-", r.Center.X, r.Bottom + 3, 2,
                 worn != null ? Mono.Dim : Mono.Faint);
             if (r.Contains(MP) && worn != null)
@@ -1552,6 +1554,7 @@ public sealed class GauntletGame : Game, IRunFx
                 _prim.StrokeRect(_sb, new Rectangle(r.X - 3, r.Y - 3, r.Width + 6, r.Height + 6), 2,
                     Mono.Cast * (0.65f + 0.35f * MathF.Sin(_time * 7f)));
             string? key = TitheContent.SkillKeyById(sp.Id);
+            if (key == null && sp.Id == 953) key = "attraction";   // Sacrier pull lives in RunCore, not the tables
             var tint = canPay || !myTurn ? SpellInk(sp) : Mono.Faint;
             if (key == null || !DrawIcon("icon_spell_" + key, r, tint))
             {

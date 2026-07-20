@@ -176,7 +176,9 @@ public sealed class Campaign
         return true;
     }
 
-    public bool SellEssence(string essence)
+    /// <summary>Crush a held essence into essence stones at the Tithe-Keeper's wheel — the
+    /// dark bargain: knowledge ground back into coin. Same substance, lesser form.</summary>
+    public bool CrushEssence(string essence)
     {
         if (!Essences.Remove(essence)) return false;
         Stones += TitheContent.Prices.EssenceSell;

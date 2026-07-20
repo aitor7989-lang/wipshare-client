@@ -371,8 +371,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 a.Add(($"BUY HARD BREAD  ({P.HardBread} st)   [have {_campaign.Bread}]  — MENDS {P.BreadHeal} HP BETWEEN FIGHTS",
                        _campaign.Stones >= P.HardBread, () => _campaign.BuyBread()));
                 if (_campaign.Essences.Count > 0)
-                    a.Add(($"SELL ESSENCE: {_campaign.Essences[0].ToUpperInvariant()}  (+{P.EssenceSell} st)", true,
-                           () => _campaign.SellEssence(_campaign.Essences[0])));
+                    a.Add(($"CRUSH {_campaign.Essences[0].ToUpperInvariant()} INTO STONES  (+{P.EssenceSell} st) — THE KNOWLEDGE IS LOST",
+                           true, () => _campaign.CrushEssence(_campaign.Essences[0])));
                 break;
             case 1: // the Temple Sister
                 var w = _campaign.Crew.FirstOrDefault(u => u.Wounded);

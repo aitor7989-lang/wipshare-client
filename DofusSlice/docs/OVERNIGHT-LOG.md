@@ -772,3 +772,16 @@ collects them. A REAL rename, not a label swap:
   coin, essences are the knowledge.
 - Sim prints speak stones; effects 18/18, survey clean ("avg end stones").
 - QA: bag row + Tithe-Keeper prices screenshot-verified.
+
+## v9.5: THE LEDGER — M5 economy tuning + essence crushing
+Frontier round 1 of 3 (owner: "do everything you mentioned").
+- TUNING (rationale logged, sims validated): draught 130 -> 80 (a fresh 160-stone
+  purse that wipes once must still afford recovery + a hire — 130 locked players
+  out, watched in v9.0 QA); tithe base 120 -> 100 but growth 70 -> 80 (gentler
+  entry, the noose tightens later); essence crush value 45 -> 60 (a real
+  temptation against teaching, with the Temple's 300 still the premium path).
+  Bread, hires, vet, surgery unchanged — they played right.
+- ESSENCE CRUSHING: SellEssence is now Campaign.CrushEssence, and the Tithe-Keeper
+  offers "CRUSH <NAME> INTO STONES (+60 st) — THE KNOWLEDGE IS LOST". Same
+  substance, lesser form: the dark bargain made explicit.
+- Sims: effects 18/18, survey 40+40 clean, progression completes.

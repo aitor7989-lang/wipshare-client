@@ -141,10 +141,22 @@ RETIRES: graveyard roam scene, pack maps, hunting, gates, walking, the crypt
 room-chain (folds into the gauntlet's fork), AP, stat-point spending, the C/S
 panels during runs (the pick replaces them), the wide city.
 
-## 3. Build plan
-- G1 PROTOTYPE (flagged, old game intact): run controller (fight→pick chain of
-  3 + Sexton), the pick screen, mana/move/strike economy, basic hazard tiles —
-  PLUS the first feel layer: hit-stop, smears, blood persistence, narrator lines.
-- G2: essence pool + synergy engine + visible auras; gear simplification.
-- G3: events, the fork, transformations, scars, the Sexton-arrival clock.
-- G4: retire the old scenes; the gauntlet becomes THE game; balance sims.
+## 3. Build plan — SHIPPED (July 2026)
+- g1-g3: run controller (fight→pick→Sexton), mana/strike economy, the Crawl
+  feel layer, isometric ragged islands with clustered stones.
+- g4 THE FALL: lethal coastlines (push/pull into void), bone spikes, backstab
+  +25% with facing, the level draft, the hired Sellsword.
+- g4.5-4.7 THE READ/AUDIT/PLAYTEST: tooltips, damage previews, run strip,
+  banners, vignette; nine defects found by audit + live play, fixed.
+- g4.8 THE TOLL: the bell repriced from seconds to 20 turn-tolls.
+- g5 THE COVENANT: gear in four slots and three families with set bonuses;
+  the full fifteen essences; three transformations worn as halo rings.
+- g6 THE HOST: drafted wave budgets, grades, fight-3 champions, and the
+  Cairn Brute — the enemy that shoves YOU.
+- g7 THE RITE: the fork (quiet/screaming rows), one grim event a run, and
+  the save file (banked stones, class, level, Sellsword persist).
+- g8 THE KEEPER: the Sexton rebuilt — retuned smash, the Gravedigger's Hook
+  (pull 2), the ritual turning at half health (graves open), the dark stage,
+  the guaranteed pre-boss mend.
+STILL OPEN: class-spell level drafts (dings offering real abilities), more
+events/roads, retiring old TITHE once the Gauntlet has clearly won.

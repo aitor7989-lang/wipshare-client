@@ -852,7 +852,9 @@ public sealed class GauntletGame : Game
             var g = gearChoices[rnd.Next(gearChoices.Count)];
             gearChoices.RemoveAll(x => x.Name == g.Name);
             var worn = _gear.GetValueOrDefault(g.Slot);
-            string body = g.Blurb + $"\n\n{g.Slot} · {g.Family} SET"
+            // Set progress counts what would be worn AFTER the take (the replaced slot drops out).
+            int famAfter = _gear.Values.Count(x => x.Family == g.Family && x.Slot != g.Slot) + 1;
+            string body = g.Blurb + $"\n\n{g.Slot} · {g.Family} SET {famAfter}/3"
                 + (worn != null ? $"\nsheds {worn.Name}" : "");
             _cards.Add((g.Name, body, "GEAR", () => { _gear[g.Slot] = g; _sfx.Play("coin", 0.7f); }));
         }
@@ -1137,15 +1139,19 @@ public sealed class GauntletGame : Game
             {
                 var arm = _avatar.Spells[_selected];
                 bool back = CombatEngine.IsBackstab(_avatar.Pos, prey);
+                // An illegal shot's promise is drawn faint — numbers you can't have yet.
+                bool legal = _engine.CanCast(_avatar, arm, hc, out _);
                 if (_engine.EstimateDamage(_avatar, arm, hc) is { } est)
                 {
                     int lo = back ? est.min + est.min / 4 : est.min;
                     int hi = back ? est.max + est.max / 4 : est.max;
                     _font.DrawCentered(_sb, back ? $"{lo}-{hi} FROM BEHIND" : $"{lo}-{hi}",
-                        (int)Center(hc).X, (int)Center(hc).Y - 42, 1, back ? Gold : Mono.Ink);
+                        (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
+                        !legal ? Mono.Faint : back ? Gold : Mono.Ink);
                 }
                 else if (back)
-                    _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1, Gold);
+                    _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
+                        legal ? Gold : Mono.Faint);
             }
         }
 
@@ -1386,6 +1392,10 @@ public sealed class GauntletGame : Game
             Mono.Button(_sb, _prim, EndTurnRect, hover: hov);
             _font.DrawCentered(_sb, "END TURN", EndTurnRect.Center.X, EndTurnRect.Y + 11, 1, Mono.ButtonInk(hov));
             _font.Draw(_sb, "1-6 ARM · CLICK MOVE/CAST · ENTER ENDS", W - 330, H - 40, 1, Mono.Faint);
+            // A drawn weapon stays drawn (a failed cast keeps its arm) — say so out loud.
+            if (_selected >= 0 && _selected < spells.Count)
+                _font.Draw(_sb, $"ARMED: {spells[_selected].Name.ToUpperInvariant()} · ESC CLEARS",
+                    400, H - 124, 1, Mono.Cast);
         }
         else if (_engine.Outcome == FightOutcome.Ongoing)
             _font.Draw(_sb, "THE DEAD MOVE...", W - 190, H - 40, 1, Mono.Faint);

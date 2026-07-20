@@ -166,7 +166,19 @@ public sealed class GauntletGame : Game
                 _ => false, allowOccupiedGoal: true) != null);
             if (_mate != null) ok &= Pathfinding.FindPath(field, aSpawn, mateSpawn,
                 _ => false, allowOccupiedGoal: true) != null;
-            if (ok || attempt > 24) break;
+            if (ok) break;
+            if (attempt > 24)
+            {
+                // Never ship a sealed island: a mob nobody can reach is a fight nobody can
+                // win. The last resort is bare ground — ugly beats unwinnable.
+                field = new Battlefield(Cols, Rows);
+                var t2 = new HashSet<CellCoord>();
+                aSpawn = Spawn(field, left: true, 0, t2);
+                if (_mate != null) mateSpawn = Spawn(field, left: true, 2, t2);
+                mobSpawns.Clear();
+                for (int i = 0; i < comp.Length; i++) mobSpawns.Add(Spawn(field, left: false, i, t2));
+                break;
+            }
         }
 
         _embers.Clear();
@@ -184,7 +196,8 @@ public sealed class GauntletGame : Game
             fighters.Add(TitheContent.MakeMob(comp[i], $"mob_{_fightIndex}_{i}", mobSpawns[i]));
 
         _engine = new CombatEngine(field, fighters, new SystemRng(_seed))
-        { LethalVoid = true };   // the coastline is a weapon: a shove over the edge ends the argument
+        // The Gauntlet's rules of engagement: coastlines kill, backs are worth finding.
+        { LethalVoid = true, Backstabs = true };
         _engine.Emitted += OnCombatEvent;
         _engine.Start();
         _scene = Scene.Fight;
@@ -308,10 +321,13 @@ public sealed class GauntletGame : Game
         switch (e)
         {
             case TurnStarted ts:
-                // The mana trickle replaces the AP purse: carry what you saved, +2 a turn.
-                ts.Fighter.CurrentAp = Math.Min(ts.Fighter.BaseAp,
-                    _manaCarry.GetValueOrDefault(ts.Fighter.Id, 3)
-                    + 2 + (ts.Fighter == _avatar ? _bonusRegen : 0));
+                // The mana trickle replaces the AP purse — for YOUR side. The dead don't
+                // budget: mobs keep their full engine AP, or a pricey attack starves them
+                // into a stalled, unlosable, unwinnable staring contest.
+                if (ts.Fighter.Team == Team.Player)
+                    ts.Fighter.CurrentAp = Math.Min(ts.Fighter.BaseAp,
+                        _manaCarry.GetValueOrDefault(ts.Fighter.Id, 3)
+                        + 2 + (ts.Fighter == _avatar ? _bonusRegen : 0));
                 if (_embers.Contains(ts.Fighter.Pos) && ts.Fighter.IsAlive && ts.Fighter.Hp > 2)
                 {
                     ts.Fighter.Hp = Math.Max(1, ts.Fighter.Hp - 2);
@@ -368,7 +384,7 @@ public sealed class GauntletGame : Game
                 }
                 if (fd.Fighter.Team == Team.Enemy)
                 {
-                    _kills++;
+                    if (!fell) _kills++;   // the fallen are the void's ledger, not the earth's
                     int pay = TitheContent.MobStonesOf(fd.Fighter)
                               + (_essences.Contains("GRASP'S COIN") ? 1 : 0);
                     _runStones += pay;
@@ -395,11 +411,14 @@ public sealed class GauntletGame : Game
     {
         float dt = (float)gt.ElapsedGameTime.TotalSeconds;
         _time += dt;
+
+        // Hit-stop BEFORE input polling: a click or key landed mid-freeze is still an
+        // un-consumed transition when the world breathes again, never silently eaten.
+        if (_freeze > 0) { _freeze -= dt; base.Update(gt); return; }
+
         _prevKeys = _keys; _keys = Keyboard.GetState();
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
-
-        if (_freeze > 0) { _freeze -= dt; base.Update(gt); return; }   // hit-stop: the world holds its breath
         _shake = Math.Max(0, _shake - dt * 40f);
         for (int i = _smears.Count - 1; i >= 0; i--)
         { var s = _smears[i]; s.ttl -= dt; if (s.ttl <= 0) _smears.RemoveAt(i); else _smears[i] = s; }

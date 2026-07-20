@@ -28,6 +28,10 @@ public sealed class CombatEngine
     /// <summary>Damage dealt by a Spikes tile each time a fighter enters it (walked or thrown).</summary>
     public const int SpikeDamage = 3;
 
+    /// <summary>When set, attacks from a victim's back arc deal +25% (the Mewgenics rule).
+    /// Off by default so the classic TITHE fights keep their original arithmetic.</summary>
+    public bool Backstabs { get; set; }
+
     /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
     public IRng Rng => _rng;
     public IReadOnlyList<Fighter> Fighters => _order;
@@ -544,7 +548,7 @@ public sealed class CombatEngine
     {
         int rolled = _rng.Roll(effect.Min, effect.Max);
         int dmg = ComputeDamage(caster, victim, effect.Element, rolled, crit);
-        bool backstab = caster != victim && IsBackstab(caster.Pos, victim);
+        bool backstab = Backstabs && caster != victim && IsBackstab(caster.Pos, victim);
         if (backstab) dmg += dmg / 4; // Mewgenics: +25% from the back arc — geometry is free damage
         var at = victim.Pos;
         victim.Hp = Math.Max(0, victim.Hp - dmg);

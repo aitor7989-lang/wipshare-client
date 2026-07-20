@@ -6,10 +6,11 @@ using DofusSlice.Core.Content.Tithe;
 namespace Gauntlet.Balance;
 
 /// <summary>
-/// The balance harness (g10, owner's ask: "a hundred runs in a minute — I want to learn
-/// from it"). Plays FULL runs headless — same boards, same waves, same covenant, same
-/// mechanics as the game, because both sides call the very same RunRules — with the
-/// autoplay Policy holding the leader's hand. Prints who wins, who dies, and where.
+/// The balance harness (g10/g11, owner's ask: "a hundred runs in a minute — I want to
+/// learn from it"). Plays FULL runs headless — the same dealt road, waves, covenant,
+/// shops and mysteries as the game, because both sides call the very same RunRules —
+/// with the autoplay Policy holding the leader's hand and a sane bot working the
+/// rooms. Prints who wins, who dies, and where.
 ///
 ///   dotnet run -- --sim              300 runs, all three classes
 ///   dotnet run -- --sim 500 bulwark  500 runs of one class
@@ -21,7 +22,7 @@ public static class RunSim
     {
         public int Runs, Wins, TollOuts;
         public readonly Dictionary<string, int> DeathsAt = new();
-        public long Kills, Falls, Stones, Levels, FightsCleared;
+        public long Kills, Falls, Stones, Levels, Spent;
         public double BossEntryHp; public int BossEntries;
     }
 
@@ -43,22 +44,22 @@ public static class RunSim
         }
 
         Console.WriteLine($"THE GAUNTLET — balance ledger · {runs} runs/class · seed {seed0} · {sw.ElapsedMilliseconds} ms");
-        Console.WriteLine(new string('-', 100));
-        Console.WriteLine($"{"CLASS",-9}{"WIN%",6}{"  F1",5}{"  F2",5}{"  F3",5}{" SEXTON",8}"
-            + $"{"  TOLL-OUT",10}{"  AVG LVL",9}{"  KILLS",8}{"  FALLS",8}{"  STONES",9}{"  BOSS HP%",10}");
+        Console.WriteLine(new string('-', 108));
+        Console.WriteLine($"{"CLASS",-9}{"WIN%",6}{"  EARLY",7}{"  MID",6}{"  LATE",7}{" SEXTON",8}"
+            + $"{"  TOLL-OUT",10}{"  AVG LVL",9}{"  KILLS",8}{"  STONES",9}{"  SPENT",8}{"  BOSS HP%",10}");
         foreach (var (cls, t) in tallies)
         {
             double W(string k) => t.DeathsAt.GetValueOrDefault(k);
             Console.WriteLine($"{cls,-9}{100.0 * t.Wins / Math.Max(1, t.Runs),5:0.0}%"
-                + $"{W("FIGHT 1 OF 3"),5:0}{W("FIGHT 2 OF 3"),5:0}{W("FIGHT 3 OF 3"),5:0}{W("THE SEXTON"),8:0}"
+                + $"{W("EARLY"),7:0}{W("MID"),6:0}{W("LATE"),7:0}{W("SEXTON"),8:0}"
                 + $"{t.TollOuts,10}{(double)t.Levels / Math.Max(1, t.Runs),9:0.0}"
-                + $"{(double)t.Kills / Math.Max(1, t.Runs),8:0.0}{(double)t.Falls / Math.Max(1, t.Runs),8:0.0}"
-                + $"{(double)t.Stones / Math.Max(1, t.Runs),9:0.0}"
+                + $"{(double)t.Kills / Math.Max(1, t.Runs),8:0.0}"
+                + $"{(double)t.Stones / Math.Max(1, t.Runs),9:0.0}{(double)t.Spent / Math.Max(1, t.Runs),8:0.0}"
                 + $"{(t.BossEntries == 0 ? 0 : 100.0 * t.BossEntryHp / t.BossEntries),9:0.0}%");
         }
-        Console.WriteLine(new string('-', 100));
-        Console.WriteLine("F1/F2/F3/SEXTON = deaths at that stage · TOLL-OUT = the bell rang before the third pack fell");
-        Console.WriteLine("BOSS HP% = average health walking into the Sexton's court");
+        Console.WriteLine(new string('-', 108));
+        Console.WriteLine("EARLY = died in fights 1-2 · MID = fights 3-4 · LATE = fights 5-6 · SEXTON = at his court");
+        Console.WriteLine("SPENT = stones left at the trader · BOSS HP% = health walking into the court");
         return 0;
     }
 
@@ -66,94 +67,123 @@ public static class RunSim
     {
         t.Runs++;
         var you = new CampaignUnit { Id = "avatar", ClassId = classId, Name = "You", IsAvatar = true };
-        var st = new RunState();
+        var st = new RunState { Road = RunRules.BuildRoad(new Random(seed * 13 + 1)) };
         var picks = new Random(seed * 31 + 5);
         int seedVar = seed;
-        bool won = false;
+        bool won = false, dead = false;
 
-        for (int fight = 0; fight < 8; fight++)
+        for (int guardRooms = 0; guardRooms < 24 && !dead && !won; guardRooms++)
         {
-            string stage = RunRules.FightLabel(st);
-            if (stage == "THE SEXTON")
+            var kind = st.SextonNow ? RoomKind.Boss : st.RoomNow;
+            switch (kind)
             {
-                t.BossEntries++;
-                t.BossEntryHp += (you.CurrentHp ?? TitheContent.UnitMaxHp(you))
-                                 / (double)TitheContent.UnitMaxHp(you);
-            }
+                case RoomKind.Shop:
+                    WorkTheStall(st, you, picks, ref seedVar, t);
+                    break;
+                case RoomKind.Event:
+                {
+                    var (_, _, cards) = RunRules.RollEventCards(st, you, new Random(++seedVar));
+                    cards[picks.Next(cards.Count)].Apply();
+                    break;
+                }
+                case RoomKind.Mystery:
+                {
+                    var (_, _, cards) = RunRules.RollMysteryCards(st, you, new Random(++seedVar), null);
+                    // Gamble while healthy, take the sure coin while bleeding — a human's line.
+                    int hp = you.CurrentHp ?? TitheContent.UnitMaxHp(you);
+                    bool brave = hp * 10 >= TitheContent.UnitMaxHp(you) * 7;
+                    cards[brave ? 0 : 1].Apply();
+                    break;
+                }
+                default:
+                {
+                    if (kind == RoomKind.Boss)
+                    {
+                        t.BossEntries++;
+                        t.BossEntryHp += (you.CurrentHp ?? TitheContent.UnitMaxHp(you))
+                                         / (double)TitheContent.UnitMaxHp(you);
+                    }
+                    var (engine, avatar) = RunRules.CreateFight(st, you, null, ref seedVar);
+                    engine.Emitted += e => RunRules.HandleMechanics(engine, e, st, avatar, null);
+                    engine.Start();
+                    for (int guard = 0; guard < 600 && engine.Outcome == FightOutcome.Ongoing; guard++)
+                    {
+                        Policy.TakeTurn(engine, engine.Current);
+                        if (engine.Outcome == FightOutcome.Ongoing) engine.EndTurn();
+                    }
+                    if (engine.Outcome != FightOutcome.Victory)
+                    {
+                        string stage = kind == RoomKind.Boss || st.SextonNow ? "SEXTON"
+                            : st.FightsWon < 2 ? "EARLY" : st.FightsWon < 4 ? "MID" : "LATE";
+                        t.DeathsAt[stage] = t.DeathsAt.GetValueOrDefault(stage) + 1;
+                        if (st.SextonNow && kind != RoomKind.Boss) t.TollOuts++;
+                        dead = true;
+                        break;
+                    }
+                    if (kind == RoomKind.Boss) { won = true; break; }
 
-            var (engine, avatar) = RunRules.CreateFight(st, you, null, ref seedVar);
-            engine.Emitted += e => RunRules.HandleMechanics(engine, e, st, avatar, null);
-            engine.Start();
-
-            for (int guard = 0; guard < 600 && engine.Outcome == FightOutcome.Ongoing; guard++)
-            {
-                Policy.TakeTurn(engine, engine.Current);
-                if (engine.Outcome == FightOutcome.Ongoing) engine.EndTurn();
+                    you.CurrentHp = Math.Max(1, avatar.Hp);
+                    int before = you.Level;
+                    you.GainXp(RunRules.XpForFight(st.FightsWon));
+                    st.PendingLevels += you.Level - before;
+                    st.FightsWon++;
+                    ApplySpoils(RunRules.RollSpoils(st, you, new Random(++seedVar), null), st, you, picks);
+                    while (st.PendingLevels > 0)
+                    {
+                        st.PendingLevels--;
+                        ApplyLevelPick(RunRules.RollLevelCards(st, you, new Random(++seedVar)), picks);
+                    }
+                    break;
+                }
             }
-
-            if (engine.Outcome != FightOutcome.Victory)
-            {
-                t.DeathsAt[stage] = t.DeathsAt.GetValueOrDefault(stage) + 1;
-                if (st.SextonNow && st.FightIndex < 3) t.TollOuts++;
-                break;
-            }
-
-            you.CurrentHp = Math.Max(1, avatar.Hp);
-            int before = you.Level;
-            you.GainXp(RunRules.XpForFight(st.FightIndex));
-            st.PendingLevels += you.Level - before;
-
-            if (st.SextonNow && st.FightIndex < 3 || st.FightIndex >= 3)
-            {
-                if (st.FightIndex >= 3) { won = true; break; }
-                st.FightIndex = 3;
-                ApplyPick(RunRules.RollSpoils(st, you, new Random(++seedVar), null), st, you, picks);
-            }
-            else
-            {
-                st.FightIndex++;
-                if (st.FightIndex == 2 && st.Road == "screaming") st.ExtraPick = true;
-                ApplyPick(RunRules.RollSpoils(st, you, new Random(++seedVar), null), st, you, picks);
-            }
-
-            // The between-fight chain, exactly as the game's Advance() walks it.
-            while (st.PendingLevels > 0)
-            {
-                st.PendingLevels--;
-                ApplyLevelPick(RunRules.RollLevelCards(st, you, new Random(++seedVar)), picks);
-            }
-            if (st.ExtraPick)
-            {
-                st.ExtraPick = false;
-                ApplyPick(RunRules.RollSpoils(st, you, new Random(++seedVar), null), st, you, picks);
-            }
-            if (st.FightIndex == 1 && st.Road == "")
-                RunRules.RollRoadCards(st, null)[picks.Next(2)].Apply();
-            if (st.FightIndex == 2 && !st.EventDone)
-            {
-                var (_, _, cards) = RunRules.RollEventCards(st, you, new Random(++seedVar));
-                cards[picks.Next(cards.Count)].Apply();
-            }
+            if (!dead && !won && !st.SextonNow) st.Room++;
         }
 
         if (won) t.Wins++;
         t.Kills += st.Kills; t.Falls += st.Falls; t.Stones += st.RunStones;
-        t.Levels += you.Level; t.FightsCleared += Math.Min(st.FightIndex, 4);
+        t.Levels += you.Level;
     }
 
-    /// <summary>A decent hand, not a perfect one: mend when bleeding, chase set pieces,
-    /// then essences — the way a competent player skims a spoils screen.</summary>
-    private static void ApplyPick(List<PickCard> cards, RunState st, CampaignUnit you, Random rnd)
+    /// <summary>The trader bot: mend when hurt, wind the bell when it's late, buy the
+    /// blade that agrees with your element, chase the set — and always keep bus fare.</summary>
+    private static void WorkTheStall(RunState st, CampaignUnit you, Random picks, ref int seedVar, Tally t)
+    {
+        var cards = RunRules.RollShop(st, you, new Random(++seedVar), null);
+        int maxHp = TitheContent.UnitMaxHp(you);
+        for (int guard = 0; guard < 6; guard++)
+        {
+            int hp = you.CurrentHp ?? maxHp;
+            PickCard? buy = null;
+            if (hp * 10 < maxHp * 7) buy = cards.FirstOrDefault(c => c.Title == "MEND" && c.Price <= st.RunStones);
+            if (buy == null && st.Tolls < 12)
+                buy = cards.FirstOrDefault(c => c.Title.StartsWith("OIL") && c.Price <= st.RunStones);
+            buy ??= cards
+                .Where(c => c.Price <= st.RunStones - 10)
+                .OrderByDescending(c => RunRules.GearPool.Any(g => g.Name == c.Title
+                    && (g.Elem == RunRules.ClassElement(you.ClassId)
+                        || st.FamilyCount(g.Family) > 0 && g.Elem == null)) ? 1 : 0)
+                .FirstOrDefault(c => c.Title != "MEND" && !c.Title.StartsWith("OIL"));
+            if (buy == null) break;
+            st.RunStones -= buy.Price;
+            t.Spent += buy.Price;
+            buy.Apply();
+            cards.Remove(buy);
+        }
+    }
+
+    /// <summary>A decent hand, not a perfect one: mend when bleeding (always before HIM),
+    /// take gear that agrees with your element, then essences.</summary>
+    private static void ApplySpoils(List<PickCard> cards, RunState st, CampaignUnit you, Random rnd)
     {
         int maxHp = TitheContent.UnitMaxHp(you);
         int hp = you.CurrentHp ?? maxHp;
         PickCard? choice = null;
-        // Any sane hand mends before walking into HIS court; mid-run, only when bleeding.
-        int mendBar = st.FightIndex >= 3 ? maxHp * 4 / 5 : maxHp / 2;
+        int mendBar = st.BossIsNext ? maxHp * 4 / 5 : maxHp / 2;
         if (hp < mendBar) choice = cards.FirstOrDefault(c => c.Title == "MEND");
         choice ??= cards.Where(c => c.Kind == "GEAR")
             .OrderByDescending(c => RunRules.GearPool.Any(g => g.Name == c.Title
-                && (st.FamilyCount(g.Family) > 0 || !st.Gear.ContainsKey(g.Slot))) ? 1 : 0)
+                && (g.Elem == RunRules.ClassElement(you.ClassId)
+                    || g.Elem == null && (st.FamilyCount(g.Family) > 0 || !st.Gear.ContainsKey(g.Slot)))) ? 1 : 0)
             .FirstOrDefault();
         choice ??= cards.FirstOrDefault(c => c.Kind == "ESSENCE");
         choice ??= cards[rnd.Next(cards.Count)];

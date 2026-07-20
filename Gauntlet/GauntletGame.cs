@@ -86,6 +86,10 @@ public sealed class GauntletGame : Game, IRunFx
     private float _freeze, _shake;
     private readonly List<(Vector2 p, int seed)> _blood = new();
     private readonly List<(Vector2 from, Vector2 to, float ttl)> _smears = new();
+    // g11 feel pass: sparks fly, impacts ring, walks kick dust, embers breathe.
+    private readonly List<(Vector2 p, Vector2 v, float born, float ttl, Color c, int size)> _sparks = new();
+    private readonly List<(Vector2 p, float born, float dur, Color c)> _rings = new();
+    private float _dustClock;
     private readonly List<(string t, Color c, Vector2 p, float born)> _floats = new();
     private readonly List<(Fighter f, CellCoord at)> _corpses = new();
     private string _narration = ""; private float _narrationUntil;
@@ -99,6 +103,7 @@ public sealed class GauntletGame : Game, IRunFx
     private List<PickCard> _cards = new();
     private string _pickTitle = "", _pickSub = "";
     private Color _pickInk = Mono.Ink;
+    private bool _shopping;              // the trader's stall: multi-buy, leave when done
 
     private static Color ThemeInk(string theme) => theme switch
     { "MARROW" => Mono.Heal, "BELL" => Gold, _ => Mono.Ink };
@@ -187,15 +192,36 @@ public sealed class GauntletGame : Game, IRunFx
     private void StartRun()
     {
         _st = new RunState { Learned = _learned };   // the covenant resets; the words remain
+        _st.Road = RunRules.BuildRoad(new Random(++_seed));
         _runWon = false;
         _you.CurrentHp = null;
         if (_mate != null) _mate.CurrentHp = null;   // the city rests everyone
-        StartFight();
+        EnterRoom();
+    }
+
+    /// <summary>The road is dealt, not chosen (g11): walk into whatever the next room is.</summary>
+    private void EnterRoom()
+    {
+        switch (_st.SextonNow ? RoomKind.Boss : _st.RoomNow)
+        {
+            case RoomKind.Shop: RollShop(); break;
+            case RoomKind.Event: RollEvent(); break;
+            case RoomKind.Mystery: RollMystery(); break;
+            default: StartFight(); break;
+        }
+    }
+
+    private void NextRoom()
+    {
+        if (_st.SextonNow) { StartFight(); return; }   // the bell rang: HE is the next room, wherever you are
+        _st.Room++;
+        EnterRoom();
     }
 
     private void StartFight()
     {
         _blood.Clear(); _smears.Clear(); _floats.Clear(); _corpses.Clear();
+        _sparks.Clear(); _rings.Clear();
         _anims.Clear(); _anim = null; _visPos.Clear(); _visFlip.Clear(); _attackUntil.Clear();
         _selected = -1; _turnOwner = ""; _inspectId = ""; _resolved = false;
         _firstBlood = false; _firstSpike = false;
@@ -229,6 +255,7 @@ public sealed class GauntletGame : Game, IRunFx
     public void EmberBurn(Fighter f, CellCoord at) => Present(() =>
     {
         Splatter(Center(at), 3);
+        Sparks(Center(at), 6, Mono.Element(Element.Fire), 60f, rise: 40f);
         Float("-2", Mono.Element(Element.Fire), Center(at));
         _sfx.Play("hit_fire", 0.5f);
     });
@@ -303,7 +330,9 @@ public sealed class GauntletGame : Game, IRunFx
                 var pts = new List<Vector2>();
                 foreach (var c in p.Path) pts.Add(Center(c));
                 if (pts.Count > 0) _anims.Enqueue(new WalkStep(p.Fighter.Id, pts, 430f, "idle"));
-                if (p.CollisionDamage > 0) Present(() => _shake = Math.Max(_shake, 6f));
+                var slamAt = p.Path.Count > 0 ? Center(p.Path[^1]) : Center(p.Fighter.Pos);
+                if (p.CollisionDamage > 0) Present(() =>
+                { _shake = Math.Max(_shake, 6f); Sparks(slamAt + new Vector2(0, -8), 8, Mono.Ink, 90f); });
                 break;
             }
 
@@ -331,6 +360,9 @@ public sealed class GauntletGame : Game, IRunFx
                     _freeze = Math.Max(_freeze, d.RemainingHp <= 0 ? 0.16f : 0.07f);
                     _shake = Math.Max(_shake, Math.Min(10f, 2f + d.Amount * 0.25f));
                     Splatter(Center(d.At), 4 + Math.Min(8, d.Amount / 3));
+                    Sparks(Center(d.At) + new Vector2(0, -12), 5 + Math.Min(8, d.Amount / 3),
+                        d.Element == Element.Neutral ? Mono.Ink : Mono.Element(d.Element));
+                    Ring(Center(d.At), d.Backstab ? Gold : d.Element == Element.Neutral ? Mono.Ink : Mono.Element(d.Element));
                     Float(d.Backstab ? $"-{d.Amount}!" : $"-{d.Amount}", d.Backstab ? Gold : Mono.Danger, Center(d.At));
                     if (attacker != null && attacker.Pos != d.At)
                         _smears.Add((VisPos(attacker), Center(d.At), 0.11f));
@@ -343,7 +375,12 @@ public sealed class GauntletGame : Game, IRunFx
             }
 
             case HealApplied h:
-                Present(() => { Float($"+{h.Amount}", Mono.Heal, Center(h.At)); _sfx.Play("heal", 0.6f); });
+                Present(() =>
+                {
+                    Float($"+{h.Amount}", Mono.Heal, Center(h.At));
+                    Sparks(Center(h.At) + new Vector2(0, -16), 6, Mono.Heal, 30f, rise: 46f, ttl: 0.7f);
+                    _sfx.Play("heal", 0.6f);
+                });
                 break;
 
             case FighterFell ff:
@@ -369,6 +406,8 @@ public sealed class GauntletGame : Game, IRunFx
                     if (!fell)
                     {
                         Splatter(Center(fd.At), 16);
+                        Sparks(Center(fd.At) + new Vector2(0, -10), 16, Mono.Danger, speed: 110f, ttl: 0.6f);
+                        Ring(Center(fd.At), Mono.Danger, 0.45f);
                         _sfx.Play("death", 0.85f);
                     }
                     if (fd.Fighter.Team == Team.Enemy)
@@ -424,7 +463,21 @@ public sealed class GauntletGame : Game, IRunFx
             {
                 if (_anims.Count == 0) return;
                 _anim = _anims.Dequeue(); _animT = 0;
-                if (_anim is LungeStep lg) _attackUntil[lg.Id] = _time + 0.34f;
+                if (_anim is LungeStep lg)
+                {
+                    _attackUntil[lg.Id] = _time + 0.34f;
+                    // Muzzle flash: a spit of motes off the weapon, toward the mark.
+                    if (_engine.Fighters.FirstOrDefault(x => x.Id == lg.Id) is { } cf)
+                    {
+                        var from = VisPos(cf) + new Vector2(0, -14);
+                        var dirv = Center(lg.Target) - from;
+                        if (dirv.LengthSquared() > 1) dirv.Normalize();
+                        for (int i = 0; i < 5; i++)
+                            _sparks.Add((from + dirv * 12,
+                                dirv * (90 + _rng.Next(60)) + new Vector2(_rng.Next(-20, 21), _rng.Next(-20, 21)),
+                                _time, 0.3f, Mono.Ink, 1));
+                    }
+                }
                 if (_anim is FxStep fx) { fx.Run(); _anim = null; continue; }
             }
             _animT += dt; dt = 0;
@@ -516,6 +569,29 @@ public sealed class GauntletGame : Game, IRunFx
     {
         UpdateAnims(dt);
 
+        // The feel layer breathes every frame: motes drift and settle, rings die,
+        // embers spit, walking feet kick dust.
+        for (int i = _sparks.Count - 1; i >= 0; i--)
+        {
+            var s = _sparks[i];
+            if (_time - s.born > s.ttl) { _sparks.RemoveAt(i); continue; }
+            s.p += s.v * dt; s.v += new Vector2(0, 90f * dt);
+            _sparks[i] = s;
+        }
+        _rings.RemoveAll(r => _time - r.born > r.dur);
+        foreach (var e in _st.Embers)
+            if (_rng.NextDouble() < dt * 1.1)
+                _sparks.Add((Center(e) + new Vector2(_rng.Next(-14, 15), 0),
+                    new Vector2(_rng.Next(-6, 7), -26 - _rng.Next(18)), _time, 0.7f,
+                    Mono.Element(Element.Fire) * 0.8f, 1));
+        if (_anim is WalkStep ws && (_dustClock += dt) > 0.11f)
+        {
+            _dustClock = 0;
+            if (_visPos.TryGetValue(ws.Id, out var wp))
+                _sparks.Add((wp + new Vector2(_rng.Next(-6, 7), TH / 4f),
+                    new Vector2(_rng.Next(-10, 11), -8), _time, 0.35f, Mono.Dim * 0.6f, 1));
+        }
+
         if (_engine.Outcome != FightOutcome.Ongoing)
         {
             if (AnimBusy) return;   // let the last blow land before the verdict
@@ -533,7 +609,7 @@ public sealed class GauntletGame : Game, IRunFx
                 {
                     _you.CurrentHp = Math.Max(1, _avatar.Hp);
                     int before = _you.Level;
-                    _you.GainXp(RunRules.XpForFight(_st.FightIndex));
+                    _you.GainXp(RunRules.XpForFight(_st.FightsWon));
                     if (_you.Level > before)
                     {
                         _st.PendingLevels += _you.Level - before;   // each ding owes a draft of three
@@ -547,17 +623,11 @@ public sealed class GauntletGame : Game, IRunFx
             {
                 if (_engine.Outcome != FightOutcome.Victory)
                 { _banked += _st.RunStones / 2; _runWon = false; _scene = Scene.End; _sfx.SetAmbient(null); }
-                else if (_st.SextonNow && _st.FightIndex < 3 || _st.FightIndex >= 3)
-                {
-                    if (_st.FightIndex >= 3 || _st.SextonNow && _st.FightIndex == 3)
-                    { _banked += _st.RunStones; _runWon = true; _scene = Scene.End; _sfx.SetAmbient(null); }
-                    else { _st.FightIndex = 3; RollSpoils(); _scene = Scene.Pick; }
-                }
+                else if (_st.BossFight)
+                { _banked += _st.RunStones; _runWon = true; _scene = Scene.End; _sfx.SetAmbient(null); }
                 else
                 {
-                    _st.FightIndex++;
-                    // The screaming row keeps its word: fight 2 survived pays a second hand.
-                    if (_st.FightIndex == 2 && _st.Road == "screaming") _st.ExtraPick = true;
+                    _st.FightsWon++;
                     RollSpoils(); _scene = Scene.Pick;
                 }
             }
@@ -623,6 +693,27 @@ public sealed class GauntletGame : Game, IRunFx
 
     private void UpdatePick()
     {
+        // The trader's stall: buy any number you can pay for, then leave on your feet.
+        if (_shopping)
+        {
+            if (Pressed(Keys.Enter) || Pressed(Keys.Space)
+                || (Clicked() && LeaveRect.Contains(MP)))
+            { _shopping = false; _sfx.Play("click", 0.5f); Advance(); return; }
+            for (int i = 0; i < _cards.Count; i++)
+                if ((Clicked() && CardRect(i).Contains(MP)) || Pressed(Keys.D1 + i))
+                {
+                    var card = _cards[i];
+                    if (card.Price > _st.RunStones) { Narrate("the trader eyes your thin purse."); return; }
+                    _st.RunStones -= card.Price;
+                    _sfx.Play("coin", 0.85f);
+                    card.Apply();
+                    _cards.RemoveAt(i);
+                    if (_cards.Count == 0) { _shopping = false; Advance(); }
+                    return;
+                }
+            return;
+        }
+
         for (int i = 0; i < _cards.Count; i++)
             if ((Clicked() && CardRect(i).Contains(MP)) || Pressed(Keys.D1 + i))
             {
@@ -633,15 +724,11 @@ public sealed class GauntletGame : Game, IRunFx
             }
     }
 
-    /// <summary>The road between fights, one screen at a time: dings first, then the
-    /// screaming row's bonus hand, then the fork, then the night's one event — then blood.</summary>
+    /// <summary>Between rooms, one screen at a time: level drafts first, then the road walks on.</summary>
     private void Advance()
     {
         if (_st.PendingLevels > 0) { _st.PendingLevels--; RollLevel(); return; }
-        if (_st.ExtraPick) { _st.ExtraPick = false; RollSpoils(); return; }
-        if (_st.FightIndex == 1 && _st.Road == "") { RollRoad(); return; }
-        if (_st.FightIndex == 2 && !_st.EventDone) { RollEvent(); return; }
-        StartFight();
+        NextRoom();
     }
 
     private void UpdateEnd()
@@ -670,19 +757,30 @@ public sealed class GauntletGame : Game, IRunFx
         _scene = Scene.Pick;
     }
 
-    private void RollRoad()
-    {
-        _pickTitle = "THE FORK"; _pickSub = "two rows lead to him. walk one."; _pickInk = Mono.Ink;
-        _cards = RunRules.RollRoadCards(_st, this);
-        _scene = Scene.Pick;
-    }
-
     private void RollEvent()
     {
         var (title, sub, cards) = RunRules.RollEventCards(_st, _you, new Random(++_seed));
         _pickTitle = title; _pickSub = sub; _pickInk = Mono.Dim;
         _cards = cards;
         _scene = Scene.Pick;
+    }
+
+    private void RollMystery()
+    {
+        var (title, sub, cards) = RunRules.RollMysteryCards(_st, _you, new Random(++_seed), this);
+        _pickTitle = title; _pickSub = sub; _pickInk = Mono.Cast;
+        _cards = cards;
+        _scene = Scene.Pick;
+    }
+
+    private void RollShop()
+    {
+        _pickTitle = "THE TRADER"; _pickSub = "a mercenary grocer on a cart of bones. stones spend here.";
+        _pickInk = Gold;
+        _cards = RunRules.RollShop(_st, _you, new Random(++_seed), this);
+        _shopping = true;
+        _scene = Scene.Pick;
+        _sfx.Play("coin", 0.6f);
     }
 
     // ================= FEEL HELPERS ====================================================
@@ -693,6 +791,21 @@ public sealed class GauntletGame : Game, IRunFx
             _blood.Add((at + new Vector2(_rng.Next(-26, 27), _rng.Next(-18, 19)), _rng.Next(1000)));
         if (_blood.Count > 500) _blood.RemoveRange(0, _blood.Count - 500);
     }
+
+    /// <summary>A handful of 1-bit motes thrown from a point — the whole particle budget.</summary>
+    private void Sparks(Vector2 at, int n, Color c, float speed = 70f, float rise = 26f, float ttl = 0.45f)
+    {
+        for (int i = 0; i < n; i++)
+        {
+            float a = (float)(_rng.NextDouble() * Math.PI * 2);
+            float s = speed * (0.4f + (float)_rng.NextDouble() * 0.9f);
+            _sparks.Add((at, new Vector2(MathF.Cos(a) * s, MathF.Sin(a) * s * 0.55f - rise),
+                _time, ttl * (0.6f + (float)_rng.NextDouble() * 0.8f), c, _rng.Next(2) + 1));
+        }
+        if (_sparks.Count > 400) _sparks.RemoveRange(0, _sparks.Count - 400);
+    }
+
+    private void Ring(Vector2 at, Color c, float dur = 0.32f) => _rings.Add((at, _time, dur, c));
 
     private void Float(string t, Color c, Vector2 p) => _floats.Add((t, c, p, _time));
     private void Narrate(string line) { _narration = line; _narrationUntil = _time + 3.2f; }
@@ -729,6 +842,7 @@ public sealed class GauntletGame : Game, IRunFx
     private static Rectangle DepartRect => new(W / 2 - 90, 476, 180, 44);
     private static Rectangle HireRect => new(W / 2 - 170, 556, 340, 30);
     private Rectangle CardRect(int i) => new(W / 2 - (_cards.Count * 240 - 40) / 2 + i * 240, 240, 200, 260);
+    private static Rectangle LeaveRect => new(W / 2 - 90, 540, 180, 30);
 
     // ================= DRAW ============================================================
 
@@ -763,15 +877,15 @@ public sealed class GauntletGame : Game, IRunFx
         _font.DrawCentered(_sb, "OF THE BELL", W / 2, 230, 3, Mono.Dim);
         _font.DrawCentered(_sb, $"BANKED: {_banked} ESSENCE STONES", W / 2, 320, 2, Mono.Ink);
         _font.DrawCentered(_sb, $"YOU — {_you.ClassId.ToUpperInvariant()}, LEVEL {_you.Level}", W / 2, 352, 1, Mono.Dim);
-        // The road ahead, spelled out Loop Hero style: three graves, then HIM.
-        for (int i = 0; i < 4; i++)
+        // The road ahead, spelled out Loop Hero style: a whole row of rooms, then HIM.
+        for (int i = 0; i < 11; i++)
         {
-            var p = new Vector2(W / 2 - 54 + i * 36, 380);
-            if (i > 0) _prim.Line(_sb, p - new Vector2(26, 0), p - new Vector2(10, 0), 1f, Mono.Faint);
-            _prim.DiscAt(_sb, p, i == 3 ? 4 : 3, i == 3 ? Mono.Danger : Mono.Dim);
+            var p = new Vector2(W / 2 - 130 + i * 26, 380);
+            if (i > 0) _prim.Line(_sb, p - new Vector2(19, 0), p - new Vector2(7, 0), 1f, Mono.Faint);
+            _prim.DiscAt(_sb, p, i == 10 ? 4 : 3, i == 10 ? Mono.Danger : Mono.Dim);
         }
-        _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 394, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "the bell grants twenty tolls. every turn you take is one.", W / 2, 408, 1, Mono.Faint);
+        _font.DrawCentered(_sb, "a road of eleven rooms is dealt: fights, traders, stranger things — then the sexton.", W / 2, 394, 1, Mono.Dim);
+        _font.DrawCentered(_sb, "the bell grants forty-five tolls. every fighting turn you take is one.", W / 2, 408, 1, Mono.Faint);
         for (int i = 0; i < ClassIds.Length; i++)
         {
             var r = ClassRect(i);
@@ -989,16 +1103,19 @@ public sealed class GauntletGame : Game, IRunFx
                     2f, Mono.Ink * 0.55f);
                 // Champions (grade 3) wear the danger color and stand a head taller.
                 bool champ = ff.Team == Team.Enemy && ff.Level >= 3 && ff.Archetype != "sexton";
+                float sh = ff.Archetype == "sexton" ? 62 : champ ? 56 : 46;
                 DrawSprite(ff, cc,
-                    ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink,
-                    ff.Archetype == "sexton" ? 62 : champ ? 56 : 46, StateOf(ff));
-                _font.DrawCentered(_sb, ff.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
-                    ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
-                // A sliver of life under the number — the state of the fight at a squint.
-                float hf = ff.Hp / (float)ff.MaxHp;
-                _prim.FillRect(_sb, new Rectangle((int)cc.X - 11, (int)cc.Y + TH / 2 + 6, 22, 2), Mono.Faint);
-                _prim.FillRect(_sb, new Rectangle((int)cc.X - 11, (int)cc.Y + TH / 2 + 6, (int)(22 * hf), 2),
+                    ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink, sh, StateOf(ff));
+                // The life bar rides ABOVE the head (owner's law) — no numbers unless asked:
+                // hover the body and the exact count appears over the bar.
+                float hf = Math.Clamp(ff.Hp / (float)ff.MaxHp, 0f, 1f);
+                int barY = (int)(cc.Y + TH / 4f + 2 - sh) - 8;
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, 26, 3), Mono.Faint);
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, (int)(26 * hf), 3),
                     ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : ff.Team == Team.Player ? Mono.Ally : Mono.Ink);
+                if (CellAt(MP) == ff.Pos)
+                    _font.DrawCentered(_sb, $"{ff.Hp}/{ff.MaxHp}", (int)cc.X, barY - 11, 1,
+                        ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
             }));
         }
         foreach (var (_, draw) in pass.OrderBy(p => p.depth)) draw();
@@ -1032,6 +1149,26 @@ public sealed class GauntletGame : Game, IRunFx
 
         foreach (var (from, to, _) in _smears)
             _prim.Line(_sb, from, to, 5f, Mono.Ink * 0.5f);
+
+        // The feel layer on top of the bodies: motes, then the impact rings.
+        foreach (var s in _sparks)
+        {
+            float a = 1f - (_time - s.born) / s.ttl;
+            _prim.FillRect(_sb, new Rectangle((int)s.p.X, (int)s.p.Y, s.size + 1, s.size + 1),
+                s.c * Math.Clamp(a, 0f, 1f));
+        }
+        foreach (var rg in _rings)
+        {
+            float t = Math.Clamp((_time - rg.born) / rg.dur, 0f, 1f);
+            float rad = 8f + t * 22f;
+            var col = rg.c * (1f - t);
+            Vector2 P(int k)
+            {
+                float ang = MathF.PI * 2 * k / 8f;
+                return rg.p + new Vector2(MathF.Cos(ang) * rad, MathF.Sin(ang) * rad * 0.5f);
+            }
+            for (int k = 0; k < 8; k++) _prim.Line(_sb, P(k), P(k + 1), 2f, col);
+        }
 
         const float FloatLife = 1.1f;
         for (int i = _floats.Count - 1; i >= 0; i--)
@@ -1088,16 +1225,8 @@ public sealed class GauntletGame : Game, IRunFx
             : urgent ? Color.Lerp(Mono.Dim, Mono.Danger, 0.5f + 0.5f * MathF.Sin(_time * 6f))
             : Mono.Dim);
 
-        // The road (Loop Hero keeps the whole loop in view): three graves, then HIM.
-        for (int i = 0; i < 4; i++)
-        {
-            var p = new Vector2(W / 2 - 54 + i * 36, 44);
-            if (i > 0) _prim.Line(_sb, p - new Vector2(26, 0), p - new Vector2(10, 0), 1f, Mono.Faint);
-            bool here = i == Math.Min(_st.FightIndex, 3);
-            var ink = i == 3 ? Mono.Danger : Mono.Ink;
-            if (here) _prim.DiscAt(_sb, p, 5f + MathF.Sin(_time * 4f), ink);
-            else _prim.DiscAt(_sb, p, i < _st.FightIndex ? 3 : 2, i < _st.FightIndex ? Mono.Dim : i == 3 ? Mono.Danger * 0.5f : Mono.Faint);
-        }
+        // The road (Loop Hero keeps the whole loop in view): every room, then HIM.
+        DrawRoadStrip(48);
 
         _font.Draw(_sb, $"{_st.RunStones} st", 16, 12, 2, Mono.Ink);
 
@@ -1301,35 +1430,96 @@ public sealed class GauntletGame : Game, IRunFx
 
     private void DrawPick()
     {
+        DrawRoadStrip(30);
         _font.DrawCentered(_sb, _pickTitle, W / 2, 120, 4, _pickInk);
         _font.DrawCentered(_sb, _pickSub, W / 2, 168, 1, Mono.Dim);
-        _font.DrawCentered(_sb, $"{_st.RunStones} st carried  ·  {_st.Tolls} tolls on the bell  ·  next: {RunRules.FightLabel(_st)}",
+        string next = _st.Room + 1 < _st.Road.Count ? RunRules.RoomWord(_st.Road[_st.Room + 1]) : "THE SEXTON";
+        _font.DrawCentered(_sb, $"{_st.RunStones} st carried  ·  {_st.Tolls} tolls on the bell  ·  ahead: {next}",
             W / 2, 190, 1, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)
         {
             var r0 = CardRect(i);
             bool hov = r0.Contains(MP);
-            // Hovered cards lift out of the dirt (Loop Hero's hand feel).
-            var r = hov ? new Rectangle(r0.X, r0.Y - 6, r0.Width, r0.Height) : r0;
-            Mono.Frame(_sb, _prim, r, emphasis: hov);
             var card = _cards[i];
+            bool payable = !_shopping || card.Price <= _st.RunStones;
+            // Hovered cards lift out of the dirt (Loop Hero's hand feel).
+            var r = hov && payable ? new Rectangle(r0.X, r0.Y - 6, r0.Width, r0.Height) : r0;
+            Mono.Frame(_sb, _prim, r, emphasis: hov && payable);
             var kindInk = card.Kind switch
-            { "RUIN" => Gold, "ESSENCE" => Mono.Cast, "GEAR" => Mono.Ink, _ => Mono.Dim };
+            { "RUIN" => Gold, "ESSENCE" or "MYSTERY" => Mono.Cast, "SHOP" => Gold, "GEAR" => Mono.Ink, _ => Mono.Dim };
+            if (!payable) kindInk = Mono.Faint;
             _prim.FillRect(_sb, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, 3), kindInk);
-            _font.DrawCentered(_sb, card.Kind == "RUIN" ? "WORD OF RUIN" : card.Kind,
+            _font.DrawCentered(_sb, card.Kind == "RUIN" ? "WORD OF RUIN" : card.Kind == "SHOP" ? "FOR SALE" : card.Kind,
                 r.Center.X, r.Y + 14, 1, kindInk);
-            _font.DrawCentered(_sb, card.Title, r.Center.X, r.Y + 36, 1, card.Kind == "ESSENCE" ? Mono.Cast : Mono.Ink);
+            _font.DrawCentered(_sb, card.Title, r.Center.X, r.Y + 36, 1,
+                !payable ? Mono.Faint : card.Kind is "ESSENCE" or "MYSTERY" ? Mono.Cast : Mono.Ink);
             int ly = r.Y + 78;
             foreach (var line in card.Body.Split('\n'))
             {
-                var ink = line.Contains(" OF 3") || line == "forever" ? Mono.Cast
-                    : line.Contains(" SET") ? Mono.Dim : Mono.Dim;
+                var ink = !payable ? Mono.Faint
+                    : line.Contains(" OF 3") || line == "forever" ? Mono.Cast
+                    : line.Contains("YOUR element") ? Mono.Heal
+                    : line.Contains("not your element") ? Mono.Danger
+                    : Mono.Dim;
                 _font.DrawCentered(_sb, line, r.Center.X, ly, 1, ink); ly += 16;
             }
             var take = new Rectangle(r.Center.X - 46, r.Bottom - 38, 92, 24);
-            Mono.Button(_sb, _prim, take, hover: hov);
-            _font.DrawCentered(_sb, $"TAKE ({i + 1})", take.Center.X, take.Y + 8, 1, Mono.ButtonInk(hov));
+            Mono.Button(_sb, _prim, take, hover: hov && payable, disabled: !payable);
+            _font.DrawCentered(_sb,
+                _shopping ? $"{card.Price} ST ({i + 1})" : $"TAKE ({i + 1})",
+                take.Center.X, take.Y + 8, 1, Mono.ButtonInk(hov && payable, disabled: !payable));
         }
+        if (_shopping)
+        {
+            bool hov = LeaveRect.Contains(MP);
+            Mono.Button(_sb, _prim, LeaveRect, hover: hov);
+            _font.DrawCentered(_sb, "LEAVE (ENTER)", LeaveRect.Center.X, LeaveRect.Y + 10, 1, Mono.ButtonInk(hov));
+        }
+    }
+
+    /// <summary>The whole road in one glance, Loop Hero style: every room a mark, HIM at
+    /// the end in the danger color. You can plan against it; you don't get to redraw it.</summary>
+    private void DrawRoadStrip(int y)
+    {
+        if (_st.Road.Count == 0) return;
+        int step = 26;
+        int x0 = W / 2 - (_st.Road.Count - 1) * step / 2;
+        for (int i = 0; i < _st.Road.Count; i++)
+        {
+            var p = new Vector2(x0 + i * step, y);
+            if (i > 0) _prim.Line(_sb, p - new Vector2(step - 7, 0), p - new Vector2(7, 0), 1f, Mono.Faint);
+            bool here = i == Math.Min(_st.Room, _st.Road.Count - 1);
+            bool past = i < _st.Room;
+            var kind = _st.Road[i];
+            var ink = kind == RoomKind.Boss ? Mono.Danger : past ? Mono.Faint : here ? Mono.Ink : Mono.Dim;
+            switch (kind)
+            {
+                case RoomKind.Boss:
+                    _prim.DiscAt(_sb, p, here ? 6f + MathF.Sin(_time * 4f) : 5, ink * (past ? 0.5f : 1f));
+                    break;
+                case RoomKind.Shop:
+                    _font.DrawCentered(_sb, "$", (int)p.X, (int)p.Y - 3, 1, ink);
+                    break;
+                case RoomKind.Event:
+                    _font.DrawCentered(_sb, "E", (int)p.X, (int)p.Y - 3, 1, ink);
+                    break;
+                case RoomKind.Mystery:
+                    _font.DrawCentered(_sb, "?", (int)p.X, (int)p.Y - 3, 1, here ? Mono.Cast : ink);
+                    break;
+                default:
+                    _prim.DiscAt(_sb, p, here ? 4f + MathF.Sin(_time * 4f) * 0.8f : past ? 2 : 3, ink);
+                    break;
+            }
+            if (here) DiamondOutlineSmall(p);
+        }
+    }
+
+    private void DiamondOutlineSmall(Vector2 p)
+    {
+        _prim.Line(_sb, p + new Vector2(0, -9), p + new Vector2(9, 0), 1f, Mono.Ink * 0.7f);
+        _prim.Line(_sb, p + new Vector2(9, 0), p + new Vector2(0, 9), 1f, Mono.Ink * 0.7f);
+        _prim.Line(_sb, p + new Vector2(0, 9), p + new Vector2(-9, 0), 1f, Mono.Ink * 0.7f);
+        _prim.Line(_sb, p + new Vector2(-9, 0), p + new Vector2(0, -9), 1f, Mono.Ink * 0.7f);
     }
 
     private void DrawEnd()

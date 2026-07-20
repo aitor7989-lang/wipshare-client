@@ -178,6 +178,24 @@ panels during runs (the pick replaces them), the wide city.
   (+2 budget -> +1), and the pre-boss MEND being crowded out of a full hand
   (the last supper now keeps its seat). Bot winrates: 21/19/17% across
   cannon/archer/bulwark at level ~2; humans with coastlines do better.
-STILL OPEN: more events/roads, mob walk/attack strips for the six unmapped
-mobs (husk/hound/spitter/mite/piper/wraith still single-frame), retiring old
-TITHE once the Gauntlet has clearly won.
+- g11 THE ROAD: the fork retired (owner: "you can choose the path so it's
+  lame") — a run now DEALS an eleven-room road, shown whole at the top of
+  every screen: six fights with climbing budgets (3..8, champions at fights
+  4 and 6, grade-2 floors at the end), TWO TRADERS (run stones finally spend
+  mid-run: mend 15, oil 20, gear 25, essence 30 — multi-buy, then LEAVE),
+  one grim event and one MYSTERY (a sealed gamble with an honest safe hand:
+  the unmarked grave, the gambler's bones, the sealed reliquary), then HIM.
+  The bell holds 45 tolls priced per fighting turn. XP repriced (60+30/fight,
+  3-4 dings a run) so the power curve is FELT. Decision depth: blades carry
+  an ELEMENT now (fire/earth/air riding Int/Str/Agi) and the cards say
+  plainly "YOUR element" / "not your element" — matching hand to blade, set
+  to family, and purse to trader is where runs are won; nothing rescues a
+  contradictory build. HP bars moved ABOVE every head, numbers only on
+  hover. VFX feel pass: elemental impact rings + spark motes, muzzle
+  flashes, walk dust, ambient ember fireflies, slam sparks. Sim rebalanced
+  on the long road: cannon 41% / bulwark 38% / archer 29% (bot); the wall
+  now CALCIFIES (+3% all-res per pack survived, cap 18) on top of its brace.
+STILL OPEN: more events/mysteries, mob walk/attack strips for the six
+unmapped mobs (husk/hound/spitter/mite/piper/wraith still single-frame),
+a mid-run sellsword offer at the trader, retiring old TITHE once the
+Gauntlet has clearly won.

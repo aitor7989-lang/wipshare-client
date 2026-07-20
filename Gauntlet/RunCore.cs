@@ -7,16 +7,23 @@ using DofusSlice.Core.Spells;
 namespace Gauntlet;
 
 // ============================================================================
-// THE RUN, AS PURE RULES (g10). Everything mechanical about a gauntlet run —
-// gear, essences, waves, boards, blessings, the bell, the covenant's verbs —
-// lives here, engine-typed and renderer-free, so the game DRAWS a run and the
-// balance sim (dotnet run -- --sim) MEASURES one, and they can never drift.
+// THE RUN, AS PURE RULES (g10/g11). Everything mechanical about a gauntlet run —
+// the road, gear, essences, waves, boards, blessings, the bell, the covenant's
+// verbs — lives here, engine-typed and renderer-free, so the game DRAWS a run
+// and the balance sim (dotnet run -- --sim) MEASURES one, and they never drift.
 // ============================================================================
 
-public sealed record GearDef(string Slot, string Name, string Family, int Power, string? Keyword, string Blurb);
+/// <summary>What a room on the road is. The road is DEALT, not chosen (g11,
+/// owner's call: "you can choose the path so it's lame") — the player's skill
+/// goes into what they do INSIDE the rooms, not which door they pick.</summary>
+public enum RoomKind { Fight, Shop, Event, Mystery, Boss }
 
-/// <summary>One card of a pick hand: what it says, what it is, what it does.</summary>
-public sealed record PickCard(string Title, string Body, string Kind, Action Apply);
+public sealed record GearDef(string Slot, string Name, string Family, int Power,
+    string? Keyword, string? Elem, int ElemAmt, string Blurb);
+
+/// <summary>One card of a pick hand: what it says, what it is, what it does —
+/// and, in a shop, what it costs in run stones.</summary>
+public sealed record PickCard(string Title, string Body, string Kind, Action Apply, int Price = 0);
 
 /// <summary>Presentation callbacks the mechanics raise mid-fight. The game floats,
 /// splatters and rings bells off these; the sim passes null and hears nothing.</summary>
@@ -36,10 +43,16 @@ public interface IRunFx
 /// <summary>Every mechanical fact of one run. The game renders it; the sim tallies it.</summary>
 public sealed class RunState
 {
-    public int RunStones, FightIndex, Kills, Falls, PendingLevels;
+    public int RunStones, Kills, Falls, PendingLevels;
     public int Tolls = RunRules.TollStart;
-    public bool SextonNow, ExtraPick, EventDone, RopePulled, BossFight, RitualTurned;
-    public string Road = "";
+    public bool SextonNow, BossFight, RitualTurned;
+
+    // ----- the road (g11) --------------------------------------------------------------
+    public List<RoomKind> Road = new();
+    public int Room;                       // index of the room we stand in
+    public int FightsWon;                  // fight ordinal — drives budgets and XP
+    public int GradeLift;                  // angered hosts (the loose rope's bill)
+    public readonly HashSet<int> EventsSeen = new();
 
     public readonly Dictionary<string, GearDef> Gear = new();      // slot -> the worn piece
     public readonly List<string> Essences = new();
@@ -54,31 +67,82 @@ public sealed class RunState
     public bool HasKeyword(string k) => Gear.Values.Any(g => g.Keyword == k);
     public int ThemeCount(string theme) => Essences.Count(e => RunRules.ThemeOf(e) == theme);
     public bool Transformed(string theme) => ThemeCount(theme) >= 3;
+
+    public RoomKind RoomNow => Road.Count == 0 ? RoomKind.Fight : Road[Math.Clamp(Room, 0, Road.Count - 1)];
+
+    /// <summary>True when no fight remains between here and HIM — the last supper.</summary>
+    public bool BossIsNext => SextonNow
+        || Road.Skip(Room + 1).TakeWhile(k => k != RoomKind.Boss).All(k => k != RoomKind.Fight);
 }
 
 public static class RunRules
 {
     public const int Cols = 13, Rows = 8;
-    public const int TollStart = 20;    // turn-priced: thinking is free, stalling is not
+    public const int TollStart = 45;    // ~six fights of thinking; stalling still bills you
     public const int MateCost = 30;
+
+    // ----- the road ----------------------------------------------------------------------
+
+    /// <summary>Deal the run's road: eleven rooms, fights bulking it out, two traders,
+    /// two strange stops, HIM at the end. Shown whole from the first step (Loop Hero's
+    /// law: you plan against a road you can SEE, you just don't get to redraw it).</summary>
+    public static List<RoomKind> BuildRoad(Random rnd)
+    {
+        var road = new List<RoomKind>
+        {
+            RoomKind.Fight,
+            RoomKind.Fight,
+            rnd.Next(2) == 0 ? RoomKind.Event : RoomKind.Mystery,
+            RoomKind.Fight,
+            RoomKind.Shop,
+            RoomKind.Fight,
+            rnd.Next(2) == 0 ? RoomKind.Mystery : RoomKind.Event,
+            RoomKind.Fight,
+            RoomKind.Fight,
+            RoomKind.Shop,
+            RoomKind.Boss,
+        };
+        return road;
+    }
+
+    public static string RoomWord(RoomKind k) => k switch
+    {
+        RoomKind.Shop => "THE TRADER",
+        RoomKind.Event => "A GRIM STOP",
+        RoomKind.Mystery => "SOMETHING STRANGE",
+        RoomKind.Boss => "THE SEXTON",
+        _ => "A FIGHT",
+    };
+
+    public static string FightLabel(RunState st) =>
+        st.SextonNow || st.RoomNow == RoomKind.Boss ? "THE SEXTON"
+        : $"ROOM {st.Room + 1} OF {st.Road.Count}";
+
+    // Priced for the long road: six fights should buy three or four dings — the run must
+    // FEEL like getting stronger (owner's law), and the drafts are where that happens.
+    public static int XpForFight(int fightOrdinal) => 60 + 30 * fightOrdinal;
 
     // ----- the covenant's pools ---------------------------------------------------------
     // Isaac's law: an item is a RULE on a shared verb, and rules stack. Mewgenics' law:
-    // pieces belong to FAMILIES, and three of a family pays a set bonus.
+    // pieces belong to FAMILIES, and three of a family pays a set bonus. g11's law: gear
+    // has an ELEMENT, and an ember blade in an archer's hand is a beautiful mistake —
+    // the game rewards the build that agrees with itself, and only that build.
 
     public static readonly GearDef[] GearPool =
     {
-        new("BLADE", "GRAVE BLADE",  "GRAVE", 3, null,       "+3 DMG"),
-        new("BLADE", "EMBER BLADE",  "EMBER", 2, "burning",  "+2 DMG\nstrikes BURN 2\nfor 2 turns"),
-        new("BLADE", "BONE CLEAVER", "BONE",  2, "heavy",    "+2 DMG\nyour pushes\ngo +1 cell"),
-        new("PLATE", "GRAVE PLATE",  "GRAVE", 8, null,       "+8 MAX HP"),
-        new("PLATE", "EMBER PLATE",  "EMBER", 6, "warm",     "+6 MAX HP\nember graves\ndon't burn you"),
-        new("PLATE", "BONE PLATE",   "BONE",  6, "thorns",   "+6 MAX HP\nreflect 15% of\nspell damage"),
-        new("BOOTS", "GRAVE BOOTS",  "GRAVE", 1, null,       "+1 MP"),
-        new("BOOTS", "BONE HOBNAILS","BONE",  1, "surefoot", "+1 MP\nbone spikes\nspare you"),
-        new("CHARM", "GRAVE CHARM",  "GRAVE", 1, null,       "+1 AP"),
-        new("CHARM", "EMBER CHARM",  "EMBER", 1, "kindling", "+1 AP\n+1 more when\nbloodied"),
-        new("CHARM", "BONE KNUCKLE", "BONE",  1, "slam",     "+1 AP\nwall slams\ndeal +4"),
+        new("BLADE", "GRAVE BLADE",   "GRAVE", 3, null,       null,    0, "+3 DMG, any element"),
+        new("BLADE", "EMBER BLADE",   "EMBER", 1, "burning",  "fire", 30, "FIRE spells +30%\nstrikes BURN 2\nfor 2 turns"),
+        new("BLADE", "BONE CLEAVER",  "BONE",  1, "heavy",    "earth",30, "EARTH spells +30%\nyour pushes\ngo +1 cell"),
+        new("BLADE", "GALE BLADE",    "GALE",  1, null,       "air",  30, "AIR spells +30%\nlight as a\nlast breath"),
+        new("PLATE", "GRAVE PLATE",   "GRAVE", 8, null,       null,    0, "+8 MAX HP"),
+        new("PLATE", "EMBER PLATE",   "EMBER", 6, "warm",     null,    0, "+6 MAX HP\nember graves\ndon't burn you"),
+        new("PLATE", "BONE PLATE",    "BONE",  6, "thorns",   null,    0, "+6 MAX HP\nreflect 15% of\nspell damage"),
+        new("BOOTS", "GRAVE BOOTS",   "GRAVE", 1, null,       null,    0, "+1 MP"),
+        new("BOOTS", "BONE HOBNAILS", "BONE",  1, "surefoot", null,    0, "+1 MP\nbone spikes\nspare you"),
+        new("BOOTS", "GALE STRIDERS", "GALE",  1, null,       "air",  15, "+1 MP\nAIR spells +15%"),
+        new("CHARM", "GRAVE CHARM",   "GRAVE", 1, null,       null,    0, "+1 AP"),
+        new("CHARM", "EMBER CHARM",   "EMBER", 1, "kindling", "fire", 15, "+1 AP · FIRE +15%\n+1 AP more when\nbloodied"),
+        new("CHARM", "BONE KNUCKLE",  "BONE",  1, "slam",     "earth",15, "+1 AP · EARTH +15%\nwall slams\ndeal +4"),
     };
 
     public static readonly (string Name, string Theme, string Blurb)[] EssencePool =
@@ -105,7 +169,12 @@ public static class RunRules
     public static string FormOf(string theme) => theme switch
     { "MARROW" => "THE BLIGHTED", "BONE" => "THE REVENANT", _ => "THE TITHED" };
 
-    // ----- the class weapon (g10: the AP purse is back — the weapon costs AP like Dofus) --
+    /// <summary>The element a class's damage rides on — the measure every gear pick is
+    /// judged against. Matching blade to hand is the run's first real decision.</summary>
+    public static string ClassElement(string classId) => classId switch
+    { "archer" => "air", "bulwark" => "earth", _ => "fire" };
+
+    // ----- the class weapon (the AP purse is back — the weapon costs AP like Dofus) ------
 
     public static SpellDef Strike(string classId) => classId switch
     {
@@ -138,24 +207,34 @@ public static class RunRules
         + (st.Essences.Contains("HOUR THIEF") ? 1 : 0);
 
     /// <summary>The avatar carries the run's covenant: gear numbers, family sets, essences,
-    /// transformations — all folded into one fighter at each fight's dawn.</summary>
+    /// elemental biases, transformations — all folded into one fighter at each fight's dawn.</summary>
     public static Fighter Bless(Fighter f, RunState st, CampaignUnit you)
     {
         int hp = st.BonusHp, dmg = st.BonusDmg, move = st.BonusMove;
+        int fire = 0, earth = 0, air = 0;
         // The wall's birthright (sim-priced): a melee leader eats every answer the host
         // has, so the bulwark alone walks in with a thicker hide and a heavier arm —
         // one more AP than its table says, so Slam and Shove fit in the same breath.
         int classAp = you.ClassId == "bulwark" ? 1 : 0;
         if (you.ClassId == "bulwark") hp += 14;
         foreach (var piece in st.Gear.Values)
+        {
             switch (piece.Slot)
             {
                 case "PLATE": hp += piece.Power; break;
-                case "BLADE": dmg += piece.Power; break;
+                case "BLADE": if (piece.Elem == null) dmg += piece.Power; break;
                 case "BOOTS": move += piece.Power; break;
             }
-        if (st.FamilyCount("GRAVE") >= 3) hp += 12;   // the dirt holds its own
-        if (st.FamilyCount("EMBER") >= 3) dmg += 2;   // and the fire feeds
+            switch (piece.Elem)
+            {
+                case "fire": fire += piece.ElemAmt; break;
+                case "earth": earth += piece.ElemAmt; break;
+                case "air": air += piece.ElemAmt; break;
+            }
+        }
+        if (st.FamilyCount("GRAVE") >= 3) hp += 12;    // the dirt holds its own
+        if (st.FamilyCount("EMBER") >= 3) fire += 20;  // and the fire feeds
+        if (st.FamilyCount("GALE") >= 3) move += 1;    // the wind carries you
         if (st.Essences.Contains("MASON'S FIST")) dmg += 2;
         if (st.Essences.Contains("QUIET STEP")) move += 1;
 
@@ -167,10 +246,11 @@ public static class RunRules
             Level = f.Level, MaxHp = f.MaxHp + hp,
             Hp = Math.Min(f.Hp + hp, f.MaxHp + hp),
             BaseAp = f.BaseAp + ApBonus(st) + classAp, BaseMp = f.BaseMp + move,
-            Strength = f.Strength, Intelligence = f.Intelligence,
-            Chance = f.Chance, Agility = f.Agility,
-            // Damage bonuses ride on Power: it scales EVERY element, where the old
-            // Intelligence route silently fed only the cannon's fire.
+            // Elemental gear rides the primary stats, so a FIRE blade scales exactly
+            // the spells that burn — and nothing else. Your pick, your consequence.
+            Strength = f.Strength + earth, Intelligence = f.Intelligence + fire,
+            Chance = f.Chance, Agility = f.Agility + air,
+            // Plain damage bonuses ride on Power: it scales EVERY element.
             Power = f.Power + dmg, Wisdom = f.Wisdom, Initiative = f.Initiative,
             Pos = f.Pos,
             // The kit: class ladder (built by MakeCrewMember at bought ranks), then words
@@ -186,6 +266,14 @@ public static class RunRules
             HazardImmune = st.HasKeyword("surefoot") || st.Transformed("BONE"),
         };
         foreach (var (k, v) in f.Resistances) g.Resistances[k] = v;
+        // The wall calcifies: +5% resistance to everything per pack survived (cap 30%) —
+        // late hosts throw four bodies a round at it, and stone answers volume.
+        if (you.ClassId == "bulwark")
+        {
+            int calc = Math.Min(18, 3 * st.FightsWon);
+            foreach (Element el in Enum.GetValues<Element>())
+                g.Resistances[el] = g.Resistances.GetValueOrDefault(el) + calc;
+        }
         if (st.Essences.Contains("WARDEN'S HIDE"))
             g.Statuses.Add(new StatusEffect(StatusKind.Shield, 3, 99));
         if (st.HasKeyword("thorns"))
@@ -199,9 +287,9 @@ public static class RunRules
 
     public readonly record struct WaveSlot(string Id, int Grade);
 
-    /// <summary>The host is drafted, not memorized: each fight spends a points budget on a
-    /// varied comp from the whole bestiary. Deeper fights buy heavier bodies and higher
-    /// grades, and the third pack always fields a grade-3 CHAMPION.</summary>
+    /// <summary>The host is drafted, not memorized: each fight spends a points budget on
+    /// a varied comp from the whole bestiary. The road is long now (g11) — budgets climb
+    /// one point a fight, grades ramp behind them, and the back half fields CHAMPIONS.</summary>
     public static WaveSlot[] BuildWave(Random rnd, bool boss, RunState st)
     {
         if (boss) return new[] { new WaveSlot("sexton", 1), new WaveSlot("barrow_husk", 2) };
@@ -211,16 +299,15 @@ public static class RunRules
             ("grave_mite", 1), ("barrow_husk", 2), ("marrow_spitter", 2), ("gravehound", 2),
             ("tomb_wraith", 2), ("cairn_brute", 3), ("grave_ghoul", 3), ("crypt_warden", 3),
         };
-        int budget = 3 + st.FightIndex * 2;   // 3 / 5 / 7 points across the run
-        if (st.FightIndex == 1 && st.Road == "screaming") budget += 1;   // sim-priced: +2 was a cliff
-        if (st.FightIndex == 1 && st.Road == "quiet") budget -= 1;
-        int gradeFloor = st.FightIndex == 1 && st.Road == "screaming" ? 2 : 1;
-        int gradeLift = st.FightIndex == 2 && st.RopePulled ? 1 : 0;   // the rope answered
+        int i = st.FightsWon;                       // fight ordinal along the road
+        int budget = 3 + i;                         // 3..8 across the run
+        int gradeFloor = i >= 5 ? 2 : 1;
+        int gradeLift = st.GradeLift;
 
         var comp = new List<WaveSlot>();
-        if (st.FightIndex == 2)
+        if (i == 3 || i == 5)
         {
-            // The champion: one of the heavy half, grown to grade 3 (+60% HP, +30% stats).
+            // A champion leads the pack: one of the heavy half at grade 3 (+60% HP, +30% stats).
             var c = pool[4 + rnd.Next(4)];
             comp.Add(new WaveSlot(c.id, 3 + gradeLift));
             budget -= c.cost;
@@ -229,7 +316,7 @@ public static class RunRules
         {
             var pick = pool[rnd.Next(pool.Length)];
             if (pick.cost > budget) { budget--; continue; }   // small change buys nothing
-            int grade = Math.Max(gradeFloor, st.FightIndex >= 1 && rnd.Next(3) == 0 ? 2 : 1) + gradeLift;
+            int grade = Math.Max(gradeFloor, i >= 1 && rnd.Next(3) == 0 ? 2 : 1) + gradeLift;
             comp.Add(new WaveSlot(pick.id, grade));
             budget -= pick.cost;
         }
@@ -302,8 +389,8 @@ public static class RunRules
     public static (CombatEngine Engine, Fighter Avatar) CreateFight(
         RunState st, CampaignUnit you, CampaignUnit? mate, ref int seed)
     {
-        bool boss = st.SextonNow || st.FightIndex >= 3;
-        var comp = BuildWave(new Random(seed * 31 + st.FightIndex), boss, st);
+        bool boss = st.SextonNow || st.RoomNow == RoomKind.Boss;
+        var comp = BuildWave(new Random(seed * 31 + st.Room), boss, st);
 
         var rnd = new Random(++seed);
         Battlefield field;
@@ -349,7 +436,7 @@ public static class RunRules
         var fighters = new List<Fighter> { avatar };
         if (mate != null) fighters.Add(TitheContent.MakeCrewMember(mate, mateSpawn));
         for (int i = 0; i < comp.Length; i++)
-            fighters.Add(TitheContent.MakeMob(comp[i].Id, $"mob_{st.FightIndex}_{i}", mobSpawns[i], comp[i].Grade));
+            fighters.Add(TitheContent.MakeMob(comp[i].Id, $"mob_{st.Room}_{i}", mobSpawns[i], comp[i].Grade));
 
         var engine = new CombatEngine(field, fighters, new SystemRng(seed))
         // The Gauntlet's rules of engagement: coastlines kill, backs are worth finding.
@@ -358,11 +445,6 @@ public static class RunRules
         engine.TileDanger = c => st.Embers.Contains(c) ? 2 : 0;
         return (engine, avatar);
     }
-
-    public static string FightLabel(RunState st) => st.SextonNow || st.FightIndex >= 3 ? "THE SEXTON"
-        : $"FIGHT {st.FightIndex + 1} OF 3";
-
-    public static int XpForFight(int fightIndex) => 45 + 30 * Math.Min(fightIndex, 3);
 
     // ----- the verbs (Isaac's law, event-driven) ------------------------------------------
 
@@ -387,13 +469,13 @@ public static class RunRules
         string theme = ThemeOf(name);
         if (st.ThemeCount(theme) == 3 && st.Announced.Add(theme))
         {
-            if (theme == "BELL") st.Tolls += 6;   // THE TITHED: the bell owes you
+            if (theme == "BELL") st.Tolls += 10;   // THE TITHED: the bell owes you
             fx?.Transformed(theme, FormOf(theme));
         }
     }
 
-    /// <summary>Everything mechanical that hangs off the fight's events: the AP economy's
-    /// covenant hooks, ember graves, the bell's tolls, the Sexton's ritual, the essence verbs.
+    /// <summary>Everything mechanical that hangs off the fight's events: the covenant's
+    /// hooks, ember graves, the bell's tolls, the Sexton's ritual, the essence verbs.
     /// The game and the sim both route every CombatEvent through here.</summary>
     public static void HandleMechanics(CombatEngine engine, CombatEvent e,
         RunState st, Fighter avatar, IRunFx? fx)
@@ -405,13 +487,14 @@ public static class RunRules
                 if (ts.Fighter == avatar && st.HasKeyword("kindling") && avatar.Hp * 2 <= avatar.MaxHp)
                     ts.Fighter.CurrentAp += 1;
                 // THE WALL BRACES (sim-priced: the bulwark reached HIM at 26% health):
-                // the shield-class starts every turn with 3 points of stone between
-                // it and the host. Chip damage pays the toll before blood does.
+                // the shield-class starts every turn with stone between it and the host.
                 if (ts.Fighter == avatar && avatar.Archetype == "bulwark")
                 {
+                    // The wall grows with the road: deeper hosts hit harder, the brace answers.
+                    int braceMag = 4 + st.FightsWon / 2;
                     var brace = avatar.Statuses.FirstOrDefault(x => x.Kind == StatusKind.Shield);
-                    if (brace == null) avatar.Statuses.Add(new StatusEffect(StatusKind.Shield, 4, 2));
-                    else { brace.Magnitude = Math.Max(brace.Magnitude, 4); brace.Remaining = Math.Max(brace.Remaining, 2); }
+                    if (brace == null) avatar.Statuses.Add(new StatusEffect(StatusKind.Shield, braceMag, 2));
+                    else { brace.Magnitude = Math.Max(brace.Magnitude, braceMag); brace.Remaining = Math.Max(brace.Remaining, 2); }
                 }
                 // The dead swing ONCE a turn (plus small change): you carry a full Dofus
                 // purse, but you are one body against a host. Full mob AP meant two or
@@ -432,11 +515,11 @@ public static class RunRules
                     fx?.EmberBurn(ts.Fighter, ts.Fighter.Pos);
                 }
                 // The bell is turn-priced: each of YOUR turns tolls it once.
-                if (ts.Fighter == avatar && !st.SextonNow && st.FightIndex < 3)
+                if (ts.Fighter == avatar && !st.SextonNow && !st.BossFight)
                 {
                     st.Tolls--;
                     if (st.Tolls <= 0) { st.Tolls = 0; st.SextonNow = true; fx?.SextonComes(); }
-                    else if (st.Tolls <= 5) fx?.TollsLow(st.Tolls);
+                    else if (st.Tolls <= 8) fx?.TollsLow(st.Tolls);
                 }
                 break;
 
@@ -459,7 +542,7 @@ public static class RunRules
                 {
                     st.RitualTurned = true;
                     d.Target.Statuses.Add(new StatusEffect(StatusKind.DamageBuff, 25, 99));
-                    var rr = new Random(unchecked(st.FightIndex * 7919 + engine.Round * 31 + 1));
+                    var rr = new Random(unchecked(st.Room * 7919 + engine.Round * 31 + 1));
                     var grown = new List<CellCoord>();
                     for (int i = 0; i < 40 && grown.Count < 3; i++)
                     {
@@ -529,21 +612,16 @@ public static class RunRules
                 "ESSENCE", () => TakeEssence(st, p.Name, fx)));
         }
 
-        // 2) Gear — Loop Hero's one number, Mewgenics' families. Shows what it replaces.
+        // 2) Gear — one number or one element, Mewgenics' families. Shows what it replaces.
         // The hand before HIM keeps a seat free for the mend (it used to be crowded out
         // by two gear cards — the sim caught the "guaranteed" last supper never arriving).
-        int gearSeats = st.FightIndex >= 3 ? 1 : 2;
+        int gearSeats = st.BossIsNext ? 1 : 2;
         var gearChoices = GearPool.Where(g => st.Gear.GetValueOrDefault(g.Slot)?.Name != g.Name).ToList();
         for (int k = 0; k < gearSeats && cards.Count < 3 && gearChoices.Count > 0; k++)
         {
             var g = gearChoices[rnd.Next(gearChoices.Count)];
             gearChoices.RemoveAll(x => x.Name == g.Name);
-            var worn = st.Gear.GetValueOrDefault(g.Slot);
-            // Set progress counts what would be worn AFTER the take (the replaced slot drops out).
-            int famAfter = st.Gear.Values.Count(x => x.Family == g.Family && x.Slot != g.Slot) + 1;
-            string body = g.Blurb + $"\n\n{g.Slot} · {g.Family} SET {famAfter}/3"
-                + (worn != null ? $"\nsheds {worn.Name}" : "");
-            cards.Add(new PickCard(g.Name, body, "GEAR", () => st.Gear[g.Slot] = g));
+            cards.Add(GearCard(st, you, g));
         }
 
         // 3) A blessing tops the hand off — instant relief, no strings.
@@ -551,16 +629,29 @@ public static class RunRules
         {
             new("MEND", "FULL HEAL NOW\n\nthe bread is\nstale. eat.", "BLESSING", () => you.CurrentHp = null),
             new("COIN OF THE GRASP", "+25 STONES NOW\n\nit hums when\nyou hold it", "BLESSING", () => st.RunStones += 25),
-            new("OIL FOR THE BELL", "+5 TOLLS\n\nhe waits.\nbarely.", "BLESSING", () => st.Tolls += 5),
+            new("OIL FOR THE BELL", "+8 TOLLS\n\nhe waits.\nbarely.", "BLESSING", () => st.Tolls += 8),
         };
         // The last supper: the hand before HIM always offers the mend.
-        if (st.FightIndex >= 3 && cards.Count < 3) cards.Add(blessings[0]);
+        if (st.BossIsNext && cards.Count < 3) cards.Add(blessings[0]);
         while (cards.Count < 3)
         {
             var c = blessings[rnd.Next(blessings.Count)];
             if (!cards.Contains(c)) cards.Add(c);
         }
         return cards;
+    }
+
+    /// <summary>One gear offer, honest about fit: family set progress, what it sheds —
+    /// and whether its element is YOUR element or somebody else's power.</summary>
+    public static PickCard GearCard(RunState st, CampaignUnit you, GearDef g, int price = 0)
+    {
+        var worn = st.Gear.GetValueOrDefault(g.Slot);
+        int famAfter = st.Gear.Values.Count(x => x.Family == g.Family && x.Slot != g.Slot) + 1;
+        string fit = g.Elem == null ? ""
+            : g.Elem == ClassElement(you.ClassId) ? "\nYOUR element" : $"\nnot your element ({g.Elem.ToUpperInvariant()})";
+        string body = g.Blurb + fit + $"\n\n{g.Slot} · {g.Family} SET {famAfter}/3"
+            + (worn != null ? $"\nsheds {worn.Name}" : "");
+        return new PickCard(g.Name, body, "GEAR", () => st.Gear[g.Slot] = g, price);
     }
 
     /// <summary>The Mewgenics ding: every level drafts three words of ruin — and the real
@@ -614,20 +705,39 @@ public static class RunRules
         return cards;
     }
 
-    /// <summary>The midpoint fork: two rows lead to the Sexton. Walk one.</summary>
-    public static List<PickCard> RollRoadCards(RunState st, IRunFx? fx) => new()
-    {
-        new("THE QUIET ROW", "the long way round.\n\nfewer teeth waiting,\nthinner spoils", "ROAD",
-            () => { st.Road = "quiet"; fx?.Narrate("the quiet row. even the crows whisper."); }),
-        new("THE SCREAMING ROW", "every grave open.\n\na grade-2 host —\nand an EXTRA pick\nif you walk out", "ROAD",
-            () => { st.Road = "screaming"; fx?.Narrate("the screaming row. they know you're coming."); }),
-    };
+    // ----- the road's rooms (g11) ---------------------------------------------------------
 
-    /// <summary>One grim little choice a run, before the last pack (Loop Hero's campfire beat).</summary>
+    /// <summary>The trader's stall: run stones finally spend mid-run. Prices bite —
+    /// every purchase is banked stones you won't take home.</summary>
+    public static List<PickCard> RollShop(RunState st, CampaignUnit you, Random rnd, IRunFx? fx)
+    {
+        var cards = new List<PickCard>
+        {
+            new("MEND", "FULL HEAL\n\nhot bread and\nsomeone's wine", "SHOP", () => you.CurrentHp = null, 15),
+            new("OIL FOR THE BELL", "+8 TOLLS\n\nthe trader winds\nthe clock back", "SHOP", () => st.Tolls += 8, 20),
+        };
+        var gearChoices = GearPool.Where(g => st.Gear.GetValueOrDefault(g.Slot)?.Name != g.Name).ToList();
+        for (int k = 0; k < 2 && gearChoices.Count > 0; k++)
+        {
+            var g = gearChoices[rnd.Next(gearChoices.Count)];
+            gearChoices.RemoveAll(x => x.Name == g.Name);
+            var card = GearCard(st, you, g, 25);
+            cards.Add(card with { Kind = "SHOP" });
+        }
+        var essChoices = EssencePool.Where(p => !st.Essences.Contains(p.Name)).ToList();
+        if (essChoices.Count > 0)
+        {
+            var p = essChoices[rnd.Next(essChoices.Count)];
+            cards.Add(new PickCard(p.Name, $"{p.Blurb}\n\n{p.Theme} {st.ThemeCount(p.Theme) + 1} OF 3\nforever",
+                "SHOP", () => TakeEssence(st, p.Name, fx), 30));
+        }
+        return cards;
+    }
+
+    /// <summary>One grim little choice (Loop Hero's campfire beat), never repeated in a run.</summary>
     public static (string Title, string Sub, List<PickCard> Cards) RollEventCards(
         RunState st, CampaignUnit you, Random rnd)
     {
-        st.EventDone = true;
         int hurt = Math.Max(1, (you.CurrentHp ?? TitheContent.UnitMaxHp(you)) - 8);
         (string title, string sub, PickCard[] options)[] events =
         {
@@ -635,26 +745,96 @@ public static class RunRules
             {
                 new PickCard("PRY IT WIDE", "+25 STONES\n\nand the lid takes\n8 of your blood", "EVENT",
                     () => { st.RunStones += 25; you.CurrentHp = hurt; }),
-                new PickCard("SEAL IT", "+2 TOLLS\n\nthe dead sleep\neasier. so do you", "EVENT",
-                    () => st.Tolls += 2),
+                new PickCard("SEAL IT", "+3 TOLLS\n\nthe dead sleep\neasier. so do you", "EVENT",
+                    () => st.Tolls += 3),
             }),
             ("THE WELL OF WAX", "old candle-water, still warm. it smells of church.", new[]
             {
-                new PickCard("DRINK DEEP", "FULL HEAL\n\nbut the wax takes\n2 tolls to swallow", "EVENT",
-                    () => { you.CurrentHp = null; st.Tolls = Math.Max(0, st.Tolls - 2); }),
+                new PickCard("DRINK DEEP", "FULL HEAL\n\nbut the wax takes\n3 tolls to swallow", "EVENT",
+                    () => { you.CurrentHp = null; st.Tolls = Math.Max(0, st.Tolls - 3); }),
                 new PickCard("PASS BY", "+8 STONES\n\nscraped from\nthe rim", "EVENT",
                     () => st.RunStones += 8),
             }),
             ("THE LOOSE ROPE", "a bell-rope, frayed, swaying. it wants pulling.", new[]
             {
-                new PickCard("PULL IT", "+5 TOLLS\n\nbut the last pack\nwakes a grade angrier", "EVENT",
-                    () => { st.Tolls += 5; st.RopePulled = true; }),
+                new PickCard("PULL IT", "+6 TOLLS\n\nbut every pack ahead\nwakes a grade angrier", "EVENT",
+                    () => { st.Tolls += 6; st.GradeLift = 1; }),
                 new PickCard("LET IT SWAY", "+1 TOLL\n\nrestraint is\nits own coin", "EVENT",
                     () => st.Tolls += 1),
             }),
         };
-        var ev = events[rnd.Next(events.Length)];
+        var open = Enumerable.Range(0, events.Length).Where(i => !st.EventsSeen.Contains(i)).ToList();
+        int pick = open.Count > 0 ? open[rnd.Next(open.Count)] : rnd.Next(events.Length);
+        st.EventsSeen.Add(pick);
+        var ev = events[pick];
         return (ev.title, ev.sub, ev.options.ToList());
+    }
+
+    /// <summary>Something strange on the road (g11, owner: "maybe even something you could
+    /// take a risk on — mysterious ones"). One safe hand, one gambling hand: the coin is
+    /// honest about its faces, and it still comes down on its own side.</summary>
+    public static (string Title, string Sub, List<PickCard> Cards) RollMysteryCards(
+        RunState st, CampaignUnit you, Random rnd, IRunFx? fx)
+    {
+        int roll = rnd.Next(100);   // sealed before you choose — the grave already knows
+        (string title, string sub, PickCard risk, PickCard safe)[] mysteries =
+        {
+            ("THE UNMARKED GRAVE", "no name, no dates. the dirt is fresh either way.",
+                new PickCard("DIG", "55 in 100: an essence\nof the dead one's\n\notherwise the lid\nbites 8 blood", "MYSTERY", () =>
+                {
+                    if (roll < 55)
+                    {
+                        var open = EssencePool.Where(p => !st.Essences.Contains(p.Name)).ToList();
+                        if (open.Count > 0)
+                        {
+                            var p = open[rnd.Next(open.Count)];
+                            TakeEssence(st, p.Name, fx);
+                            fx?.Narrate($"the grave held {p.Name}. it holds you now.");
+                        }
+                        else { st.RunStones += 20; fx?.Narrate("the grave held only stones. twenty of them."); }
+                    }
+                    else
+                    {
+                        you.CurrentHp = Math.Max(1, (you.CurrentHp ?? TitheContent.UnitMaxHp(you)) - 8);
+                        fx?.Narrate("the lid bites. eight of your blood stay in the dirt.");
+                    }
+                }),
+                new PickCard("LEAVE IT", "+6 STONES\n\npocketed from\nthe headless cairn", "MYSTERY",
+                    () => st.RunStones += 6)),
+            ("THE GAMBLER'S BONES", "two dice of knuckle, still warm. someone just lost.",
+                new PickCard("THROW", "50 in 100: your stones\nDOUBLE\n\notherwise half sink\ninto the dirt", "MYSTERY", () =>
+                {
+                    if (roll < 50) { st.RunStones += Math.Min(st.RunStones, 60); fx?.Narrate("the bones land kind. your purse doubles."); }
+                    else { st.RunStones -= st.RunStones / 2; fx?.Narrate("the bones laugh. half your stones sink."); }
+                }),
+                new PickCard("WALK ON", "+4 STONES\n\ndropped by whoever\nran from the table", "MYSTERY",
+                    () => st.RunStones += 4)),
+            ("THE SEALED RELIQUARY", "iron bands, wax seals, a smell of old prayers.",
+                new PickCard("BREAK THE SEAL", "50 in 100: a relic —\nfree GEAR\n\notherwise the wards\ntake 6 blood, 3 tolls", "MYSTERY", () =>
+                {
+                    if (roll < 50)
+                    {
+                        var open = GearPool.Where(g => st.Gear.GetValueOrDefault(g.Slot)?.Name != g.Name).ToList();
+                        if (open.Count > 0)
+                        {
+                            var g = open[rnd.Next(open.Count)];
+                            st.Gear[g.Slot] = g;
+                            fx?.Narrate($"the reliquary yields {g.Name}.");
+                        }
+                        else { st.RunStones += 25; fx?.Narrate("the reliquary is empty but for stones."); }
+                    }
+                    else
+                    {
+                        you.CurrentHp = Math.Max(1, (you.CurrentHp ?? TitheContent.UnitMaxHp(you)) - 6);
+                        st.Tolls = Math.Max(0, st.Tolls - 3);
+                        fx?.Narrate("the wards answer. blood and time, both taken.");
+                    }
+                }),
+                new PickCard("LEAVE IT SEALED", "+2 TOLLS\n\nsome prayers are\nbest left unheard", "MYSTERY",
+                    () => st.Tolls += 2)),
+        };
+        var m = mysteries[rnd.Next(mysteries.Length)];
+        return (m.title, m.sub, new List<PickCard> { m.risk, m.safe });
     }
 }
 

@@ -48,6 +48,7 @@ public sealed class GauntletGame : Game
     private bool _runWon, _sextonNow;
     private CampaignUnit _you = NewYou();
     private CampaignUnit? _mate;         // the hired Sellsword — rides every run until the day he dies
+    private readonly List<string> _learned = new();   // words learned ahead of your years (die with you)
     private readonly List<string> _essences = new();
     private int _bonusHp, _bonusDmg, _bonusMove, _bonusRegen;
     private int _pendingLevels;          // dings earned this run, each owed a draft of 3
@@ -188,7 +189,12 @@ public sealed class GauntletGame : Game
         try
         {
             File.WriteAllText(SavePath, System.Text.Json.JsonSerializer.Serialize(new
-            { banked = _banked, classId = _you.ClassId, level = _you.Level, xp = _you.Xp, mate = _mate?.ClassId ?? "" }));
+            {
+                banked = _banked, classId = _you.ClassId, level = _you.Level, xp = _you.Xp,
+                mate = _mate?.ClassId ?? "",
+                learned = string.Join(",", _learned),
+                ranks = string.Join(",", _you.SpellRanks.Select(kv => kv.Key + ":" + kv.Value)),
+            }));
         }
         catch { /* a lost save must never take the game down with it */ }
     }
@@ -206,6 +212,15 @@ public sealed class GauntletGame : Game
             _you.Xp = Math.Max(0, r.GetProperty("xp").GetInt32());
             string mate = r.GetProperty("mate").GetString() ?? "";
             if (mate != "") _mate = new CampaignUnit { Id = "mate", ClassId = mate, Name = "Sellsword" };
+            // Newer fields read tolerantly, so an old save still opens the gate.
+            if (r.TryGetProperty("learned", out var lp))
+                _learned.AddRange((lp.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
+            if (r.TryGetProperty("ranks", out var rp))
+                foreach (var pair in (rp.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var kv = pair.Split(':');
+                    if (kv.Length == 2 && int.TryParse(kv[1], out int rank)) _you.SpellRanks[kv[0]] = rank;
+                }
         }
         catch { /* an unreadable save is a fresh start, not a crash */ }
     }
@@ -427,7 +442,12 @@ public sealed class GauntletGame : Game
             // Intelligence route silently fed only the cannon's fire.
             Power = f.Power + dmg, Wisdom = f.Wisdom, Initiative = f.Initiative,
             Pos = f.Pos,
-            Spells = f.Spells.Concat(new[] { Strike() }).ToArray(),
+            // The kit: class ladder (built by MakeCrewMember at bought ranks), then words
+            // learned ahead of the ladder — deduped in case the years caught up — then the strike.
+            Spells = f.Spells
+                .Concat(_learned.Select(k => TitheContent.UnitSkill(_you, k))
+                    .Where(sp => f.Spells.All(o => o.Id != sp.Id)))
+                .Concat(new[] { Strike() }).ToArray(),
             PushBonus = (HasKeyword("heavy") ? 1 : 0)
                         + (_essences.Contains("HUSK'S GRIP") ? 1 : 0)
                         + (FamilyCount("BONE") >= 3 ? 1 : 0),
@@ -685,7 +705,7 @@ public sealed class GauntletGame : Game
         {
             for (int i = 0; i < ClassIds.Length; i++)
                 if (ClassRect(i).Contains(MP) && _you.ClassId != ClassIds[i])
-                { _you = NewYou(ClassIds[i]); _sfx.Play("click"); return; }   // the hired sword stays hired
+                { _you = NewYou(ClassIds[i]); _learned.Clear(); _sfx.Play("click"); return; }   // the hired sword stays hired
             if (_mate == null && _banked >= MateCost && HireRect.Contains(MP))
             {
                 _banked -= MateCost;
@@ -822,7 +842,7 @@ public sealed class GauntletGame : Game
     {
         if (Pressed(Keys.Space) || Pressed(Keys.Enter) || Clicked())
         {
-            if (!_runWon) _you = NewYou(_you.ClassId); // the fallen leader is buried; kin answer
+            if (!_runWon) { _you = NewYou(_you.ClassId); _learned.Clear(); } // the fallen leader is buried, words and all
             SaveMeta();
             _scene = Scene.City;
         }
@@ -897,10 +917,38 @@ public sealed class GauntletGame : Game
         }
     }
 
-    /// <summary>The Mewgenics ding: every level earned drafts three words of ruin — keep one.</summary>
+    /// <summary>The Mewgenics ding: every level drafts three words of ruin — and the real
+    /// words are SPELLS now. Learn the class's next skill ahead of your years, or deepen
+    /// one you know to its next rank (Dofus rank rows: economics or shape, never just damage).</summary>
     private void RollLevelCards()
     {
-        var pool = new List<(string t, string b, string k, Action a)>
+        static string Cost(SpellDef s) =>
+            (s.ApCost == 0 ? "FREE" : $"{s.ApCost} MANA") + $" · RANGE {s.MinRange}-{s.MaxRange}";
+
+        var spellCards = new List<(string t, string b, string k, Action a)>();
+        var known = TitheContent.ClassSkillsAt(_you.ClassId, _you.Level).Concat(_learned).Distinct().ToList();
+
+        // LEARN: the next word the ladder hasn't taught yet.
+        var next = TitheContent.ClassSkillsAt(_you.ClassId, 99).FirstOrDefault(k => !known.Contains(k));
+        if (next != null)
+        {
+            var sp = TitheContent.SkillAtRank(next, 1);
+            spellCards.Add(($"LEARN {sp.Name.ToUpperInvariant()}",
+                $"{EffectsLine(sp)}\n{Cost(sp)}\n\na word ahead\nof your years", "RUIN",
+                () => _learned.Add(next)));
+        }
+
+        // DEEPEN: any known word still below its top rank.
+        foreach (var key in known.Where(k => _you.RankOf(k) < TitheContent.MaxRank(k)).Take(2))
+        {
+            int rank = _you.RankOf(key) + 1;
+            var sp = TitheContent.SkillAtRank(key, rank);
+            spellCards.Add(($"DEEPEN {TitheContent.SkillAtRank(key, 1).Name.ToUpperInvariant()}",
+                $"{sp.Name.ToUpperInvariant()}\n{EffectsLine(sp)}\n{Cost(sp)}\n\nthe word deepens", "RUIN",
+                () => _you.SpellRanks[key] = rank));
+        }
+
+        var statWords = new List<(string t, string b, string k, Action a)>
         {
             ("IRON MARROW", "+10 MAX HP\n\nthe grave gives\nback a little", "RUIN", () => _bonusHp += 10),
             ("KILLING WORD", "+5 DAMAGE\n\nsay it and\nsomething breaks", "RUIN", () => _bonusDmg += 5),
@@ -908,12 +956,14 @@ public sealed class GauntletGame : Game
             ("DEEP WELL", "+1 MANA A TURN\n\nyou drink where\nno water is", "RUIN", () => _bonusRegen += 1),
             ("OLD BLOOD", "FULL HEAL\n+4 MAX HP\n\nyours, again", "RUIN", () => { _bonusHp += 4; _you.CurrentHp = null; }),
         };
+
         var rnd = new Random(++_seed);
         _pickTitle = $"A WORD OF RUIN — LEVEL {_you.Level}"; _pickSub = "you grow harder. learn ONE."; _pickInk = Gold;
         _cards = new();
+        foreach (var c in spellCards.Take(2)) _cards.Add(c);   // the real words lead the draft
         while (_cards.Count < 3)
         {
-            var c = pool[rnd.Next(pool.Count)];
+            var c = statWords[rnd.Next(statWords.Count)];
             if (!_cards.Contains(c)) _cards.Add(c);
         }
         _scene = Scene.Pick;

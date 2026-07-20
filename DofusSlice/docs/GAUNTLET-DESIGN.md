@@ -195,6 +195,19 @@ panels during runs (the pick replaces them), the wide city.
   flashes, walk dust, ambient ember fireflies, slam sparks. Sim rebalanced
   on the long road: cannon 41% / bulwark 38% / archer 29% (bot); the wall
   now CALCIFIES (+3% all-res per pack survived, cap 18) on top of its brace.
+- g12 THE WEIGHT: the bulwark reborn a SACRIER (owner's design): every point
+  of damage it deals feeds half back as blood (the brace retired), and
+  ATTRACTION (2 AP, range 2-5, cd 1) drags a body to its fists — over
+  embers, onto spikes, toward the coast. Sim: 29% for a bot that never even
+  casts the pull; the human ceiling is higher. And the game-feel pass, built
+  on research (Vlambeer's screenshake checklist, Powerhoof's Crawl smears,
+  fighting-game hitstop clocks, Celeste's split Game/UI worlds): the fight
+  WORLD renders at 640x380 and integer-upscales 2x point-sampled — chunky
+  pixels, 2px-stepped screenshake — while text and the band stay native and
+  crisp; victims flash inverted, recoil 6px and tremble for ~100ms on every
+  hit; sleep frames by the fighting-game clock (90ms hit / 160ms backstab /
+  260ms kill / 300ms void-fall); lunges gained anticipation-strike-HOLD-
+  settle; walks hop 3px a cell; sparks doubled to survive the downscale.
 STILL OPEN: more events/mysteries, mob walk/attack strips for the six
 unmapped mobs (husk/hound/spitter/mite/piper/wraith still single-frame),
 a mid-run sellsword offer at the trader, retiring old TITHE once the

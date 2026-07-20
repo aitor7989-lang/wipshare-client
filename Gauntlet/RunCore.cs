@@ -186,12 +186,11 @@ public static class RunRules
         },
         "bulwark" => new SpellDef
         {
-            // The sim's verdict (0% winrate, half its graves dug in fight 1): the wall
-            // needed a heavier hand AND a way to last. Shove hits like a door and the
-            // door drinks — the blood it takes is blood it keeps.
+            // Plain damage on the weapon: the SACRIER LAW (below) already feeds the wall
+            // half of everything it deals — a lifesteal effect here would double-drink.
             Id = 952, Name = "Shove", ApCost = 3, MinRange = 1, MaxRange = 1,
             RequiresLineOfSight = true, MaxCastsPerTurn = 2,
-            Effects = new[] { SpellEffect.Lifesteal(Element.Earth, 8, 11), SpellEffect.Push(1) },
+            Effects = new[] { SpellEffect.Damage(Element.Earth, 8, 11), SpellEffect.Push(1) },
         },
         _ => new SpellDef
         {
@@ -199,6 +198,17 @@ public static class RunRules
             RequiresLineOfSight = true, MaxCastsPerTurn = 2,
             Effects = new[] { SpellEffect.Damage(Element.Fire, 5, 7) },
         },
+    };
+
+    /// <summary>The Sacrier's hook (g12, owner's call: "attraction like sacro from dofus"):
+    /// the bulwark drags a body across the yard to its fists — onto spikes, over embers,
+    /// off a coastline if the line is right. Berserker plumbing, Dofus soul.</summary>
+    public static SpellDef Attraction() => new()
+    {
+        Id = 953, Name = "Attraction", ApCost = 2, MinRange = 2, MaxRange = 5,
+        RequiresLineOfSight = true, MaxCastsPerTurn = 1, Cooldown = 1, NeedsTarget = true,
+        Description = "drag them to you, through whatever the floor is made of",
+        Effects = new[] { SpellEffect.Pull(4) },
     };
 
     /// <summary>Extra AP folded into the avatar's purse from charms and essences.</summary>
@@ -258,7 +268,9 @@ public static class RunRules
             Spells = f.Spells
                 .Concat(st.Learned.Select(k => TitheContent.UnitSkill(you, k))
                     .Where(sp => f.Spells.All(o => o.Id != sp.Id)))
-                .Concat(new[] { Strike(you.ClassId) }).ToArray(),
+                .Concat(you.ClassId == "bulwark"
+                    ? new[] { Strike(you.ClassId), Attraction() }
+                    : new[] { Strike(you.ClassId) }).ToArray(),
             PushBonus = (st.HasKeyword("heavy") ? 1 : 0)
                         + (st.Essences.Contains("HUSK'S GRIP") ? 1 : 0)
                         + (st.FamilyCount("BONE") >= 3 ? 1 : 0),
@@ -486,16 +498,8 @@ public static class RunRules
                 // Kindling burns brighter in a bleeding hand: +1 AP while bloodied.
                 if (ts.Fighter == avatar && st.HasKeyword("kindling") && avatar.Hp * 2 <= avatar.MaxHp)
                     ts.Fighter.CurrentAp += 1;
-                // THE WALL BRACES (sim-priced: the bulwark reached HIM at 26% health):
-                // the shield-class starts every turn with stone between it and the host.
-                if (ts.Fighter == avatar && avatar.Archetype == "bulwark")
-                {
-                    // The wall grows with the road: deeper hosts hit harder, the brace answers.
-                    int braceMag = 4 + st.FightsWon / 2;
-                    var brace = avatar.Statuses.FirstOrDefault(x => x.Kind == StatusKind.Shield);
-                    if (brace == null) avatar.Statuses.Add(new StatusEffect(StatusKind.Shield, braceMag, 2));
-                    else { brace.Magnitude = Math.Max(brace.Magnitude, braceMag); brace.Remaining = Math.Max(brace.Remaining, 2); }
-                }
+                // (The old brace retired in g12: the SACRIER LAW below is the wall's
+                // sustain now — blood taken is blood kept.)
                 // The dead swing ONCE a turn (plus small change): you carry a full Dofus
                 // purse, but you are one body against a host. Full mob AP meant two or
                 // three blows to your one — the sim put every class under 8% on it.
@@ -552,6 +556,16 @@ public static class RunRules
                         { engine.Field.SetTile(c, TileKind.Spikes); grown.Add(c); }
                     }
                     fx?.RitualTurns(grown);
+                }
+                // THE SACRIER LAW (g12, owner's design): every point of damage the bulwark
+                // deals feeds half back as blood — slam, shove, seize, all of it. The wall
+                // heals by HITTING, and Attraction fetches the meal.
+                if (engine.Outcome == FightOutcome.Ongoing && engine.Current == avatar
+                    && avatar.Archetype == "bulwark" && avatar.IsAlive
+                    && d.Target.Team == Team.Enemy && d.Amount > 1)
+                {
+                    int fed = Math.Min(d.Amount / 2, avatar.MaxHp - avatar.Hp);
+                    if (fed > 0) { avatar.Hp += fed; fx?.FedByMite(avatar, fed); }
                 }
                 // On-strike rules (Isaac's verbs): your elemental hits carry rot and fire.
                 if (engine.Outcome == FightOutcome.Ongoing && engine.Current == avatar

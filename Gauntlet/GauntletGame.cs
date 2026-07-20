@@ -82,7 +82,12 @@ public sealed class GauntletGame : Game, IRunFx
     private readonly Dictionary<string, Vector2> _visPos = new();
     private readonly Dictionary<string, bool> _visFlip = new();
     private readonly Dictionary<string, float> _attackUntil = new();
+    private readonly Dictionary<string, (float until, Vector2 dir)> _hurt = new();  // flash + recoil
     private bool AnimBusy => _anim != null || _anims.Count > 0;
+
+    // g12: the world renders at HALF resolution and upscales with point sampling —
+    // the Crawl/Powerhoof law: spend pixels on motion, not on rendering. UI stays native.
+    private RenderTarget2D _worldRT = null!;
 
     // ----- the feel (the Crawl layer) -------------------------------------------------
     private float _freeze, _shake;
@@ -140,6 +145,7 @@ public sealed class GauntletGame : Game, IRunFx
                 vd[y * W + x] = Color.Black * (a * a * 0.5f);
             }
         _vignette.SetData(vd);
+        _worldRT = new RenderTarget2D(GraphicsDevice, W / 2, H / 2);
         LoadMeta();
     }
 
@@ -224,7 +230,7 @@ public sealed class GauntletGame : Game, IRunFx
     {
         _blood.Clear(); _smears.Clear(); _floats.Clear(); _corpses.Clear();
         _sparks.Clear(); _rings.Clear();
-        _anims.Clear(); _anim = null; _visPos.Clear(); _visFlip.Clear(); _attackUntil.Clear();
+        _anims.Clear(); _anim = null; _visPos.Clear(); _visFlip.Clear(); _attackUntil.Clear(); _hurt.Clear();
         _selected = -1; _turnOwner = ""; _inspectId = ""; _resolved = false;
         _firstBlood = false; _firstSpike = false;
 
@@ -359,8 +365,17 @@ public sealed class GauntletGame : Game, IRunFx
                 var attacker = _engine.Outcome == FightOutcome.Ongoing ? _engine.Current : null;
                 Present(() =>
                 {
-                    _freeze = Math.Max(_freeze, d.RemainingHp <= 0 ? 0.16f : 0.07f);
+                    // Sleep frames by the fighting-game clock: ~90ms a hit, ~160ms a
+                    // backstab, kills get the long silence in FighterDied below.
+                    _freeze = Math.Max(_freeze, d.RemainingHp <= 0 ? 0.26f : d.Backstab ? 0.16f : 0.09f);
                     _shake = Math.Max(_shake, Math.Min(10f, 2f + d.Amount * 0.25f));
+                    if (d.Target.IsAlive || d.RemainingHp <= 0)
+                    {
+                        var hdir = attacker != null && attacker.Pos != d.At
+                            ? Center(d.At) - VisPos(attacker) : Vector2.Zero;
+                        if (hdir.LengthSquared() > 1) hdir.Normalize();
+                        _hurt[d.Target.Id] = (_time + 0.15f, hdir);
+                    }
                     Splatter(Center(d.At), 4 + Math.Min(8, d.Amount / 3));
                     Sparks(Center(d.At) + new Vector2(0, -12), 5 + Math.Min(8, d.Amount / 3),
                         d.Element == Element.Neutral ? Mono.Ink : Mono.Element(d.Element));
@@ -389,7 +404,7 @@ public sealed class GauntletGame : Game, IRunFx
                 Present(() =>
                 {
                     // The void takes them whole: no blood, no corpse — just the long quiet.
-                    _freeze = Math.Max(_freeze, 0.26f); _shake = Math.Max(_shake, 14f);
+                    _freeze = Math.Max(_freeze, 0.3f); _shake = Math.Max(_shake, 14f);
                     Float("GONE", Mono.Danger, Center(ff.At));
                     _sfx.Play("crush", 0.9f);
                     Narrate(ff.Fighter == _avatar
@@ -502,7 +517,9 @@ public sealed class GauntletGame : Game, IRunFx
                         if (acc + seg >= travelled)
                         {
                             float t = seg <= 0 ? 1 : (travelled - acc) / seg;
-                            _visPos[w.Id] = Vector2.Lerp(pts[i - 1], pts[i], t);
+                            // A little hop per cell (walks only — the shoved slide flat).
+                            float hop = w.State == "walk" ? MathF.Sin(t * MathF.PI) * 3f : 0f;
+                            _visPos[w.Id] = Vector2.Lerp(pts[i - 1], pts[i], t) - new Vector2(0, hop);
                             float dx = pts[i].X - pts[i - 1].X;
                             if (MathF.Abs(dx) > 1) _visFlip[w.Id] = dx < 0;
                             break;
@@ -513,7 +530,10 @@ public sealed class GauntletGame : Game, IRunFx
                 }
                 case LungeStep l:
                 {
-                    const float dur = 0.26f;
+                    // Anticipation → strike → hit frame → settle (the Slynyrd rhythm:
+                    // lean back 2-3 beats, hit in 1-2, recover slow). Weight lives in
+                    // the windup and the held frame, not in the travel.
+                    const float dur = 0.34f;
                     var f = _engine.Fighters.FirstOrDefault(x => x.Id == l.Id);
                     if (f == null || _animT >= dur)
                     { if (f != null) _visPos[l.Id] = Center(f.Pos); _anim = null; break; }
@@ -522,7 +542,12 @@ public sealed class GauntletGame : Game, IRunFx
                     if (dir.LengthSquared() > 1)
                     {
                         dir.Normalize();
-                        _visPos[l.Id] = home + dir * MathF.Sin(_animT / dur * MathF.PI) * 16f;
+                        float t = _animT / dur;
+                        float ext = t < 0.30f ? -6f * (t / 0.30f)                     // windup: lean away
+                            : t < 0.50f ? -6f + 28f * ((t - 0.30f) / 0.20f)           // strike: snap in
+                            : t < 0.72f ? 22f                                          // hit frame: hold
+                            : 22f * (1f - (t - 0.72f) / 0.28f);                        // settle home
+                        _visPos[l.Id] = home + dir * ext;
                         if (MathF.Abs(dir.X) > 0.2f) _visFlip[l.Id] = dir.X < 0;
                     }
                     break;
@@ -850,27 +875,119 @@ public sealed class GauntletGame : Game, IRunFx
 
     protected override void Draw(GameTime gt)
     {
-        GraphicsDevice.Clear(Mono.Bg);
-        var shakeOff = _shake > 0
-            ? new Vector2(_rng.Next(-(int)_shake, (int)_shake + 1) * 0.5f, _rng.Next(-(int)_shake, (int)_shake + 1) * 0.5f)
-            : Vector2.Zero;
-        _sb.Begin(samplerState: SamplerState.PointClamp,
-            transformMatrix: Matrix.CreateTranslation(shakeOff.X, shakeOff.Y, 0));
+        if (_scene == Scene.Fight) { DrawFightFrame(); base.Draw(gt); return; }
 
+        GraphicsDevice.Clear(Mono.Bg);
+        _sb.Begin(samplerState: SamplerState.PointClamp);
         switch (_scene)
         {
             case Scene.City: DrawCity(); break;
-            case Scene.Fight: DrawFight(); break;
             case Scene.Pick: DrawPick(); break;
             case Scene.End: DrawEnd(); break;
         }
-
         if (_time < _narrationUntil && _scene != Scene.City)
             _font.DrawCentered(_sb, _narration.ToUpperInvariant(), W / 2, 62, 2,
                 Mono.Ink * Math.Min(1f, (_narrationUntil - _time) / 0.6f));
-
         _sb.End();
         base.Draw(gt);
+    }
+
+    /// <summary>The fight frame, Powerhoof-shaped (g12): the WORLD renders into a half-
+    /// resolution target and integer-upscales with point sampling — chunky pixels, chunky
+    /// 2px-stepped screenshake — while every word of text and the whole band stay native
+    /// and crisp on top. Detail goes to motion, never to rendering.</summary>
+    private void DrawFightFrame()
+    {
+        bool myTurn = _engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar;
+        bool pilots = myTurn && !_autoPlay;
+
+        GraphicsDevice.SetRenderTarget(_worldRT);
+        GraphicsDevice.Clear(Mono.Bg);
+        _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: Matrix.CreateScale(0.5f));
+        DrawFight(myTurn, pilots);
+        _sb.End();
+        GraphicsDevice.SetRenderTarget(null);
+
+        GraphicsDevice.Clear(Mono.Bg);
+        var shakeOff = _shake > 0
+            ? new Vector2(_rng.Next(-(int)_shake, (int)_shake + 1) / 2 * 2,
+                          _rng.Next(-(int)_shake, (int)_shake + 1) / 2 * 2)
+            : Vector2.Zero;
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        _sb.Draw(_worldRT, new Rectangle((int)shakeOff.X, (int)shakeOff.Y, W, H), Color.White);
+        _sb.End();
+
+        // World-anchored TEXT (floats, previews, hover counts, banners) rides the shake
+        // but renders at native resolution — blocky world, legible numbers.
+        _sb.Begin(samplerState: SamplerState.PointClamp,
+            transformMatrix: Matrix.CreateTranslation(shakeOff.X, shakeOff.Y, 0));
+        DrawWorldText(myTurn, pilots);
+        _sb.End();
+
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        DrawFightHud(myTurn, pilots);
+        var inspected = _inspectId == ""
+            ? null : _engine.Fighters.FirstOrDefault(f => f.IsAlive && f.Id == _inspectId);
+        if (inspected != null) DrawInspector(inspected);
+        if (_time < _narrationUntil)
+            _font.DrawCentered(_sb, _narration.ToUpperInvariant(), W / 2, 62, 2,
+                Mono.Ink * Math.Min(1f, (_narrationUntil - _time) / 0.6f));
+        _sb.End();
+    }
+
+    /// <summary>Everything written over the world at native resolution.</summary>
+    private void DrawWorldText(bool myTurn, bool pilots)
+    {
+        var focus = FocusSpell(out _);
+        var hovCell = CellAt(MP);
+
+        if (pilots && focus == null && !AnimBusy && hovCell is { } dest && _moveRange.ContainsKey(dest))
+            _font.DrawCentered(_sb, $"{_moveRange[dest]} MP", (int)Center(dest).X, (int)Center(dest).Y - 34, 1, Mono.Mp);
+
+        if (focus != null && hovCell is { } hc && _engine.FighterAt(hc) is { Team: Team.Enemy } prey)
+        {
+            bool back = CombatEngine.IsBackstab(_avatar.Pos, prey);
+            bool legal = myTurn && _engine.CanCast(_avatar, focus, hc, out _);
+            if (_engine.EstimateDamage(_avatar, focus, hc) is { } est)
+            {
+                int lo = back ? est.min + est.min / 4 : est.min;
+                int hi = back ? est.max + est.max / 4 : est.max;
+                _font.DrawCentered(_sb, back ? $"{lo}-{hi} FROM BEHIND" : $"{lo}-{hi}",
+                    (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
+                    !legal ? Mono.Faint : back ? Gold : Mono.Ink);
+            }
+            else if (back)
+                _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
+                    legal ? Gold : Mono.Faint);
+        }
+
+        // The exact count appears over a hovered body's bar — never uninvited.
+        foreach (var f in _engine.Fighters.Where(f => f.IsAlive))
+            if (hovCell == f.Pos)
+            {
+                var cc = VisPos(f);
+                bool champ = f.Team == Team.Enemy && f.Level >= 3 && f.Archetype != "sexton";
+                var (_, figH) = SizeOf(f.Archetype);
+                int barY = (int)(cc.Y + TH / 4f + 2 - figH * (champ ? 1.15f : 1f)) - 8;
+                _font.DrawCentered(_sb, $"{f.Hp}/{f.MaxHp}", (int)cc.X, barY - 11, 1,
+                    f.Hp * 4 <= f.MaxHp ? Mono.Danger : Mono.Ink);
+            }
+
+        const float FloatLife = 1.1f;
+        for (int i = _floats.Count - 1; i >= 0; i--)
+        {
+            var (t, c, p, born) = _floats[i];
+            float age = _time - born;
+            if (age > FloatLife) { _floats.RemoveAt(i); continue; }
+            _font.DrawCentered(_sb, t, (int)p.X, (int)(p.Y - 24 - age * 30), 2, c * (1f - age / FloatLife));
+        }
+
+        // Turn banner — one loud breath, then gone.
+        if (_time < _bannerUntil)
+        {
+            float a = Math.Min(1f, (_bannerUntil - _time) / 0.35f);
+            _font.DrawCentered(_sb, _banner, W / 2, 148, 3, _bannerInk * a);
+        }
     }
 
     private void DrawCity()
@@ -944,11 +1061,8 @@ public sealed class GauntletGame : Game, IRunFx
         return -1;
     }
 
-    private void DrawFight()
+    private void DrawFight(bool myTurn, bool pilots)
     {
-        bool myTurn = _engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar;
-        bool pilots = myTurn && !_autoPlay;
-
         // The board: a ragged iso island — void is the night, stones cluster like graves.
         // Every coast edge gets a brighter rim: the coastline KILLS here, so the eye must
         // find it without counting cells (and the island stops looking like torn paper).
@@ -959,7 +1073,7 @@ public sealed class GauntletGame : Game, IRunFx
                 if (_engine.Field.TileAt(cell) == TileKind.Void) continue;
                 var cc = Center(cell);
                 _prim.DiamondAt(_sb, cc, (x + y) % 2 == 0 ? Mono.Floor : Mono.FloorAlt);
-                DiamondOutline(cc, 1f, Mono.Seam * 0.7f);
+                DiamondOutline(cc, 2f, Mono.Seam * 0.7f);   // 2 logical px = 1 chunky pixel
 
                 bool VoidAt(int dx, int dy)
                 {
@@ -1005,7 +1119,6 @@ public sealed class GauntletGame : Game, IRunFx
                 if (path != null)
                     foreach (var c in path.Where(c => c != _avatar.Pos))
                         _prim.DiscAt(_sb, Center(c), c == dest ? 6 : 4, Mono.Walk * (c == dest ? 0.95f : 0.7f));
-                _font.DrawCentered(_sb, $"{_moveRange[dest]} MP", (int)Center(dest).X, (int)Center(dest).Y - 34, 1, Mono.Mp);
             }
         }
 
@@ -1036,27 +1149,8 @@ public sealed class GauntletGame : Game, IRunFx
 
         if (hovCell is { } hc && _engine.Field.InBounds(hc)
             && _engine.Field.TileAt(hc) != TileKind.Void)
-        {
             DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
-            // The promise (Mewgenics reads its numbers out loud): an armed attack over a
-            // target shows what it would do — more when you've found their back.
-            if (focus != null && _engine.FighterAt(hc) is { Team: Team.Enemy } prey)
-            {
-                bool back = CombatEngine.IsBackstab(_avatar.Pos, prey);
-                bool legal = myTurn && _engine.CanCast(_avatar, focus, hc, out _);
-                if (_engine.EstimateDamage(_avatar, focus, hc) is { } est)
-                {
-                    int lo = back ? est.min + est.min / 4 : est.min;
-                    int hi = back ? est.max + est.max / 4 : est.max;
-                    _font.DrawCentered(_sb, back ? $"{lo}-{hi} FROM BEHIND" : $"{lo}-{hi}",
-                        (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
-                        !legal ? Mono.Faint : back ? Gold : Mono.Ink);
-                }
-                else if (back)
-                    _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1,
-                        legal ? Gold : Mono.Faint);
-            }
-        }
+        // (The damage-preview NUMBERS moved to DrawWorldText — text stays native-crisp.)
 
         // Entities: stones, corpses and fighters share ONE depth-sorted pass, so a
         // sprite behind a rock cluster is properly buried by it. Depth follows the
@@ -1123,18 +1217,24 @@ public sealed class GauntletGame : Game, IRunFx
                 var (frameH, figH) = SizeOf(ff.Archetype);
                 float scale = champ ? 1.15f : 1f;
                 float sh = frameH * scale;
-                DrawSprite(ff, cc,
-                    ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink, sh, StateOf(ff));
-                // The life bar rides ABOVE the head (owner's law) — no numbers unless asked:
-                // hover the body and the exact count appears over the bar.
+                // The hit frame (Vlambeer's law, SF's clock): for ~100ms the victim flashes
+                // inverted, recoils 6px off the blow and trembles — pain you can SEE.
+                var drawAt = cc;
+                var tint = ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink;
+                if (_hurt.TryGetValue(ff.Id, out var hh) && hh.until > _time)
+                {
+                    float rem = (hh.until - _time) / 0.15f;
+                    drawAt += hh.dir * 6f * rem + new Vector2(_rng.Next(-2, 3), 0);
+                    if (hh.until - _time > 0.05f) tint = tint == Mono.Danger ? Mono.Ink : Mono.Danger;
+                }
+                DrawSprite(ff, drawAt, tint, sh, StateOf(ff));
+                // The life bar rides ABOVE the head (owner's law) — numbers only on hover
+                // (drawn native in DrawWorldText).
                 float hf = Math.Clamp(ff.Hp / (float)ff.MaxHp, 0f, 1f);
                 int barY = (int)(cc.Y + TH / 4f + 2 - figH * scale) - 8;
-                _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, 26, 3), Mono.Faint);
-                _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, (int)(26 * hf), 3),
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 14, barY, 28, 4), Mono.Faint);
+                _prim.FillRect(_sb, new Rectangle((int)cc.X - 14, barY, (int)(28 * hf), 4),
                     ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : ff.Team == Team.Player ? Mono.Ally : Mono.Ink);
-                if (CellAt(MP) == ff.Pos)
-                    _font.DrawCentered(_sb, $"{ff.Hp}/{ff.MaxHp}", (int)cc.X, barY - 11, 1,
-                        ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
             }));
         }
         foreach (var (_, draw) in pass.OrderBy(p => p.depth)) draw();
@@ -1173,7 +1273,7 @@ public sealed class GauntletGame : Game, IRunFx
         foreach (var s in _sparks)
         {
             float a = 1f - (_time - s.born) / s.ttl;
-            _prim.FillRect(_sb, new Rectangle((int)s.p.X, (int)s.p.Y, s.size + 1, s.size + 1),
+            _prim.FillRect(_sb, new Rectangle((int)s.p.X, (int)s.p.Y, (s.size + 1) * 2, (s.size + 1) * 2),
                 s.c * Math.Clamp(a, 0f, 1f));
         }
         foreach (var rg in _rings)
@@ -1189,29 +1289,10 @@ public sealed class GauntletGame : Game, IRunFx
             for (int k = 0; k < 8; k++) _prim.Line(_sb, P(k), P(k + 1), 2f, col);
         }
 
-        const float FloatLife = 1.1f;
-        for (int i = _floats.Count - 1; i >= 0; i--)
-        {
-            var (t, c, p, born) = _floats[i];
-            float age = _time - born;
-            if (age > FloatLife) { _floats.RemoveAt(i); continue; }
-            _font.DrawCentered(_sb, t, (int)p.X, (int)(p.Y - 24 - age * 30), 2, c * (1f - age / FloatLife));
-        }
-
         // Crawl's law: the dark leans in from the rim, and the candle is never quite steady.
         _sb.Draw(_vignette, Vector2.Zero, Color.White * (0.9f + 0.1f * MathF.Sin(_time * 5.3f)));
         // The ritual's stage: HIS fight is lit by half the candles.
         if (_st.BossFight) _sb.Draw(_vignette, Vector2.Zero, Color.White * 0.55f);
-
-        // Turn banner — one loud breath, then gone.
-        if (_time < _bannerUntil)
-        {
-            float a = Math.Min(1f, (_bannerUntil - _time) / 0.35f);
-            _font.DrawCentered(_sb, _banner, W / 2, 148, 3, _bannerInk * a);
-        }
-
-        DrawFightHud(myTurn, pilots);
-        if (inspected != null) DrawInspector(inspected);
     }
 
     /// <summary>What the body is doing right now, for the sprite sheets.</summary>

@@ -45,31 +45,31 @@ public static class TitheTables
     public const string MobsJson = """
     [
       { "id": "barrow_husk",   "name": "Barrow Husk",   "policy": "melee",   "maxHp": 54, "ap": 6, "mp": 3,
-        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 110, "gold": 18,
+        "strength": 18, "agility": 8,  "initiative": 5,  "skills": ["husk_strike"], "xp": 110, "stones": 18,
         "essence": "Seize", "drop": 6, "gear": 4 },
       { "id": "marrow_spitter","name": "Marrow Spitter", "policy": "ranged",  "maxHp": 30, "ap": 6, "mp": 3,
         "strength": 14, "chance": 14, "agility": 10, "initiative": 9,  "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["marrow_spit"], "xp": 90, "gold": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
+        "skills": ["marrow_spit"], "xp": 90, "stones": 15, "essence": "Marrow Spit", "drop": 8, "gear": 4 },
       { "id": "gravehound",    "name": "Gravehound",    "policy": "flanker", "maxHp": 36, "ap": 6, "mp": 5,
-        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 130, "gold": 22,
+        "strength": 20, "agility": 16, "initiative": 15, "skills": ["grave_bite"], "xp": 130, "stones": 22,
         "essence": "Pounce", "drop": 5, "gear": 5, "resAir": 20 },
       { "id": "crypt_warden",  "name": "Crypt Warden",  "policy": "melee",   "maxHp": 72, "ap": 6, "mp": 2,
-        "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 170, "gold": 26,
+        "strength": 18, "agility": 10, "initiative": 6,  "skills": ["husk_strike", "warden_ironhide"], "xp": 170, "stones": 26,
         "essence": "Ironhide", "drop": 5, "gear": 7, "resEarth": 35, "resFire": 15 },
       { "id": "grave_mite",    "name": "Grave Mite",    "policy": "flanker", "maxHp": 12, "ap": 6, "mp": 4,
-        "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 35, "gold": 6,
+        "strength": 8,  "agility": 12, "initiative": 11, "skills": ["mite_sap"], "xp": 35, "stones": 6,
         "essence": "Sap", "drop": 10, "gear": 2 },
       { "id": "bone_piper",    "name": "Bone Piper",    "policy": "support", "maxHp": 26, "ap": 6, "mp": 3,
         "strength": 10, "agility": 10, "initiative": 10, "prefRangeMin": 3, "prefRangeMax": 6,
-        "skills": ["piper_gift"], "xp": 120, "gold": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
+        "skills": ["piper_gift"], "xp": 120, "stones": 20, "essence": "Piper's Gift", "drop": 8, "gear": 5 },
       { "id": "tomb_wraith",   "name": "Tomb Wraith",   "policy": "ranged",  "maxHp": 24, "ap": 6, "mp": 3,
         "strength": 8, "agility": 18, "initiative": 14, "prefRangeMin": 4, "prefRangeMax": 7,
-        "skills": ["wraith_wail"], "xp": 140, "gold": 24, "essence": "Marrow Spit", "drop": 6, "gear": 5, "resAir": 30 },
+        "skills": ["wraith_wail"], "xp": 140, "stones": 24, "essence": "Marrow Spit", "drop": 6, "gear": 5, "resAir": 30 },
       { "id": "grave_ghoul",   "name": "Grave Ghoul",   "policy": "melee",   "maxHp": 44, "ap": 6, "mp": 4,
-        "strength": 24, "agility": 10, "initiative": 12, "skills": ["ghoul_rend"], "xp": 150, "gold": 24,
+        "strength": 24, "agility": 10, "initiative": 12, "skills": ["ghoul_rend"], "xp": 150, "stones": 24,
         "essence": "Seize", "drop": 5, "gear": 5, "resEarth": 20, "resWater": -20 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
-        "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 700, "gold": 120,
+        "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 700, "stones": 120,
         "essence": "Sexton's Toll", "drop": 100, "gear": 65, "resEarth": 20, "resFire": 20, "resAir": 20, "resWater": 20 }
     ]
     """;
@@ -343,7 +343,7 @@ public static class TitheTables
     ]
     """;
 
-    // Economy + services (Bible §5 tables, §8). Placeholders for the M5 tuning pass. Gold from a
+    // Economy + services (Bible §5 tables, §8). Placeholders for the M5 tuning pass. Stones from a
     // mob equals its XP value (one dial for now); vendoring an essence returns essenceSell.
     public const string PricesJson = """
     {

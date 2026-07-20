@@ -130,7 +130,7 @@ ICON_MAP = {
     "icon_ui_char": "Travel_Person_Player_Character_Single",
     "icon_ui_book": "Misc_Religion_Christianity_Bible_Book_Cross_Tome_Libram",
     "icon_ui_bag": "Travel_Backpack_Bag_Pouch_Small",
-    "icon_ui_gold": "RPG_Coin_Gold_Currency_Money_GP",
+    "icon_ui_stone": "RPG_Gem_Jewelcrafting_Diamond_Points_Currency",
     "icon_ui_bread": "Food_Bread_Loaf",
     "icon_ui_draught": "Alchemy_Potion_Vial_Bottle_Heart_Health_Life_Full",
     "icon_ui_essence": "Alchemy_Sulphur_Sulfur_Soul",

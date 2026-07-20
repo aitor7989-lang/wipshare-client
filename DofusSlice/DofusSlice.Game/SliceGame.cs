@@ -366,18 +366,18 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             case 0: // the Tithe-Keeper
                 if (_campaign.TitheDue)
-                    a.Add(($"PAY THE TITHE  ({_campaign.TitheAmount}g)", _campaign.Gold >= _campaign.TitheAmount,
+                    a.Add(($"PAY THE TITHE  ({_campaign.TitheAmount} st)", _campaign.Stones >= _campaign.TitheAmount,
                            () => _campaign.PayTithe()));
-                a.Add(($"BUY HARD BREAD  ({P.HardBread}g)   [have {_campaign.Bread}]  — MENDS {P.BreadHeal} HP BETWEEN FIGHTS",
-                       _campaign.Gold >= P.HardBread, () => _campaign.BuyBread()));
+                a.Add(($"BUY HARD BREAD  ({P.HardBread} st)   [have {_campaign.Bread}]  — MENDS {P.BreadHeal} HP BETWEEN FIGHTS",
+                       _campaign.Stones >= P.HardBread, () => _campaign.BuyBread()));
                 if (_campaign.Essences.Count > 0)
-                    a.Add(($"SELL ESSENCE: {_campaign.Essences[0].ToUpperInvariant()}  (+{P.EssenceSell}g)", true,
+                    a.Add(($"SELL ESSENCE: {_campaign.Essences[0].ToUpperInvariant()}  (+{P.EssenceSell} st)", true,
                            () => _campaign.SellEssence(_campaign.Essences[0])));
                 break;
             case 1: // the Temple Sister
                 var w = _campaign.Crew.FirstOrDefault(u => u.Wounded);
-                a.Add((w != null ? $"TREAT {w.Name.ToUpperInvariant()}'S WOUNDS  ({P.Draught}g)" : "NO ONE IS WOUNDED",
-                       w != null && (_campaign.Draughts > 0 || _campaign.Gold >= P.Draught),
+                a.Add((w != null ? $"TREAT {w.Name.ToUpperInvariant()}'S WOUNDS  ({P.Draught} st)" : "NO ONE IS WOUNDED",
+                       w != null && (_campaign.Draughts > 0 || _campaign.Stones >= P.Draught),
                        () => { if (_campaign.Draughts == 0) _campaign.BuyDraught(); if (w != null) _campaign.TreatWounded(w); }));
                 // Essence consumption (Bible §6.5): teach the first held essence's skill to a unit
                 // with a free slot. Learning is consumption; the slot is campaign-permanent.
@@ -390,27 +390,27 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 }
                 // The shelf (rotates each return): everything is for sale, at a painful price.
                 string shelf = TitheContent.EssenceForSale(_campaign.Dives);
-                a.Add(($"BUY {shelf.ToUpperInvariant()}  ({P.EssenceBuy}g)  — {TitheContent.EssenceSkillName(shelf).ToUpperInvariant()}",
-                       _campaign.Gold >= P.EssenceBuy, () => _campaign.BuyEssence(shelf)));
+                a.Add(($"BUY {shelf.ToUpperInvariant()}  ({P.EssenceBuy} st)  — {TitheContent.EssenceSkillName(shelf).ToUpperInvariant()}",
+                       _campaign.Stones >= P.EssenceBuy, () => _campaign.BuyEssence(shelf)));
                 // Surgery: strip a filled slot — costly, and the essence is destroyed.
                 var patient = _campaign.Crew.FirstOrDefault(u => u.EssenceSlots.Count > 0);
                 if (patient != null)
                     a.Add(($"SURGERY: STRIP {patient.EssenceSlots[0].ToUpperInvariant()} FROM {patient.Name.ToUpperInvariant()}  ({P.EssenceRemoval}g, DESTROYED)",
-                           _campaign.Gold >= P.EssenceRemoval,
+                           _campaign.Stones >= P.EssenceRemoval,
                            () => _campaign.RemoveEssence(patient, patient.EssenceSlots[0])));
                 // Vetting (Bible §6.12): reveal a survivor's hidden temperament for a fee.
                 var suspect = _campaign.Crew.FirstOrDefault(u => u.Temperament != Temperament.None && !u.Vetted);
                 if (suspect != null)
-                    a.Add(($"VET {suspect.Name.ToUpperInvariant()}  ({P.VetFee}g) — READ THEIR NATURE",
-                           _campaign.Gold >= P.VetFee,
-                           () => { if (_campaign.Gold >= P.VetFee) { _campaign.Gold -= P.VetFee; suspect.Vetted = true; } }));
+                    a.Add(($"VET {suspect.Name.ToUpperInvariant()}  ({P.VetFee} st) — READ THEIR NATURE",
+                           _campaign.Stones >= P.VetFee,
+                           () => { if (_campaign.Stones >= P.VetFee) { _campaign.Stones -= P.VetFee; suspect.Vetted = true; } }));
                 break;
             default: // the Hiring Post
                 int lvl = Math.Max(1, _campaign.Avatar?.Level ?? 1);
                 int price = _campaign.HirePrice(lvl);
                 foreach (var cls in new[] { "bulwark", "archer", "cannon" })
-                    a.Add(($"HIRE A {cls.ToUpperInvariant()}  (L{lvl}, {price}g)",
-                           _campaign.Crew.Count < 3 && _campaign.Gold >= price,
+                    a.Add(($"HIRE A {cls.ToUpperInvariant()}  (L{lvl}, {price} st)",
+                           _campaign.Crew.Count < 3 && _campaign.Stones >= price,
                            () => _campaign.Hire(cls, $"{cls}-merc", lvl)));
                 break;
         }
@@ -665,7 +665,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             var offer = _dive!.Survivor;
             if (offer != null)
                 _yardMsg = _dive.HireSurvivor()
-                    ? $"The {offer.ClassId}-survivor falls in with the crew ({offer.Price}g). Their eyes are hard to read."
+                    ? $"The {offer.ClassId}-survivor falls in with the crew ({offer.Price} st). Their eyes are hard to read."
                     : _campaign.Crew.Count >= 3 ? "The crew is full — the survivor watches you pass."
                     : "You cannot afford the survivor's price.";
             _yardMsgTimer = 3f;
@@ -2914,11 +2914,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             // Two short lines — one wide line at world scale collides with pack labels.
             _font.DrawCentered(_sb, "SURVIVOR", (int)center.X, (int)center.Y - 52, 2, Mono.Ink);
-            _font.DrawCentered(_sb, $"{offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}G)",
+            _font.DrawCentered(_sb, $"{offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price} ST)",
                 (int)center.X, (int)center.Y - 34, 2, Mono.Dim);
         }
         else
-            _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price}g)",
+            _font.DrawCentered(_sb, $"SURVIVOR — {offer.ClassId.ToUpperInvariant()} L{offer.Level} ({offer.Price} st)",
                 (int)center.X, (int)center.Y - 30, 1, new Color(150, 210, 170));
     }
 
@@ -3138,7 +3138,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             _reportSounded = true;
             _sfx.Play(win ? "victory" : "defeat", 0.8f, jitter: false);
-            if (win && r.Gold > 0) _sfx.Play("coin");
+            if (win && r.Stones > 0) _sfx.Play("coin");
             if (_levelUps.Count > 0) _sfx.Play("levelup", 0.9f, jitter: false);
         }
 
@@ -3163,8 +3163,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (win)
         {
             _font.DrawCentered(_sb, r.Shares.Count > 1
-                    ? $"+{r.Gold} GOLD — SPLIT {r.Shares.Count} WAYS      +{r.Xp} XP POOL"
-                    : $"+{r.Gold} GOLD      +{r.Xp} XP POOL",
+                    ? $"+{r.Stones} STONES — SPLIT {r.Shares.Count} WAYS      +{r.Xp} XP POOL"
+                    : $"+{r.Stones} STONES      +{r.Xp} XP POOL",
                 panel.Center.X, y, 2, ink); y += 34;
 
             // Per-unit rows, the Dofus end-of-fight window: XP won, their gold cut, level bar.
@@ -3179,8 +3179,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                         ur.Died ? (Mono.On ? Mono.Danger : new Color(184, 70, 60))
                         : ur.Wounded ? (Mono.On ? Mono.Danger : new Color(190, 140, 40)) : inkDim);
                     var cut = r.Shares.FirstOrDefault(s => s.Name == ur.Name);
-                    if (cut.Gold > 0)
-                        _font.Draw(_sb, $"+{cut.Gold}G", panel.X + 244, y, 1, ink);
+                    if (cut.Stones > 0)
+                        _font.Draw(_sb, $"+{cut.Stones} ST", panel.X + 244, y, 1, ink);
                     if (cu != null)
                     {
                         int need = CampaignUnit.XpForNextLevel(cu.Level);

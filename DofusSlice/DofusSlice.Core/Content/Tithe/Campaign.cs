@@ -68,7 +68,7 @@ public sealed class CampaignUnit
     /// Cumulative XP to reach each level, index = level — the classic Dofus 1.29 table, levels
     /// 1–20 (Bible §6.3: adopt the 1.29 curve verbatim; cross-check against an emulator dump in
     /// the §9 pass). Landed TOGETHER with Dofus-scale per-mob XP values, since curve and mob XP
-    /// only pace correctly as a pair. Mob gold is decoupled from XP (mobs carry a "gold" column).
+    /// only pace correctly as a pair. Mob stones are decoupled from XP (mobs carry a "stones" column).
     /// </summary>
     private static readonly int[] XpCurve =
     {
@@ -106,7 +106,7 @@ public sealed class CampaignUnit
 public sealed class Campaign
 {
     public List<CampaignUnit> Crew { get; init; } = new();
-    public int Gold { get; set; }
+    public int Stones { get; set; }
     public int Bread { get; set; }        // Hard Bread: restores HP outside combat
     public int Draughts { get; set; }     // Physicker's Draught: cures Wounded
     public int Dives { get; set; }        // completed dives — drives the tithe cadence
@@ -130,9 +130,9 @@ public sealed class Campaign
 
     public static Campaign NewGame(string avatarClass)
     {
-        // You start ALONE (the Dofus way): one avatar, enough gold to hire a crew at the
+        // You start ALONE (the Dofus way): one avatar, enough essence stones to hire a crew at the
         // Hiring Post if you choose to — building the party is the player's first decision.
-        var c = new Campaign { Gold = 160, Bread = 2, Draughts = 0 };
+        var c = new Campaign { Stones = 160, Bread = 2, Draughts = 0 };
         c.Crew.Add(new CampaignUnit { Id = "avatar", ClassId = avatarClass, Name = "You", IsAvatar = true });
         return c;
     }
@@ -141,15 +141,15 @@ public sealed class Campaign
 
     public bool BuyBread()
     {
-        if (Gold < TitheContent.Prices.HardBread) return false;
-        Gold -= TitheContent.Prices.HardBread; Bread++;
+        if (Stones < TitheContent.Prices.HardBread) return false;
+        Stones -= TitheContent.Prices.HardBread; Bread++;
         return true;
     }
 
     public bool BuyDraught()
     {
-        if (Gold < TitheContent.Prices.Draught) return false;
-        Gold -= TitheContent.Prices.Draught; Draughts++;
+        if (Stones < TitheContent.Prices.Draught) return false;
+        Stones -= TitheContent.Prices.Draught; Draughts++;
         return true;
     }
 
@@ -167,8 +167,8 @@ public sealed class Campaign
     {
         if (Crew.Count >= 3) return false;               // slice caps the party at three
         int price = HirePrice(level);
-        if (Gold < price) return false;
-        Gold -= price;
+        if (Stones < price) return false;
+        Stones -= price;
         // A hire arrives with its level's banked spell points (auto-spent by its class template).
         Crew.Add(new CampaignUnit
         { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level,
@@ -179,7 +179,7 @@ public sealed class Campaign
     public bool SellEssence(string essence)
     {
         if (!Essences.Remove(essence)) return false;
-        Gold += TitheContent.Prices.EssenceSell;
+        Stones += TitheContent.Prices.EssenceSell;
         return true;
     }
 
@@ -188,8 +188,8 @@ public sealed class Campaign
     public bool BuyEssence(string essence)
     {
         if (TitheContent.EssenceSkill(essence) == null) return false;
-        if (Gold < TitheContent.Prices.EssenceBuy) return false;
-        Gold -= TitheContent.Prices.EssenceBuy;
+        if (Stones < TitheContent.Prices.EssenceBuy) return false;
+        Stones -= TitheContent.Prices.EssenceBuy;
         Essences.Add(essence);
         return true;
     }
@@ -216,8 +216,8 @@ public sealed class Campaign
     public bool RemoveEssence(CampaignUnit u, string essence)
     {
         if (!u.EssenceSlots.Contains(essence)) return false;
-        if (Gold < TitheContent.Prices.EssenceRemoval) return false;
-        Gold -= TitheContent.Prices.EssenceRemoval;
+        if (Stones < TitheContent.Prices.EssenceRemoval) return false;
+        Stones -= TitheContent.Prices.EssenceRemoval;
         u.EssenceSlots.Remove(essence);
         return true;
     }
@@ -321,7 +321,7 @@ public sealed class Campaign
     public bool PayTithe()
     {
         int due = TitheAmount;
-        if (Gold >= due) { Gold -= due; TitheDebt = 0; TithesPaid++; return true; }
+        if (Stones >= due) { Stones -= due; TitheDebt = 0; TithesPaid++; return true; }
         TitheDebt = due; // unpaid → escalating ledger
         return false;
     }

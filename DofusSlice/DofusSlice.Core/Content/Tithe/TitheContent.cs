@@ -29,7 +29,7 @@ public static class TitheContent
                                    int PrefRangeMin, int PrefRangeMax, GrowthDto? Growth, string[] Skills, string? Blurb);
     private sealed record MobDto(string Id, string Name, string Policy, int MaxHp, int Ap, int Mp,
                                  int Strength, int Intelligence, int Chance, int Agility, int Initiative,
-                                 int PrefRangeMin, int PrefRangeMax, string[] Skills, int Xp, int Gold,
+                                 int PrefRangeMin, int PrefRangeMax, string[] Skills, int Xp, int Stones,
                                  string? Essence, int Drop, int Gear,
                                  int ResEarth, int ResFire, int ResAir, int ResWater);
     private sealed record SpawnDto(string Mob, int X, int Y);
@@ -288,7 +288,7 @@ public static class TitheContent
 
     /// <summary>Grade-aware rewards for a defeated mob fighter (its Level carries the grade).</summary>
     public static int MobXpOf(Fighter mob) => GradeReward(MobXp(mob.Archetype), mob.Level);
-    public static int MobGoldOf(Fighter mob) => GradeReward(MobGold(mob.Archetype), mob.Level);
+    public static int MobStonesOf(Fighter mob) => GradeReward(MobStones(mob.Archetype), mob.Level);
 
     /// <summary>The essence a mob can drop and its percent chance (Bible §5), or (null, 0).</summary>
     public static (string? essence, int rate) MobDrop(string mobId) =>
@@ -511,7 +511,7 @@ public static class TitheContent
         u.Equipment.Count(id => Item(id)?.Set == setId);
 
     /// <summary>Coin a mob drops (Bible §6.11). Decoupled from XP since XP went to the Dofus band.</summary>
-    public static int MobGold(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Gold : 0;
+    public static int MobStones(string mobId) => Mobs.TryGetValue(mobId, out var m) ? m.Stones : 0;
 
     /// <summary>The Sexton's court — the Crypt's boss encounter, as a mob composition.</summary>
     public static IReadOnlyList<string> CryptComp() =>

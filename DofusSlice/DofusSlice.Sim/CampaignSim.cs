@@ -23,7 +23,7 @@ public static class CampaignSim
         if (verbose)
         {
             Console.WriteLine($"TITHE — campaign loop (seed {seed})");
-            Console.WriteLine($"Avatar: {campaign.Avatar!.ClassId}.  Starting gold {campaign.Gold}.\n");
+            Console.WriteLine($"Avatar: {campaign.Avatar!.ClassId}.  Starting stones {campaign.Stones}.\n");
         }
 
         int dive = 0;
@@ -44,7 +44,7 @@ public static class CampaignSim
             Console.WriteLine(campaign.Over
                 ? $"The avatar fell. Campaign over after {dive} dives."
                 : $"Survived {dive} dives.");
-            Console.WriteLine($"Gold {campaign.Gold}, tithes paid {campaign.TithesPaid}, debt {campaign.TitheDebt}.");
+            Console.WriteLine($"Stones {campaign.Stones}, tithes paid {campaign.TithesPaid}, debt {campaign.TitheDebt}.");
             Console.WriteLine($"Crew: {string.Join(", ", campaign.Crew.Select(u => $"{u.Name}({u.ClassId} L{u.Level}{(u.Wounded ? " wounded" : "")})"))}");
             Console.WriteLine($"Essences held: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
             if (campaign.Avatar is { } av)
@@ -74,13 +74,13 @@ public static class CampaignSim
         if (c.TitheDue)
         {
             int due = c.TitheAmount;
-            log.Add(c.PayTithe() ? $"paid the tithe ({due}g)" : $"COULD NOT PAY the tithe ({due}g) — debt grows");
+            log.Add(c.PayTithe() ? $"paid the tithe ({due} st)" : $"COULD NOT PAY the tithe ({due} st) — debt grows");
         }
 
         // 2. Mend the wounded while a Draught is affordable (leave a working reserve).
         foreach (var u in c.Crew.Where(u => u.Wounded).ToList())
         {
-            if (c.Draughts == 0 && c.Gold >= TitheContent.Prices.Draught + 80) c.BuyDraught();
+            if (c.Draughts == 0 && c.Stones >= TitheContent.Prices.Draught + 80) c.BuyDraught();
             if (c.TreatWounded(u)) log.Add($"treated {u.Name}'s wounds");
         }
 
@@ -96,17 +96,17 @@ public static class CampaignSim
 
         // 3b. When flush, buy the Temple's shelf essence for an empty slot (her painful price is
         //     the certain path to the exclusives — Blood Pact and Blink never drop from mobs).
-        if (c.Gold > 900 && c.Crew.Any(u => u.HasFreeEssenceSlot))
+        if (c.Stones > 900 && c.Crew.Any(u => u.HasFreeEssenceSlot))
         {
             string shelf = TitheContent.EssenceForSale(c.Dives);
             var buyer = c.Crew.OrderByDescending(u => u.IsAvatar)
                 .FirstOrDefault(u => u.HasFreeEssenceSlot && !u.EssenceSlots.Contains(shelf));
             if (buyer != null && c.BuyEssence(shelf) && c.TeachEssence(buyer, shelf))
-                log.Add($"bought {shelf} at the Temple ({TitheContent.Prices.EssenceBuy}g) — {buyer.Name} learned it");
+                log.Add($"bought {shelf} at the Temple ({TitheContent.Prices.EssenceBuy} st) — {buyer.Name} learned it");
         }
 
         // 4. Restock Hard Bread — it mends the party between fights on the dive.
-        while (c.Bread < 5 && c.Gold >= TitheContent.Prices.HardBread + 60) c.BuyBread();
+        while (c.Bread < 5 && c.Stones >= TitheContent.Prices.HardBread + 60) c.BuyBread();
 
         // 5. Spend banked spell points by the class template (also covers essence skills just taught).
         foreach (var u in c.Crew) log.AddRange(TitheContent.AutoSpendSpellPoints(u));
@@ -116,15 +116,15 @@ public static class CampaignSim
         {
             int level = Math.Max(1, c.Avatar!.Level);
             int price = c.HirePrice(level);
-            if (c.Gold < price + 40) break;
+            if (c.Stones < price + 40) break;
             var cls = HireClasses[c.Crew.Count % HireClasses.Length];
-            if (c.Hire(cls, $"{cls}-merc", level)) log.Add($"hired a {cls} ({price}g)");
+            if (c.Hire(cls, $"{cls}-merc", level)) log.Add($"hired a {cls} ({price} st)");
             else break;
         }
 
         if (verbose)
         {
-            Console.WriteLine($"--- City (before dive {dive}) --- gold {c.Gold}, party {c.Crew.Count}"
+            Console.WriteLine($"--- City (before dive {dive}) --- stones {c.Stones}, party {c.Crew.Count}"
                 + (c.TitheDue ? "  [TITHE DUE]" : ""));
             if (log.Count > 0) Console.WriteLine("  " + string.Join("; ", log));
         }
@@ -133,7 +133,7 @@ public static class CampaignSim
     private static void PrintDive(int dive, DiveSession.DiveReport r, Campaign c)
     {
         Console.WriteLine($"Dive {dive}: {r.EndReason}.  cleared {r.PacksCleared} packs, "
-            + $"+{r.Gold}g, +{r.Xp}xp"
+            + $"+{r.Stones}g, +{r.Xp}xp"
             + (r.Essences.Count > 0 ? $", essences: {string.Join("/", r.Essences)}" : "")
             + (r.Gear.Count > 0 ? $"  GEAR: {string.Join("/", r.Gear)}" : "")
             + (r.Lost.Count > 0 ? $"  LOST: {string.Join(", ", r.Lost)}" : ""));
@@ -164,7 +164,7 @@ public static class CampaignSim
             var r = dive.ApplyResult(pack, engine);
 
             Console.WriteLine($"  Room {i + 1}/{rooms.Count} {room.Name,-20} {r.Outcome}"
-                + $"  +{r.Gold}g +{r.Xp}xp"
+                + $"  +{r.Stones}g +{r.Xp}xp"
                 + (r.Drops.Count > 0 ? $"  essences: {string.Join("/", r.Drops)}" : "")
                 + (r.Gear.Count > 0 ? $"  GEAR: {string.Join("/", r.Gear)}" : "")
                 + (r.Wounded.Count > 0 ? $"  wounded: {string.Join(",", r.Wounded)}" : "")
@@ -173,7 +173,7 @@ public static class CampaignSim
         }
 
         if (!campaign.Over)
-            Console.WriteLine($"\n  The altar tears the crew out. Gold {campaign.Gold}, "
+            Console.WriteLine($"\n  The altar tears the crew out. Stones {campaign.Stones}, "
                 + $"essences: {(campaign.Essences.Count == 0 ? "none" : string.Join(", ", campaign.Essences))}");
         return 0;
     }
@@ -257,7 +257,7 @@ public static class CampaignSim
         // AI actually flies them (Blink = the skirmisher's escape; Blood Pact = blood for AP).
         // A FRESH level-1 crew, so the g3 hounds genuinely reach melee and force the escapes.
         var c2 = Campaign.NewGame("cannon");
-        c2.Gold += 600;
+        c2.Stones += 600;
         // Campaigns start SOLO since the fun pivot — the sim hires its crew like a player would.
         c2.Hire("archer", "Wren", 1);
         c2.Hire("bulwark", "Bern", 1);
@@ -295,7 +295,7 @@ public static class CampaignSim
         {
             var c = Campaign.NewGame("cannon");
             c.Crew.Remove(c.Crew.Last()); // short-handed on purpose — the survivor's opening
-            c.Gold += 100;
+            c.Stones += 100;
             var dive = new DiveSession(c, new SystemRng(seed * 977 + 5));
             if (dive.Survivor != null) offered++;
             var r = dive.RunAuto(greedy: false);
@@ -320,7 +320,7 @@ public static class CampaignSim
     {
         foreach (bool greedy in new[] { false, true })
         {
-            int totalDives = 0, wipeouts = 0, gold = 0;
+            int totalDives = 0, wipeouts = 0, stones = 0;
             for (int i = 1; i <= trials; i++)
             {
                 var rng = new SystemRng(i * 131 + 7);
@@ -332,12 +332,12 @@ public static class CampaignSim
                     CityPrep(campaign, false, dive);
                     new DiveSession(campaign, rng).RunAuto(greedy);
                 }
-                totalDives += dive; gold += campaign.Gold;
+                totalDives += dive; stones += campaign.Stones;
                 if (campaign.Over) wipeouts++;
             }
             Console.WriteLine($"{(greedy ? "GREEDY" : "CAUTIOUS")} play over {trials} runs (cap 40 dives): "
                 + $"avg {(double)totalDives / trials:0.0} dives, {wipeouts} wipes "
-                + $"({100.0 * wipeouts / trials:0}%), avg end gold {gold / trials}");
+                + $"({100.0 * wipeouts / trials:0}%), avg end stones {stones / trials}");
         }
         return 0;
     }

@@ -6,7 +6,7 @@ namespace DofusSlice.Core.Content.Tithe;
 /// <summary>
 /// One trip through the Lychgate onto the Graveyard floor (Bible §4, §6.7–6.9). A real-time
 /// <see cref="Clock"/> runs the whole time; the crew engages skeleton packs (each a watched fight
-/// through the shared combat engine), banking gold / XP / essences and taking wounds. When the
+/// through the shared combat engine), banking essence stones / XP / essences and taking wounds. When the
 /// clock runs out the labyrinth ejects everyone to the city with what they carry; a fight lost
 /// outright ends the campaign. Exposes per-step methods for the game and a headless auto-dive for
 /// the sim, so the loop's economics are testable before any scene art (the Door Test on paper).
@@ -24,15 +24,15 @@ public sealed class DiveSession
     /// <summary>The most recent fight's per-unit resolution (XP shares, fates) for the UI.</summary>
     public TitheResolution.Result? LastResolution { get; private set; }
 
-    public sealed record FightReport(string PackId, FightOutcome Outcome, int Gold, int Xp,
+    public sealed record FightReport(string PackId, FightOutcome Outcome, int Stones, int Xp,
                                      IReadOnlyList<string> Drops, IReadOnlyList<string> Gear,
                                      IReadOnlyList<string> Lost, IReadOnlyList<string> Wounded)
     {
-        /// <summary>The party's pay: each living member's gold cut (the leader banks only theirs).</summary>
-        public IReadOnlyList<(string Name, int Gold)> Shares { get; init; } = Array.Empty<(string, int)>();
+        /// <summary>The party's pay: each living member's stones cut (the leader banks only theirs).</summary>
+        public IReadOnlyList<(string Name, int Stones)> Shares { get; init; } = Array.Empty<(string, int)>();
     }
 
-    public sealed record DiveReport(int PacksCleared, int Gold, int Xp, IReadOnlyList<string> Essences,
+    public sealed record DiveReport(int PacksCleared, int Stones, int Xp, IReadOnlyList<string> Essences,
                                     IReadOnlyList<string> Gear, IReadOnlyList<string> Lost,
                                     bool CampaignOver, string EndReason, IReadOnlyList<FightReport> Fights,
                                     IReadOnlyList<string> Notes);
@@ -49,8 +49,8 @@ public sealed class DiveSession
     public bool Ended { get; private set; }
     public int XpBanked { get; private set; }
 
-    /// <summary>Gold banked this dive — the "carried haul" a Grasping merc weighs (Bible §6.12).</summary>
-    public int GoldGained { get; private set; }
+    /// <summary>Stones banked this dive — the "carried haul" a Grasping merc weighs (Bible §6.12).</summary>
+    public int StonesGained { get; private set; }
 
     /// <summary>A survivor found below (Bible §6.12): class and level visible, price cheap,
     /// temperament HIDDEN until the Temple vets them — or until they show you themselves.</summary>
@@ -67,7 +67,7 @@ public sealed class DiveSession
     public string? ConsumeDeparture() { var d = Departure; Departure = null; return d; }
 
     // The Grasping calculus (Bible §6.12), placeholders for M5: leave when the haul crosses
-    // GraspThreshold gold and the bell is under GraspClock seconds, taking GraspSharePct of it.
+    // GraspThreshold stones and the bell is under GraspClock seconds, taking GraspSharePct of it.
     private const int GraspThreshold = 100, GraspClock = 75, GraspSharePct = 30;
     private const int SurvivorChancePct = 30, GraspingOddsPct = 50;
 
@@ -93,9 +93,9 @@ public sealed class DiveSession
     /// <summary>Hire the wandering survivor mid-dive (cheap; temperament stays hidden).</summary>
     public bool HireSurvivor()
     {
-        if (Survivor == null || Ended || _campaign.Crew.Count >= 3 || _campaign.Gold < Survivor.Price)
+        if (Survivor == null || Ended || _campaign.Crew.Count >= 3 || _campaign.Stones < Survivor.Price)
             return false;
-        _campaign.Gold -= Survivor.Price;
+        _campaign.Stones -= Survivor.Price;
         _campaign.Crew.Add(new CampaignUnit
         {
             Id = $"surv_{_campaign.Crew.Count}_{Survivor.ClassId}", ClassId = Survivor.ClassId,
@@ -113,13 +113,13 @@ public sealed class DiveSession
     /// </summary>
     private void CheckBetrayal()
     {
-        if (Ended || InFight || GoldGained < GraspThreshold || Clock > GraspClock) return;
+        if (Ended || InFight || StonesGained < GraspThreshold || Clock > GraspClock) return;
         var traitor = _campaign.Crew.FirstOrDefault(u => !u.IsAvatar && u.Temperament == Temperament.Grasping);
         if (traitor == null) return;
-        int cut = GoldGained * GraspSharePct / 100;
-        _campaign.Gold = Math.Max(0, _campaign.Gold - cut);
+        int cut = StonesGained * GraspSharePct / 100;
+        _campaign.Stones = Math.Max(0, _campaign.Stones - cut);
         _campaign.Crew.Remove(traitor);
-        Departure = $"{traitor.Name} slips away toward the Lychgate with {cut}g of the haul";
+        Departure = $"{traitor.Name} slips away toward the Lychgate with {cut} stones of the haul";
     }
 
     public float FightCost(TitheContent.PackDef p) => FightBaseSeconds + FightPerEnemy * p.Comp.Length;
@@ -226,20 +226,20 @@ public sealed class DiveSession
         {
             pack.Cleared = true;
             pack.ClearedAtClock = Clock; // starts the respawn timer (the grave refills)
-            int gold = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
-                .Sum(TitheContent.MobGoldOf); // grade-aware: deep packs pay their risk premium
+            int stones = engine.Fighters.Where(f => f.Team == Team.Enemy && !f.IsAlive)
+                .Sum(TitheContent.MobStonesOf); // grade-aware: deep packs pay their risk premium
 
             // The party works for SHARES: gold splits evenly across living members; the
             // mercs' cuts leave with them (their pay), the leader banks only their own —
             // plus the remainder, the leader holds the purse. A dead member's share is lost.
             var living = res.Units.Where(u => !u.Died).ToList();
-            int share = living.Count > 0 ? gold / living.Count : 0;
+            int share = living.Count > 0 ? stones / living.Count : 0;
             var shares = living.Select(u => (u.Name, share)).ToList();
             var avatarUnit = _campaign.Avatar;
             bool avatarPaid = avatarUnit != null && living.Any(u => u.Id == avatarUnit.Id);
-            int banked = avatarPaid ? share + (living.Count > 0 ? gold % living.Count : gold) : 0;
-            _campaign.Gold += banked;
-            GoldGained += banked;
+            int banked = avatarPaid ? share + (living.Count > 0 ? stones % living.Count : stones) : 0;
+            _campaign.Stones += banked;
+            StonesGained += banked;
             _campaign.Essences.AddRange(res.Drops);
             XpBanked += res.XpPool;
 
@@ -286,7 +286,7 @@ public sealed class DiveSession
             CheckBetrayal(); // a heavy haul under a low bell is when a Grasping merc walks
             if (avatarDown) Eject("you are carried out cold — the dive ends");
             else if (Clock <= 0) Eject("the bell — clock expired");
-            return new FightReport(pack.Def.Id, res.Outcome, gold, res.XpPool, res.Drops, gearGot, lost, wounded)
+            return new FightReport(pack.Def.Id, res.Outcome, stones, res.XpPool, res.Drops, gearGot, lost, wounded)
                 { Shares = shares };
         }
 
@@ -346,7 +346,7 @@ public sealed class DiveSession
     /// </summary>
     public DiveReport RunAuto(bool greedy = false)
     {
-        int gold0 = _campaign.Gold, cleared0 = Packs.Count(p => p.Cleared), ess0 = _campaign.Essences.Count;
+        int stones0 = _campaign.Stones, cleared0 = Packs.Count(p => p.Cleared), ess0 = _campaign.Essences.Count;
         var fights = new List<FightReport>();
         var lostAll = new List<string>();
         var gearAll = new List<string>();
@@ -381,7 +381,7 @@ public sealed class DiveSession
         }
 
         return new DiveReport(
-            Packs.Count(p => p.Cleared) - cleared0, _campaign.Gold - gold0, XpBanked,
+            Packs.Count(p => p.Cleared) - cleared0, _campaign.Stones - stones0, XpBanked,
             _campaign.Essences.Skip(ess0).ToList(), gearAll, lostAll, _campaign.Over, EndReason, fights, notes);
     }
 }

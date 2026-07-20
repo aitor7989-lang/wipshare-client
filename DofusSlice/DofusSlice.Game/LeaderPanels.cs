@@ -338,18 +338,18 @@ public partial class SliceGame
         // The Tithe-Keeper's shadow lives in the bag now (the HUD stays clean).
         int per = TitheContent.Prices.TitheEveryNDives;
         _font.Draw(_sb, _campaign.TitheDue
-                ? $"TITHE DUE: {_campaign.TitheAmount}G — THE KEEPER WAITS"
+                ? $"TITHE DUE: {_campaign.TitheAmount} ST — THE KEEPER WAITS"
                 : $"TITHE IN {per - (_campaign.Dives % per)} DIVE(S)",
             w.X + 34, w.Y + 424, 1, _campaign.TitheDue ? Mono.Danger : Mono.Dim);
 
         // The kamas row, ours: the pack's coin (or the old ink disc), the number, the set progress.
-        if (!DrawIconRect("icon_ui_gold", new Rectangle(w.X + 382, w.Y + 512, 32, 32), pad: 0))
+        if (!DrawIconRect("icon_ui_stone", new Rectangle(w.X + 382, w.Y + 512, 32, 32), pad: 0))
         {
             _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 7, Mono.Ink);
             _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 5, Mono.Panel);
             _prim.DiscAt(_sb, new Vector2(w.X + 398, w.Y + 528), 3, Mono.Ink);
         }
-        _font.Draw(_sb, $"{_campaign.Gold} GOLD", w.X + 414, w.Y + 521, 2, Mono.Ink);
+        _font.Draw(_sb, $"{_campaign.Stones} ESSENCE STONES", w.X + 414, w.Y + 521, 2, Mono.Ink);
         int adv = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
         _font.Draw(_sb, $"ADVENTURER {adv}/7", w.X + 414, w.Y + 545, 1, adv > 0 ? Mono.Ink : Mono.Faint);
         // The panoply ladder: the tier you HOLD in ink, the next rung as the goal line.

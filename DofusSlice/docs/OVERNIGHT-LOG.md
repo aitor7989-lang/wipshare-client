@@ -758,3 +758,17 @@ diff on the tables) surfaced two real fixes:
 - ART-FREE BOOT RE-PROVEN after the icon era: assets hidden, game boots clean —
   letter corner menu, gem-badge vitals, icon-less sheet rows all fall back right.
 - Sims after revert: effects 18/18.
+
+## v9.4: THE CURRENCY IS ESSENCE STONES (owner's call)
+Gold is gone from the fiction: the dead pay in ESSENCE STONES, and the Tithe-Keeper
+collects them. A REAL rename, not a label swap:
+- Core: Campaign.Gold -> Stones, StonesGained, FightReport/DiveReport.Stones,
+  Shares (Name, Stones), MobStonesOf/MobStones, the mob tables' "gold" column ->
+  "stones". Rendering's Ew.Gold/WinGold COLORS untouched (they are paint, not money).
+- UI: every price reads "N ST" (tithe, bread, draught, essences, vet, hires,
+  survivor), the report pays "+N STONES" with "+N ST" member cuts, the bag banks
+  "N ESSENCE STONES" behind the pack's currency-gem glyph (icon_ui_stone replaces
+  icon_ui_gold in the bake). Skill essences keep their soul glyph — stones are the
+  coin, essences are the knowledge.
+- Sim prints speak stones; effects 18/18, survey clean ("avg end stones").
+- QA: bag row + Tithe-Keeper prices screenshot-verified.

@@ -89,7 +89,33 @@ roll one keyword ("burning: strikes apply Burn 1"). The Dofus 6-stat block
 compresses to five readable numbers: HP · DMG · MOVE · MANA · SPEED.
 Sets survive as Mewgenics does them: 3+ pieces of a family = one bonus line.
 
-### 2.5 What stays / what retires
+### 2.5 Look & feel — the CRAWL standard (owner: "I like Crawl's aesthetics
+and how brutal it feels")
+Crawl's brutality recipe (Powerhoof / Barney Cumming, from their art deep-dives):
+- SUPER LOW-RES ON PURPOSE (~150px-tall screens): detail spent on atmosphere and
+  movement, never on rendering. Our half-res 1-bit world is already this creed —
+  commit harder, not softer.
+- STACCATO ANIMATION: no smooth inbetweens — the strike happens BETWEEN two
+  frames with a big MOTION-BLUR SMEAR; delayed follow-through shows weight.
+- CARTOON GORE + OCCULT DRESSING: blood, dismemberment, pentagrams — the
+  violence is loud and the theme is unapologetic.
+- A NARRATOR with a Vincent Price spiel gives the dungeon a voice.
+FOR THE GAUNTLET (our one accent color IS blood):
+- BLOOD PERSISTENCE: hits splatter RED onto the board and it STAYS; corpses
+  stay; by round five the arena is a painting of the fight. Kills pop bone
+  fragments; the Danger red that today means "enemy" becomes "what is left".
+- IMPACT: hit-stop (~80ms freeze on every landed strike, longer on kills),
+  procedural SMEAR (stretch the striker's sprite along the strike vector for
+  one frame), heavier kill-shake, deeper thud layered under lethal blows.
+- THE NARRATOR: the fight log grows a voice — grim one-line couplets on first
+  blood, crits, kills, transformations and the Sexton's arrival ("another
+  mouth for the earth", "the bell is patient; he is not"). Big beats print
+  center-screen in the old-print style.
+- OCCULT DRESSING: candle-lit hazard tiles, a pentagram placement zone, the
+  Sexton's arrival staged as a ritual (the board darkens, wax gutters).
+- A soft VIGNETTE + candle flicker on the world pass; the 1-bit palette holds.
+
+### 2.6 What stays / what retires
 STAYS: the combat engine + animator + band UI + icons + color law + celebration
 + sound + city (ONE screen: Keeper for tithe/crush, Post for hires, DEPART) +
 stones/tithe/bell + Wounded (as scars) + Grasping mercs (they may walk mid-
@@ -100,7 +126,8 @@ panels during runs (the pick replaces them), the wide city.
 
 ## 3. Build plan
 - G1 PROTOTYPE (flagged, old game intact): run controller (fight→pick chain of
-  3 + Sexton), the pick screen, mana/move/strike economy, basic hazard tiles.
+  3 + Sexton), the pick screen, mana/move/strike economy, basic hazard tiles —
+  PLUS the first feel layer: hit-stop, smears, blood persistence, narrator lines.
 - G2: essence pool + synergy engine + visible auras; gear simplification.
 - G3: events, the fork, transformations, scars, the Sexton-arrival clock.
 - G4: retire the old scenes; the gauntlet becomes THE game; balance sims.

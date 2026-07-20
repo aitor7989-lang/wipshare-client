@@ -47,9 +47,12 @@ public sealed class GauntletGame : Game
     private int _fightIndex;             // 0..2 packs, 3 = THE SEXTON
     private bool _runWon, _sextonNow;
     private CampaignUnit _you = NewYou();
+    private CampaignUnit? _mate;         // the hired Sellsword — rides every run until the day he dies
     private readonly List<string> _essences = new();
     private int _bonusHp, _bonusDmg, _bonusMove, _bonusRegen;
+    private int _pendingLevels;          // dings earned this run, each owed a draft of 3
     private const float BellStart = 300f;
+    private const int MateCost = 30;
 
     private static CampaignUnit NewYou(string classId = "cannon") =>
         new() { Id = "avatar", ClassId = classId, Name = "You", IsAvatar = true };
@@ -72,12 +75,15 @@ public sealed class GauntletGame : Game
     private readonly List<(Vector2 from, Vector2 to, float ttl)> _smears = new();
     private readonly List<(string t, Color c, Vector2 p, float born)> _floats = new();
     private readonly List<(Fighter f, CellCoord at)> _corpses = new();
+    private readonly HashSet<string> _fallen = new();   // took the void exit: no corpse, no blood
     private string _narration = ""; private float _narrationUntil;
-    private bool _firstBlood;
+    private bool _firstBlood, _firstSpike;
+    private static readonly Color Gold = new(232, 192, 88);   // the backstab's one glint of color
     private readonly Random _rng = new();
 
     // ----- the pick ------------------------------------------------------------------
     private List<(string title, string body, Action apply)> _cards = new();
+    private bool _pickIsLevel;           // this pick is a ding's word of ruin, not the spoils
 
     public GauntletGame()
     {
@@ -104,14 +110,17 @@ public sealed class GauntletGame : Game
     {
         _runStones = 0; _bell = BellStart; _fightIndex = 0; _sextonNow = false; _runWon = false;
         _essences.Clear(); _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
+        _pendingLevels = 0;
         _you.CurrentHp = null;
+        if (_mate != null) _mate.CurrentHp = null;   // the city rests everyone
         StartFight();
     }
 
     private void StartFight()
     {
-        _blood.Clear(); _smears.Clear(); _floats.Clear(); _corpses.Clear();
-        _manaCarry.Clear(); _selected = -1; _turnOwner = ""; _resolved = false; _firstBlood = false;
+        _blood.Clear(); _smears.Clear(); _floats.Clear(); _corpses.Clear(); _fallen.Clear();
+        _manaCarry.Clear(); _selected = -1; _turnOwner = ""; _resolved = false;
+        _firstBlood = false; _firstSpike = false;
 
         string[][] waves =
         {
@@ -127,16 +136,20 @@ public sealed class GauntletGame : Game
         // be reached from the crew's ground (no sealed pockets, ever).
         var rnd = new Random(++_seed);
         Battlefield field;
-        CellCoord aSpawn; var mobSpawns = new List<CellCoord>();
+        CellCoord aSpawn; CellCoord mateSpawn = default;
+        var mobSpawns = new List<CellCoord>();
         for (int attempt = 0; ; attempt++)
         {
             field = BuildBoard(rnd);
             var taken = new HashSet<CellCoord>();
             aSpawn = Spawn(field, left: true, 0, taken);
+            if (_mate != null) mateSpawn = Spawn(field, left: true, 2, taken);
             mobSpawns.Clear();
             for (int i = 0; i < comp.Length; i++) mobSpawns.Add(Spawn(field, left: false, i, taken));
             bool ok = mobSpawns.All(mc => Pathfinding.FindPath(field, aSpawn, mc,
                 _ => false, allowOccupiedGoal: true) != null);
+            if (_mate != null) ok &= Pathfinding.FindPath(field, aSpawn, mateSpawn,
+                _ => false, allowOccupiedGoal: true) != null;
             if (ok || attempt > 24) break;
         }
 
@@ -144,15 +157,18 @@ public sealed class GauntletGame : Game
         for (int i = 0; i < 24 && _embers.Count < 5; i++)
         {
             var c = new CellCoord(2 + rnd.Next(Cols - 4), rnd.Next(Rows));
-            if (field.IsWalkable(c) && c != aSpawn && !mobSpawns.Contains(c)) _embers.Add(c);
+            if (field.IsWalkable(c) && field.TileAt(c) != TileKind.Spikes
+                && c != aSpawn && !mobSpawns.Contains(c)) _embers.Add(c);
         }
 
         _avatar = Bless(TitheContent.MakeCrewMember(_you, aSpawn));
         var fighters = new List<Fighter> { _avatar };
+        if (_mate != null) fighters.Add(TitheContent.MakeCrewMember(_mate, mateSpawn));
         for (int i = 0; i < comp.Length; i++)
             fighters.Add(TitheContent.MakeMob(comp[i], $"mob_{_fightIndex}_{i}", mobSpawns[i]));
 
-        _engine = new CombatEngine(field, fighters, new SystemRng(_seed));
+        _engine = new CombatEngine(field, fighters, new SystemRng(_seed))
+        { LethalVoid = true };   // the coastline is a weapon: a shove over the edge ends the argument
         _engine.Emitted += OnCombatEvent;
         _engine.Start();
         _scene = Scene.Fight;
@@ -193,6 +209,12 @@ public sealed class GauntletGame : Game
                 if (opts.Count == 0) break;
                 c = opts[rnd.Next(opts.Count)];
             }
+        }
+        // Bone spikes: a few open graves' worth of teeth, mid-board where the fighting happens.
+        for (int i = 0, laid = 0; i < 24 && laid < 3; i++)
+        {
+            var c = new CellCoord(2 + rnd.Next(Cols - 4), rnd.Next(Rows));
+            if (f.TileAt(c) is TileKind.Grass or TileKind.Grass2) { f.SetTile(c, TileKind.Spikes); laid++; }
         }
         return f;
     }
@@ -288,11 +310,13 @@ public sealed class GauntletGame : Game
                 _freeze = Math.Max(_freeze, d.RemainingHp <= 0 ? 0.16f : 0.07f);
                 _shake = Math.Max(_shake, Math.Min(10f, 2f + d.Amount * 0.25f));
                 Splatter(Center(d.At), 4 + Math.Min(8, d.Amount / 3));
-                Float($"-{d.Amount}", Mono.Danger, Center(d.At));
+                Float(d.Backstab ? $"-{d.Amount}!" : $"-{d.Amount}", d.Backstab ? Gold : Mono.Danger, Center(d.At));
                 if (_engine.Current != null && _engine.Current.Pos != d.At)
                     _smears.Add((Center(_engine.Current.Pos), Center(d.At), 0.11f));
                 _sfx.Play("hit_" + d.Element.ToString().ToLowerInvariant(), 0.8f);
                 if (!_firstBlood) { _firstBlood = true; Narrate("first blood feeds the ground."); }
+                if (!_firstSpike && _engine.Field.TileAt(d.At) == TileKind.Spikes && d.Element == Element.Neutral)
+                { _firstSpike = true; Narrate("the bones underfoot are hungry."); }
                 break;
 
             case HealApplied h:
@@ -300,11 +324,26 @@ public sealed class GauntletGame : Game
                 _sfx.Play("heal", 0.6f);
                 break;
 
+            case FighterFell ff:
+                // The void takes them whole: no blood, no corpse — just the long quiet.
+                _fallen.Add(ff.Fighter.Id);
+                _freeze = Math.Max(_freeze, 0.26f); _shake = Math.Max(_shake, 14f);
+                Float("GONE", Mono.Danger, Center(ff.At));
+                _sfx.Play("crush", 0.9f);
+                Narrate(ff.Fighter == _avatar
+                    ? "the dark has a floor. you never find it."
+                    : "the island sheds its dead.");
+                break;
+
             case FighterDied fd:
+                bool fell = _fallen.Contains(fd.Fighter.Id);
                 _freeze = Math.Max(_freeze, 0.2f); _shake = Math.Max(_shake, 12f);
-                Splatter(Center(fd.At), 16);
-                _corpses.Add((fd.Fighter, fd.At));
-                _sfx.Play("death", 0.85f);
+                if (!fell)
+                {
+                    Splatter(Center(fd.At), 16);
+                    _corpses.Add((fd.Fighter, fd.At));
+                    _sfx.Play("death", 0.85f);
+                }
                 if (fd.Fighter.Team == Team.Enemy)
                 {
                     int pay = TitheContent.MobStonesOf(fd.Fighter)
@@ -312,11 +351,13 @@ public sealed class GauntletGame : Game
                     _runStones += pay;
                     Float($"+{pay} st", Mono.Ink, Center(fd.At) + new Vector2(0, -20));
                     if (_essences.Contains("TOLL KEEPER")) _bell += 8f;
-                    Narrate(fd.Fighter.Archetype == "sexton"
+                    if (!fell) Narrate(fd.Fighter.Archetype == "sexton"
                         ? "the gravedigger digs his own."
                         : "another mouth for the earth.");
                 }
-                else Narrate("the ground remembers your name.");
+                else if (!fell) Narrate(fd.Fighter == _avatar
+                    ? "the ground remembers your name."
+                    : "the sellsword's contract ends here.");
                 break;
 
             case FighterPushed p when p.CollisionDamage > 0:
@@ -353,13 +394,25 @@ public sealed class GauntletGame : Game
     private static readonly string[] ClassIds = { "cannon", "archer", "bulwark" };
     private static Rectangle ClassRect(int i) => new(W / 2 - 205 + i * 140, 430, 130, 26);
 
+    /// <summary>The hire is always a class you are not — a second pair of hands, not a mirror.</summary>
+    private string MateClassId() => _you.ClassId == "bulwark" ? "archer" : "bulwark";
+
     private void UpdateCity()
     {
         _sfx.SetAmbient("dirge", 0.09f);
         if (Clicked())
+        {
             for (int i = 0; i < ClassIds.Length; i++)
                 if (ClassRect(i).Contains(MP) && _you.ClassId != ClassIds[i])
-                { _you = NewYou(ClassIds[i]); _sfx.Play("click"); return; }
+                { _you = NewYou(ClassIds[i]); _sfx.Play("click"); return; }   // the hired sword stays hired
+            if (_mate == null && _banked >= MateCost && HireRect.Contains(MP))
+            {
+                _banked -= MateCost;
+                _mate = new CampaignUnit { Id = "mate", ClassId = MateClassId(), Name = "Sellsword" };
+                _sfx.Play("coin", 0.85f);
+                return;
+            }
+        }
         if (Pressed(Keys.Space) || Pressed(Keys.Enter) || (Clicked() && DepartRect.Contains(MP)))
         { _sfx.Play("bell", 0.7f, jitter: false); StartRun(); }
     }
@@ -376,13 +429,23 @@ public sealed class GauntletGame : Game
             {
                 _resolved = true; _endPause = 1.1f;
                 _sfx.Play(_engine.Outcome == FightOutcome.Victory ? "victory" : "defeat", 0.8f, jitter: false);
+                // The Sellsword's contract is written in his own blood: dead is dead.
+                if (_mate != null && _engine.Fighters.FirstOrDefault(f => f.Id == _mate.Id) is { } mf)
+                {
+                    if (!mf.IsAlive) _mate = null;
+                    else _mate.CurrentHp = mf.Hp;
+                }
                 if (_engine.Outcome == FightOutcome.Victory)
                 {
                     _you.CurrentHp = Math.Max(1, _avatar.Hp);
                     int before = _you.Level;
                     _you.GainXp(45 + 30 * Math.Min(_fightIndex, 3));
                     if (_you.Level > before)
-                    { Narrate($"you grow harder. LEVEL {_you.Level} — a new word of ruin."); _sfx.Play("levelup", 0.8f, jitter: false); }
+                    {
+                        _pendingLevels += _you.Level - before;   // each ding owes a draft of three
+                        Narrate($"you grow harder. LEVEL {_you.Level} — a new word of ruin.");
+                        _sfx.Play("levelup", 0.8f, jitter: false);
+                    }
                 }
             }
             _endPause -= dt;
@@ -455,7 +518,9 @@ public sealed class GauntletGame : Game
             {
                 _sfx.Play("coin", 0.8f);
                 _cards[i].apply();
-                StartFight();
+                // Any ding earned gets its own draft before the next fight starts.
+                if (_pendingLevels > 0) { _pendingLevels--; RollLevelCards(); }
+                else StartFight();
                 return;
             }
     }
@@ -491,6 +556,7 @@ public sealed class GauntletGame : Game
         Ess("TOLL KEEPER", "+8 BELL SECONDS\nON EVERY KILL");
 
         var rnd = new Random(++_seed);
+        _pickIsLevel = false;
         _cards = new();
         if (essencePool.Count > 0) _cards.Add(essencePool[rnd.Next(essencePool.Count)]);
         while (_cards.Count < 3)
@@ -498,6 +564,28 @@ public sealed class GauntletGame : Game
             var c = pool[rnd.Next(pool.Count)];
             if (!_cards.Contains(c)) _cards.Add(c);
         }
+    }
+
+    /// <summary>The Mewgenics ding: every level earned drafts three words of ruin — keep one.</summary>
+    private void RollLevelCards()
+    {
+        var pool = new List<(string, string, Action)>
+        {
+            ("IRON MARROW", "+10 MAX HP\n\nthe grave gives\nback a little", () => _bonusHp += 10),
+            ("KILLING WORD", "+5 DAMAGE\n\nsay it and\nsomething breaks", () => _bonusDmg += 5),
+            ("SECOND WIND", "+1 MOVE\n\nthe body learns\nwhat the bell asks", () => _bonusMove += 1),
+            ("DEEP WELL", "+1 MANA A TURN\n\nyou drink where\nno water is", () => _bonusRegen += 1),
+            ("OLD BLOOD", "FULL HEAL\n+4 MAX HP\n\nyours, again", () => { _bonusHp += 4; _you.CurrentHp = null; }),
+        };
+        var rnd = new Random(++_seed);
+        _pickIsLevel = true;
+        _cards = new();
+        while (_cards.Count < 3)
+        {
+            var c = pool[rnd.Next(pool.Count)];
+            if (!_cards.Contains(c)) _cards.Add(c);
+        }
+        _scene = Scene.Pick;
     }
 
     // ================= FEEL HELPERS ====================================================
@@ -538,6 +626,7 @@ public sealed class GauntletGame : Game
     private static Rectangle WellRect(int i) => new(400 + i * 52, H - 92, 48, 48);
     private static Rectangle EndTurnRect => new(W - 190, H - 86, 130, 30);
     private static Rectangle DepartRect => new(W / 2 - 90, 476, 180, 44);
+    private static Rectangle HireRect => new(W / 2 - 170, 556, 340, 30);
     private static Rectangle CardRect(int i) => new(W / 2 - 340 + i * 240, 240, 200, 260);
 
     // ================= DRAW ============================================================
@@ -588,6 +677,21 @@ public sealed class GauntletGame : Game
         Mono.Button(_sb, _prim, DepartRect, hover: hov);
         _font.DrawCentered(_sb, "DEPART", DepartRect.Center.X, DepartRect.Y + 15, 2, Mono.ButtonInk(hov));
         _font.DrawCentered(_sb, "(SPACE)", W / 2, 530, 1, Mono.Faint);
+
+        // The Post: one hire, paid in banked stones, dead when he's dead.
+        if (_mate != null)
+            _font.DrawCentered(_sb, $"THE SELLSWORD RIDES WITH YOU — {_mate.ClassId.ToUpperInvariant()}",
+                W / 2, HireRect.Y + 10, 1, Mono.Ally);
+        else if (_banked >= MateCost)
+        {
+            bool hh = HireRect.Contains(MP);
+            Mono.Button(_sb, _prim, HireRect, hover: hh);
+            _font.DrawCentered(_sb, $"HIRE THE SELLSWORD ({MateClassId().ToUpperInvariant()}) — {MateCost} ST",
+                HireRect.Center.X, HireRect.Y + 10, 1, Mono.ButtonInk(hh));
+        }
+        else
+            _font.DrawCentered(_sb, $"the post wants {MateCost} banked stones for a sellsword.",
+                W / 2, HireRect.Y + 10, 1, Mono.Faint);
     }
 
     private void DrawFight()
@@ -627,7 +731,13 @@ public sealed class GauntletGame : Game
                 _prim.DiamondAt(_sb, Center(c), Mono.Cast * 0.32f);
         if (CellAt(MP) is { } hc && _engine.Field.InBounds(hc)
             && _engine.Field.TileAt(hc) != TileKind.Void)
+        {
             DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
+            // Flanking preview: an armed attack aimed at an exposed back promises its bonus.
+            if (myTurn && _selected >= 0 && _engine.FighterAt(hc) is { Team: Team.Enemy } prey
+                && CombatEngine.IsBackstab(_avatar.Pos, prey))
+                _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 1, Gold);
+        }
 
         // Entities: stones, corpses and fighters share ONE depth-sorted pass, so a
         // sprite behind a rock cluster is properly buried by it.
@@ -636,14 +746,26 @@ public sealed class GauntletGame : Game
             for (int y = 0; y < Rows; y++)
             {
                 var cell = new CellCoord(x, y);
-                if (_engine.Field.TileAt(cell) != TileKind.Rock) continue;
+                var kind = _engine.Field.TileAt(cell);
                 var cc = Center(cell);
-                pass.Add(((x + y) * 4 + 1, () =>
-                {
-                    _prim.BlockAt(_sb, cc, new Color(30, 30, 29), new Color(17, 17, 16), new Color(23, 23, 22));
-                    var rock = _sprites.GetSheet("onebit_rock", "idle", "se");
-                    if (rock != null) SpriteDraw.Feet(_sb, rock, cc + new Vector2(0, -4), Mono.Ink, 26, 0);
-                }));
+                if (kind == TileKind.Rock)
+                    pass.Add(((x + y) * 4 + 1, () =>
+                    {
+                        _prim.BlockAt(_sb, cc, new Color(30, 30, 29), new Color(17, 17, 16), new Color(23, 23, 22));
+                        var rock = _sprites.GetSheet("onebit_rock", "idle", "se");
+                        if (rock != null) SpriteDraw.Feet(_sb, rock, cc + new Vector2(0, -4), Mono.Ink, 26, 0);
+                    }));
+                else if (kind == TileKind.Spikes)
+                    pass.Add(((x + y) * 4 + 1, () =>
+                    {
+                        // an open grave's worth of teeth: three crooked bone spurs
+                        for (int s = 0; s < 3; s++)
+                        {
+                            var b = cc + new Vector2(-13 + s * 13, 7 - s % 2 * 8);
+                            _prim.Line(_sb, b, b + new Vector2(s % 2 == 0 ? 2 : -2, -10), 2f, Mono.Ink * 0.85f);
+                            _prim.FillRect(_sb, new Rectangle((int)b.X + (s % 2 == 0 ? 2 : -4), (int)b.Y - 12, 2, 2), Mono.Ink);
+                        }
+                    }));
             }
         foreach (var (f, at) in _corpses)
         {
@@ -662,6 +784,10 @@ public sealed class GauntletGame : Game
                 bool current = _engine.Outcome == FightOutcome.Ongoing && ff == _engine.Current;
                 _prim.HaloAt(_sb, cc + new Vector2(0, 5),
                     (ff.Team == Team.Player ? Mono.Ally : Mono.Danger) * (current ? 1f : 0.6f));
+                // The facing tick: which way they look is which way you flank.
+                var fo = new Vector2((ff.Facing.X - ff.Facing.Y) * (TW / 4f), (ff.Facing.X + ff.Facing.Y) * (TH / 4f));
+                _prim.Line(_sb, cc + new Vector2(0, 5) + fo * 0.55f, cc + new Vector2(0, 5) + fo * 0.95f,
+                    2f, Mono.Ink * 0.55f);
                 DrawSprite(ff.Archetype, cc,
                     ff.Archetype == "sexton" ? Mono.Danger : Mono.Ink, ff.Archetype == "sexton" ? 62 : 46);
                 _font.DrawCentered(_sb, ff.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
@@ -753,8 +879,11 @@ public sealed class GauntletGame : Game
 
     private void DrawPick()
     {
-        _font.DrawCentered(_sb, "THE SPOILS", W / 2, 120, 4, Mono.Ink);
-        _font.DrawCentered(_sb, "take ONE. the rest sink into the dirt.", W / 2, 168, 1, Mono.Dim);
+        _font.DrawCentered(_sb, _pickIsLevel ? $"A WORD OF RUIN — LEVEL {_you.Level}" : "THE SPOILS",
+            W / 2, 120, 4, _pickIsLevel ? Gold : Mono.Ink);
+        _font.DrawCentered(_sb, _pickIsLevel
+            ? "you grow harder. learn ONE."
+            : "take ONE. the rest sink into the dirt.", W / 2, 168, 1, Mono.Dim);
         _font.DrawCentered(_sb, $"{_runStones} st carried  ·  {(int)_bell}s on the bell  ·  next: {FightLabel()}",
             W / 2, 190, 1, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)

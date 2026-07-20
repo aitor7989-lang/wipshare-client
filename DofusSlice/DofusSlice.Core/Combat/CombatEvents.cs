@@ -22,7 +22,10 @@ public sealed record FighterTeleported(Fighter Fighter, CellCoord From, CellCoor
 
 public sealed record FighterPushed(Fighter Fighter, IReadOnlyList<CellCoord> Path, int CollisionDamage) : CombatEvent;
 
-public sealed record DamageDealt(Fighter Target, int Amount, Element Element, CellCoord At, int RemainingHp, bool Critical = false) : CombatEvent;
+public sealed record DamageDealt(Fighter Target, int Amount, Element Element, CellCoord At, int RemainingHp, bool Critical = false, bool Backstab = false) : CombatEvent;
+
+/// <summary>A push or pull sent this fighter into the void — they are gone, not slain (no corpse).</summary>
+public sealed record FighterFell(Fighter Fighter, CellCoord At) : CombatEvent;
 
 public sealed record SpellFizzled(Fighter Caster, SpellDef Spell) : CombatEvent;
 

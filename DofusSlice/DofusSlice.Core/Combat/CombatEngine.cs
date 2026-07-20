@@ -20,6 +20,14 @@ public sealed class CombatEngine
 
     public int Round { get; private set; }
 
+    /// <summary>When set, a push or pull into a Void tile (or off the map) makes the victim FALL —
+    /// dead, gone, no corpse. Off by default so the classic walled maps keep their collisions;
+    /// the Gauntlet's ragged islands turn it on and every coastline becomes a weapon.</summary>
+    public bool LethalVoid { get; set; }
+
+    /// <summary>Damage dealt by a Spikes tile each time a fighter enters it (walked or thrown).</summary>
+    public const int SpikeDamage = 3;
+
     /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
     public IRng Rng => _rng;
     public IReadOnlyList<Fighter> Fighters => _order;
@@ -88,6 +96,14 @@ public sealed class CombatEngine
         {
             if (k < first.Count) _order.Add(first[k]);
             if (k < second.Count) _order.Add(second[k]);
+        }
+
+        // Everyone opens facing their nearest foe, so round one already has back arcs.
+        foreach (var f in _order.Where(f => f.IsAlive))
+        {
+            var foe = _order.Where(o => o.IsAlive && o.Team != f.Team)
+                .OrderBy(o => f.Pos.DistanceTo(o.Pos)).FirstOrDefault();
+            if (foe != null) f.Facing = StepToward(f.Pos, foe.Pos);
         }
 
         Round = 1;
@@ -198,10 +214,35 @@ public sealed class CombatEngine
                    ?? new List<CellCoord> { f.Pos, dest };
         f.Pos = dest;
         f.CurrentMp -= cost;
+        if (path.Count >= 2) f.Facing = StepToward(path[^2], path[^1]);
         Emit($"{f.Name} moves to {dest} (-{cost} MP, {f.CurrentMp} left)"
              + (paidLock ? " — pulled free of the lock." : "."));
         Raise(new FighterMoved(f, path, cost));
+        ApplyHazards(f, path.Skip(1));
         return true;
+    }
+
+    /// <summary>Bone spikes gash whoever enters them, however they got there (Mewgenics' tile law:
+    /// the ground is a combatant). Applied per cell entered, so a careless sprint bleeds twice.</summary>
+    private void ApplyHazards(Fighter f, IEnumerable<CellCoord> entered)
+    {
+        foreach (var cell in entered)
+        {
+            if (!f.IsAlive) return;
+            if (Field.TileAt(cell) != TileKind.Spikes) continue;
+            f.Hp = Math.Max(0, f.Hp - SpikeDamage);
+            Emit($"  {f.Name} is gashed by bone spikes for {SpikeDamage} ({f.Hp}/{f.MaxHp} HP).");
+            Raise(new DamageDealt(f, SpikeDamage, Element.Neutral, cell, f.Hp));
+            if (!f.IsAlive) { Emit($"  {f.Name} is defeated!"); Raise(new FighterDied(f, cell)); }
+        }
+    }
+
+    /// <summary>True when an attack from that cell lands in the victim's back arc (+25% damage).</summary>
+    public static bool IsBackstab(CellCoord from, Fighter victim)
+    {
+        if (from == victim.Pos) return false;
+        int dx = from.X - victim.Pos.X, dy = from.Y - victim.Pos.Y;
+        return dx * victim.Facing.X + dy * victim.Facing.Y < 0;
     }
 
     // ---- Casting --------------------------------------------------------------------
@@ -300,6 +341,7 @@ public sealed class CombatEngine
 
         caster.CurrentAp -= spell.ApCost;
         caster.RecordCast(spell, Round);
+        if (target != caster.Pos) caster.Facing = StepToward(caster.Pos, target);
         Emit($"{caster.Name} casts {spell.Name} at {target} (-{spell.ApCost} AP).");
         Raise(new SpellCast(caster, spell, target));
 
@@ -502,10 +544,12 @@ public sealed class CombatEngine
     {
         int rolled = _rng.Roll(effect.Min, effect.Max);
         int dmg = ComputeDamage(caster, victim, effect.Element, rolled, crit);
+        bool backstab = caster != victim && IsBackstab(caster.Pos, victim);
+        if (backstab) dmg += dmg / 4; // Mewgenics: +25% from the back arc — geometry is free damage
         var at = victim.Pos;
         victim.Hp = Math.Max(0, victim.Hp - dmg);
-        Emit($"  {victim.Name} takes {dmg} {effect.Element} damage{(crit ? " (CRIT)" : "")} ({victim.Hp}/{victim.MaxHp} HP).");
-        Raise(new DamageDealt(victim, dmg, effect.Element, at, victim.Hp, crit));
+        Emit($"  {victim.Name} takes {dmg} {effect.Element} damage{(crit ? " (CRIT)" : "")}{(backstab ? " — from behind!" : "")} ({victim.Hp}/{victim.MaxHp} HP).");
+        Raise(new DamageDealt(victim, dmg, effect.Element, at, victim.Hp, crit, backstab));
         if (!victim.IsAlive)
         {
             Emit($"  {victim.Name} is defeated!");
@@ -563,6 +607,18 @@ public sealed class CombatEngine
         for (int i = 0; i < cells; i++)
         {
             var next = victim.Pos.Offset(dx, dy);
+            // The fall: sent over a coastline (or off the map entirely), the victim is simply gone.
+            if (LethalVoid && Field.TileAt(next) == TileKind.Void)
+            {
+                path.Add(next);
+                victim.Pos = next;
+                victim.Hp = 0;
+                Emit($"  {victim.Name} is cast into the void!");
+                Raise(new FighterPushed(victim, path, 0));
+                Raise(new FighterFell(victim, next));
+                Raise(new FighterDied(victim, next));
+                return;
+            }
             if (!Field.IsWalkable(next) || IsOccupied(next))
             {
                 int collision = pull ? 0 : (cells - moved) * 5; // only shoves deal collision damage
@@ -579,6 +635,7 @@ public sealed class CombatEngine
                     Emit($"  {victim.Name} is defeated!");
                     Raise(new FighterDied(victim, at));
                 }
+                ApplyHazards(victim, path.Skip(1));
                 return;
             }
             victim.Pos = next;
@@ -589,6 +646,7 @@ public sealed class CombatEngine
         {
             Emit($"  {victim.Name} is {(pull ? "pulled" : "pushed")} {moved} cell(s) to {victim.Pos}.");
             Raise(new FighterPushed(victim, path, 0));
+            ApplyHazards(victim, path.Skip(1));
         }
     }
 

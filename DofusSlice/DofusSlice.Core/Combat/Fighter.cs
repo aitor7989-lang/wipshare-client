@@ -74,6 +74,10 @@ public sealed class Fighter
 
     public CellCoord Pos { get; set; }
 
+    /// <summary>Unit grid direction this fighter faces — the backstab arc's anchor. The engine
+    /// turns a fighter along its last step and toward whatever it casts at.</summary>
+    public CellCoord Facing { get; set; } = new(1, 0);
+
     public IReadOnlyList<SpellDef> Spells { get; init; } = Array.Empty<SpellDef>();
 
     /// <summary>Active timed states (buffs, shields, poison, drains).</summary>

@@ -14,6 +14,7 @@ public enum TileKind
     Tree,    // obstacle: blocks movement and line of sight (taller prop)
     Void,    // hole: not walkable, but you can see across it
     Water,   // not walkable, but you can see (and shoot) across it
+    Spikes,  // walkable hazard: bone spikes gash whoever enters (damage applied by the engine)
 }
 
 public static class TileKindInfo

@@ -78,6 +78,66 @@ touch (the "neatly packing a closet" pleasure).
 - Persistent unlocks: 2 new starting classes' kits, starting trinkets, class variants
 - Small numbers pass rides along here if F1 plays well
 
+## PART 2 — THE BIG SWINGS (owner: "I might want huge changes")
+
+Second research round: Loop Hero's family, and the itch.io dice games (Dicey
+Dungeons and Slice & Dice — both itch-born, both "cool and easy"), plus He Is
+Coming (2025's minimalist auto-battler) and Guild of Dungeoneering (indirect
+control). These are whole-shape candidates, not features.
+
+### Swing A — "THE DICE OF THE DEAD"  (the Slice & Dice shape)
+Slice & Dice: five heroes ARE five dice; faces are their abilities; each turn you
+roll, reroll twice (push-your-luck), assign faces against fully-telegraphed enemy
+attacks. Perfect information + a gamble you chose yourself. Dicey Dungeons: dice
+feed EQUIPMENT slots; static loadouts, chaos tamed by design; every class riffs
+the same core rule differently.
+- TITHE version: each crew member IS a die. Their spells are its faces (our spell
+  glyphs become die faces 1:1). Level-ups upgrade faces, gear and ESSENCES add or
+  transform faces, wounds crack a face blank. Enemies telegraph their strike; you
+  roll the crew, reroll at your nerve's cost, assign. NO GRID — one screen.
+- Keeps: the whole campaign (city, bell, dives, stones, tithe, crushing, sets,
+  hires, Grasping mercs, drops, the celebration). Retires: the tactical grid,
+  movement, AP/MP (the dice ARE the economy).
+- Character: the crew as a fistful of carved bone dice — thematically PERFECT.
+
+### Swing B — "THE ENDLESS PROCESSION"  (the full Loop Hero shape)
+Loop Hero: the hero walks the loop alone; your hands touch only the world (cards)
+and the gear; the one recurring decision is another-lap-or-retreat. He Is Coming:
+"absolute videogame minimalism" — no move choices, no stat picks; strategy IS the
+inventory, a boss arrives every three days. Guild of Dungeoneering: you build the
+dungeon around a hero you never control.
+- TITHE version: the crew walks the yard ON RAILS, lap after lap; fights resolve
+  through the WATCHED AUTOBATTLER WE ALREADY BUILT. Your hands: play GRAVE-CARDS
+  earned from kills onto the yard (a mausoleum spawns wardens + gear odds, a bone
+  orchard breeds ghouls + essences, a shrine mends), manage gear/essences between
+  laps, and answer the bell: one more lap, or leave with the haul. The Sexton
+  alone demands your hand — piloted boss fights keep the Dofus turn as the CLIMAX
+  instead of the routine.
+- Keeps: ~80% of everything (the AI policies, packs, drops, bell, economy, mercs,
+  betrayals — the game BEGAN as a watched autobattler; this is a homecoming).
+  Retires: routine piloting, free-roam walking, per-fight placement.
+
+### Swing C — "THE GRAVE ARCHITECT"  (the inversion — noted, not recommended)
+Play the Tithe-Keeper: bait adventurers INTO the yard you build. The biggest
+fiction flip, the least reuse. Shelved unless the others stale.
+
+### Swing D — "THE PUZZLE TURN"  (Part 1's F1+F2 — the conservative big change)
+Keep the grid; make it Into the Breach: deterministic damage, enemy intents, free
+undo, yard as stops. The evolution path if A/B feel like too much surgery.
+
+### The honest comparison
+- Swing A: boldest, most "cool and easy", one-screen fights, medium build (new
+  combat resolver, ~all campaign code survives). The crew-as-bone-dice image is
+  the strongest single idea either round of research produced.
+- Swing B: highest fun-per-effort — the autobattler, packs, and economy already
+  exist; it mostly DELETES code (piloting routine, pathing, placement). Loop
+  Hero's proven heartbeat (commit-or-retreat) is already our bell.
+- Swing D: safest, keeps the most; also keeps the most COMPLEXITY (grid, AP/MP,
+  LoS) — the thing the owner wants less of.
+- RECOMMENDATION: B as the spine (it is nearly built), with A's dice as the
+  POSSIBLE combat resolver inside it later if watched fights need more player
+  hands. Decide after one B prototype dive.
+
 ## Sources
 - https://after-strategy.com/en/into-the-breach-complete-guide-tactical-strategy-2026/
 - https://atomicbobomb.home.blog/2020/05/17/into-the-breach-enemy-intentions/

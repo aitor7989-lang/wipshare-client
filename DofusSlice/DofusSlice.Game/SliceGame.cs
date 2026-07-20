@@ -795,13 +795,15 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             return;
         }
 
-        // Pass 4: essences don't teleport into the bag — they FALL where the pack died,
+        // Pass 4: essences don't teleport into the bag — they FALL near where the pack died,
         // shining on the dirt until the crew walks them over (leaving snatches leftovers).
+        // SCATTERED a couple of cells clear of the crew's feet, so the shine is actually SEEN
+        // (v9.3 fix: the crew stands on the pack's cell post-fight and swallowed the moment).
         if (_fightReport is { Outcome: FightOutcome.Victory } fr && fr.Drops.Count > 0
             && _packCells.TryGetValue(fr.PackId, out var dropCell))
             foreach (var e in fr.Drops)
                 if (_campaign.Essences.Remove(e))
-                    _groundEssences.Add((e, dropCell, _time));
+                    _groundEssences.Add((e, ScatterFrom(dropCell), _time));
 
         _cryptRun = false;                               // a yard pack cleared
         _scene = Scene.Graveyard; SetupView(_graveMap);
@@ -2826,6 +2828,23 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
         _sb.End();
+    }
+
+    /// <summary>The nearest free yard cell at least two steps from the crew's feet — where a
+    /// fallen essence lands so its shine is seen before it is claimed.</summary>
+    private CellCoord ScatterFrom(CellCoord from)
+    {
+        for (int r = 1; r <= 3; r++)
+            for (int dx = -r; dx <= r; dx++)
+                for (int dy = -r; dy <= r; dy++)
+                {
+                    if (Math.Abs(dx) + Math.Abs(dy) != r) continue;
+                    var c = new CellCoord(from.X + dx, from.Y + dy);
+                    if (_graveField != null && _graveField.InBounds(c) && _graveMap.IsWalkable(c)
+                        && c.DistanceTo(_partyCell) >= 2 && !_packCells.ContainsValue(c))
+                        return c;
+                }
+        return from;
     }
 
     /// <summary>Fallen essences shine on the dirt (Pass 4): a bobbing soul-glyph pulsing

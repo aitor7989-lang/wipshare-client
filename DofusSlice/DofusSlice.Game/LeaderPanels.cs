@@ -23,6 +23,7 @@ public partial class SliceGame
     private bool _dragFromDoll, _dragging;
     private bool _bagPress;             // the press began while the bag was open (else its release is not ours)
     private Point _dragStart;
+    private Rectangle _dragSrcRect;     // where the drag began — a wobbled click released here still clicks
 
     private static readonly (string key, string label)[] StatRows =
     {
@@ -401,17 +402,17 @@ public partial class SliceGame
             _bagPress = true;
             _dragStart = m; _dragItem = null; _dragFromDoll = false; _dragging = false;
             for (int idx = 0; idx < _campaign.Stash.Count && idx < 40; idx++)
-                if (GridRect(idx).Contains(m)) { _dragItem = _campaign.Stash[idx]; break; }
+                if (GridRect(idx).Contains(m)) { _dragItem = _campaign.Stash[idx]; _dragSrcRect = GridRect(idx); break; }
             if (_dragItem == null)
             {
                 var bySlot = a.Equipment.ToDictionary(TitheContent.ItemSlot, id => id);
                 foreach (var d in DollSlots)
                     if (DollSlotRect(d).Contains(m) && bySlot.TryGetValue(d.slot, out string? worn))
-                    { _dragItem = worn; _dragFromDoll = true; break; }
+                    { _dragItem = worn; _dragFromDoll = true; _dragSrcRect = DollSlotRect(d); break; }
             }
         }
         if (_mouse.LeftButton == ButtonState.Pressed && _dragItem != null && !_dragging
-            && Math.Abs(m.X - _dragStart.X) + Math.Abs(m.Y - _dragStart.Y) > 6)
+            && Math.Abs(m.X - _dragStart.X) + Math.Abs(m.Y - _dragStart.Y) > 10)
             _dragging = true;
 
         if (!released) return;
@@ -422,6 +423,8 @@ public partial class SliceGame
         {
             if (!_dragFromDoll && DollRect.Contains(m)) { _campaign.Equip(a, _dragItem); _sfx.Play("coin"); }
             else if (_dragFromDoll && grid.Contains(m)) { _campaign.Unequip(a, _dragItem); _sfx.Play("click"); }
+            // A "drag" that never left its own slot was a wobbly CLICK — honor it as one.
+            else if (_dragSrcRect.Contains(m)) ClickInventoryWindow(m);
         }
         else if ((_scene == Scene.City || _scene == Scene.Graveyard) && ClickMenuButtons(m)) { }
         else ClickInventoryWindow(m);   // a plain click keeps every old behavior

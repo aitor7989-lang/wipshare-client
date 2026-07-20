@@ -735,3 +735,26 @@ ALL FOUR PASSES OF docs/ROADMAP-POLISH.md ARE DONE (18 items + 3.4b).
   "You" now conjugates — YOU REACH / {NAME} REACHES.
 - Still luck-gated in live QA (mechanisms sim-proven): a live essence ground-drop
   and a live gear drag — both thin layers over verified Core calls.
+
+## v9.3: QA sweep — the drops SEEN, the drag hardened, art-free re-proven
+Instrumented QA (husk drop rates temporarily 100%, REVERTED before commit — zero
+diff on the tables) surfaced two real fixes:
+- THE SHINE WAS SWALLOWED: the crew stands on the pack's cell after a fight, so a
+  fallen essence was auto-claimed the same frame it landed — the moment never
+  showed. Fixed with ScatterFrom(): the drop lands on the nearest free yard cell
+  at least two steps from the crew. VERIFIED LIVE: SEIZE shone in cast-blue with
+  its glint two cells from YOU (band well empty), one walk-click later "+SEIZE"
+  floated and the well filled. The whole loop on camera.
+- WOBBLY CLICKS WERE SWALLOWED: a press that drifted >6px armed a drag, and an
+  aimless release dropped the action on the floor — a sloppy click on a doll slot
+  did NOTHING. Threshold raised to 10px and an invalid drop released over its own
+  source slot now falls back to the plain click.
+- Auto-equip note (by design, v8.6): AddGear self-equips upgrades into empty
+  slots, so fresh finds often start ON the doll (the report's FOUND line is the
+  receipt). Drag-to-stash is the way to bench them.
+- Harness note: synthetic held-button mouse MOTION never reaches SDL under the
+  Xvfb rig, so a full drag can't be exercised by the bot — the drag path is
+  compile/review-verified atop the sim-proven Equip/Unequip; clicks fully QA'd.
+- ART-FREE BOOT RE-PROVEN after the icon era: assets hidden, game boots clean —
+  letter corner menu, gem-badge vitals, icon-less sheet rows all fall back right.
+- Sims after revert: effects 18/18.

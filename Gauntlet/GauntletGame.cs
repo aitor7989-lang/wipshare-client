@@ -86,7 +86,13 @@ public sealed class GauntletGame : Game
 
     // ----- the pick ------------------------------------------------------------------
     private List<(string title, string body, string kind, Action apply)> _cards = new();
-    private bool _pickIsLevel;           // this pick is a ding's word of ruin, not the spoils
+    private string _pickTitle = "", _pickSub = "";
+    private Color _pickInk = Mono.Ink;
+
+    // ----- the road (g7): the fork, the events, what survives the night ---------------
+    private string _road = "";           // "" until the fork; then "quiet" or "screaming"
+    private bool _extraPick, _eventDone; // the screaming row's bonus hand; one event a run
+    private bool _ropePulled;            // the loose rope: fight 3 comes a grade angrier
 
     // ----- the covenant (g5): gear in four slots, essences in three themes -------------
     // Isaac's law: an item is a RULE on a shared verb (strike/push/kill/toll), and rules
@@ -168,6 +174,39 @@ public sealed class GauntletGame : Game
                 vd[y * W + x] = Color.Black * (a * a * 0.5f);
             }
         _vignette.SetData(vd);
+        LoadMeta();
+    }
+
+    // ----- what survives the night: a tiny save of the meta (g7) -----------------------
+
+    private static string SavePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "gauntlet-of-the-bell.json");
+
+    private void SaveMeta()
+    {
+        try
+        {
+            File.WriteAllText(SavePath, System.Text.Json.JsonSerializer.Serialize(new
+            { banked = _banked, classId = _you.ClassId, level = _you.Level, xp = _you.Xp, mate = _mate?.ClassId ?? "" }));
+        }
+        catch { /* a lost save must never take the game down with it */ }
+    }
+
+    private void LoadMeta()
+    {
+        try
+        {
+            if (!File.Exists(SavePath)) return;
+            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(SavePath));
+            var r = doc.RootElement;
+            _banked = r.GetProperty("banked").GetInt32();
+            _you = NewYou(r.GetProperty("classId").GetString() ?? "cannon");
+            _you.Level = Math.Max(1, r.GetProperty("level").GetInt32());
+            _you.Xp = Math.Max(0, r.GetProperty("xp").GetInt32());
+            string mate = r.GetProperty("mate").GetString() ?? "";
+            if (mate != "") _mate = new CampaignUnit { Id = "mate", ClassId = mate, Name = "Sellsword" };
+        }
+        catch { /* an unreadable save is a fresh start, not a crash */ }
     }
 
     // ================= RUN FLOW ========================================================
@@ -178,6 +217,7 @@ public sealed class GauntletGame : Game
         _essences.Clear(); _gear.Clear(); _transformed.Clear();
         _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
         _pendingLevels = 0; _kills = 0; _falls = 0;
+        _road = ""; _extraPick = false; _eventDone = false; _ropePulled = false;
         _you.CurrentHp = null;
         if (_mate != null) _mate.CurrentHp = null;   // the city rests everyone
         StartFight();
@@ -326,22 +366,30 @@ public sealed class GauntletGame : Game
             ("tomb_wraith", 2), ("cairn_brute", 3), ("grave_ghoul", 3), ("crypt_warden", 3),
         };
         int budget = 3 + _fightIndex * 2;   // 3 / 5 / 7 points across the run
+        // The fork prices fight 2: the quiet row spares you a body, the screaming row
+        // buys two more and grades the whole host up.
+        if (_fightIndex == 1 && _road == "screaming") budget += 2;
+        if (_fightIndex == 1 && _road == "quiet") budget -= 1;
+        int gradeFloor = _fightIndex == 1 && _road == "screaming" ? 2 : 1;
+        int gradeLift = _fightIndex == 2 && _ropePulled ? 1 : 0;   // the rope answered
+
         var comp = new List<WaveSlot>();
         if (_fightIndex == 2)
         {
             // The champion: one of the heavy half, grown to grade 3 (+60% HP, +30% stats).
             var c = pool[4 + rnd.Next(4)];
-            comp.Add(new WaveSlot(c.id, 3));
+            comp.Add(new WaveSlot(c.id, 3 + gradeLift));
             budget -= c.cost;
         }
         while (budget > 0 && comp.Count < 5)
         {
             var pick = pool[rnd.Next(pool.Length)];
             if (pick.cost > budget) { budget--; continue; }   // small change buys nothing
-            comp.Add(new WaveSlot(pick.id, _fightIndex >= 1 && rnd.Next(3) == 0 ? 2 : 1));
+            int grade = Math.Max(gradeFloor, _fightIndex >= 1 && rnd.Next(3) == 0 ? 2 : 1) + gradeLift;
+            comp.Add(new WaveSlot(pick.id, grade));
             budget -= pick.cost;
         }
-        if (comp.Count == 0) comp.Add(new WaveSlot("barrow_husk", 1));
+        if (comp.Count == 0) comp.Add(new WaveSlot("barrow_husk", gradeFloor));
         return comp.ToArray();
     }
 
@@ -620,6 +668,7 @@ public sealed class GauntletGame : Game
                 _banked -= MateCost;
                 _mate = new CampaignUnit { Id = "mate", ClassId = MateClassId(), Name = "Sellsword" };
                 _sfx.Play("coin", 0.85f);
+                SaveMeta();
                 return;
             }
         }
@@ -665,7 +714,13 @@ public sealed class GauntletGame : Game
                     { _banked += _runStones; _runWon = true; _scene = Scene.End; _sfx.SetAmbient(null); }
                     else { _fightIndex = 3; RollCards(); _scene = Scene.Pick; }
                 }
-                else { _fightIndex++; RollCards(); _scene = Scene.Pick; }
+                else
+                {
+                    _fightIndex++;
+                    // The screaming row keeps its word: fight 2 survived pays a second hand.
+                    if (_fightIndex == 2 && _road == "screaming") _extraPick = true;
+                    RollCards(); _scene = Scene.Pick;
+                }
             }
             return;
         }
@@ -724,11 +779,20 @@ public sealed class GauntletGame : Game
             {
                 _sfx.Play("coin", 0.8f);
                 _cards[i].apply();
-                // Any ding earned gets its own draft before the next fight starts.
-                if (_pendingLevels > 0) { _pendingLevels--; RollLevelCards(); }
-                else StartFight();
+                Advance();
                 return;
             }
+    }
+
+    /// <summary>The road between fights, one screen at a time: dings first, then the
+    /// screaming row's bonus hand, then the fork, then the night's one event — then blood.</summary>
+    private void Advance()
+    {
+        if (_pendingLevels > 0) { _pendingLevels--; RollLevelCards(); return; }
+        if (_extraPick) { _extraPick = false; RollCards(); return; }
+        if (_fightIndex == 1 && _road == "") { RollRoadCards(); return; }
+        if (_fightIndex == 2 && !_eventDone) { RollEventCards(); return; }
+        StartFight();
     }
 
     private void UpdateEnd()
@@ -736,6 +800,7 @@ public sealed class GauntletGame : Game
         if (Pressed(Keys.Space) || Pressed(Keys.Enter) || Clicked())
         {
             if (!_runWon) _you = NewYou(_you.ClassId); // the fallen leader is buried; kin answer
+            SaveMeta();
             _scene = Scene.City;
         }
     }
@@ -745,7 +810,7 @@ public sealed class GauntletGame : Game
     private void RollCards()
     {
         var rnd = new Random(++_seed);
-        _pickIsLevel = false;
+        _pickTitle = "THE SPOILS"; _pickSub = "take ONE. the rest sink into the dirt."; _pickInk = Mono.Ink;
         _cards = new();
 
         // 1) An essence — Isaac's rule-card, one per hand while any remain untaken.
@@ -817,13 +882,66 @@ public sealed class GauntletGame : Game
             ("OLD BLOOD", "FULL HEAL\n+4 MAX HP\n\nyours, again", "RUIN", () => { _bonusHp += 4; _you.CurrentHp = null; }),
         };
         var rnd = new Random(++_seed);
-        _pickIsLevel = true;
+        _pickTitle = $"A WORD OF RUIN — LEVEL {_you.Level}"; _pickSub = "you grow harder. learn ONE."; _pickInk = Gold;
         _cards = new();
         while (_cards.Count < 3)
         {
             var c = pool[rnd.Next(pool.Count)];
             if (!_cards.Contains(c)) _cards.Add(c);
         }
+        _scene = Scene.Pick;
+    }
+
+    /// <summary>The midpoint fork: two rows lead to the Sexton. Walk one.</summary>
+    private void RollRoadCards()
+    {
+        _pickTitle = "THE FORK"; _pickSub = "two rows lead to him. walk one."; _pickInk = Mono.Ink;
+        _cards = new()
+        {
+            ("THE QUIET ROW", "the long way round.\n\nfewer teeth waiting,\nthinner spoils", "ROAD",
+                () => { _road = "quiet"; Narrate("the quiet row. even the crows whisper."); }),
+            ("THE SCREAMING ROW", "every grave open.\n\na grade-2 host —\nand an EXTRA pick\nif you walk out", "ROAD",
+                () => { _road = "screaming"; Narrate("the screaming row. they know you're coming."); }),
+        };
+        _scene = Scene.Pick;
+    }
+
+    /// <summary>One grim little choice a run, before the last pack (Loop Hero's campfire beat).</summary>
+    private void RollEventCards()
+    {
+        _eventDone = true;
+        var rnd = new Random(++_seed);
+        int hurt = Math.Max(1, (_you.CurrentHp ?? TitheContent.UnitMaxHp(_you)) - 8);
+        (string title, string sub, (string, string, string, Action)[] options)[] events =
+        {
+            ("THE OPEN OSSUARY", "a stone lid, already ajar. something glints.",
+                new (string, string, string, Action)[]
+                {
+                    ("PRY IT WIDE", "+25 STONES\n\nand the lid takes\n8 of your blood", "EVENT",
+                        () => { _runStones += 25; _you.CurrentHp = hurt; }),
+                    ("SEAL IT", "+2 TOLLS\n\nthe dead sleep\neasier. so do you", "EVENT",
+                        () => _tolls += 2),
+                }),
+            ("THE WELL OF WAX", "old candle-water, still warm. it smells of church.",
+                new (string, string, string, Action)[]
+                {
+                    ("DRINK DEEP", "FULL HEAL\n\nbut the wax takes\n2 tolls to swallow", "EVENT",
+                        () => { _you.CurrentHp = null; _tolls = Math.Max(0, _tolls - 2); }),
+                    ("PASS BY", "+8 STONES\n\nscraped from\nthe rim", "EVENT",
+                        () => _runStones += 8),
+                }),
+            ("THE LOOSE ROPE", "a bell-rope, frayed, swaying. it wants pulling.",
+                new (string, string, string, Action)[]
+                {
+                    ("PULL IT", "+5 TOLLS\n\nbut the last pack\nwakes a grade angrier", "EVENT",
+                        () => { _tolls += 5; _ropePulled = true; }),
+                    ("LET IT SWAY", "+1 TOLL\n\nrestraint is\nits own coin", "EVENT",
+                        () => _tolls += 1),
+                }),
+        };
+        var ev = events[rnd.Next(events.Length)];
+        _pickTitle = ev.title; _pickSub = ev.sub; _pickInk = Mono.Dim;
+        _cards = ev.options.Select(o => (o.Item1, o.Item2, o.Item3, o.Item4)).ToList();
         _scene = Scene.Pick;
     }
 
@@ -867,7 +985,7 @@ public sealed class GauntletGame : Game
     private static Rectangle EndTurnRect => new(W - 190, H - 86, 130, 30);
     private static Rectangle DepartRect => new(W / 2 - 90, 476, 180, 44);
     private static Rectangle HireRect => new(W / 2 - 170, 556, 340, 30);
-    private static Rectangle CardRect(int i) => new(W / 2 - 340 + i * 240, 240, 200, 260);
+    private Rectangle CardRect(int i) => new(W / 2 - (_cards.Count * 240 - 40) / 2 + i * 240, 240, 200, 260);
 
     // ================= DRAW ============================================================
 
@@ -1248,11 +1366,8 @@ public sealed class GauntletGame : Game
 
     private void DrawPick()
     {
-        _font.DrawCentered(_sb, _pickIsLevel ? $"A WORD OF RUIN — LEVEL {_you.Level}" : "THE SPOILS",
-            W / 2, 120, 4, _pickIsLevel ? Gold : Mono.Ink);
-        _font.DrawCentered(_sb, _pickIsLevel
-            ? "you grow harder. learn ONE."
-            : "take ONE. the rest sink into the dirt.", W / 2, 168, 1, Mono.Dim);
+        _font.DrawCentered(_sb, _pickTitle, W / 2, 120, 4, _pickInk);
+        _font.DrawCentered(_sb, _pickSub, W / 2, 168, 1, Mono.Dim);
         _font.DrawCentered(_sb, $"{_runStones} st carried  ·  {_tolls} tolls on the bell  ·  next: {FightLabel()}",
             W / 2, 190, 1, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)

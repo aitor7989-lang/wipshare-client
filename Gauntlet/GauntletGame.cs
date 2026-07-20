@@ -1763,10 +1763,12 @@ public sealed class GauntletGame : Game, IRunFx
         var name = SpriteOf.GetValueOrDefault(f.Archetype, "husk");
         // Facing: the walk sets it stride by stride; at rest the engine's Facing rules.
         bool flip = _visFlip.TryGetValue(f.Id, out bool vf) ? vf : f.Facing.X - f.Facing.Y < 0;
-        // Missing art never shows a placeholder ball-and-letter (owner report): any
-        // body without its own file borrows the husk's, so the field always reads.
+        // Missing art never shows a placeholder ball-and-letter (owner report): the body's
+        // own file, else its idle, else the committed default silhouette for its kind, else
+        // the husk default. assets-default/ ships these, so the field ALWAYS reads.
         var sheet = _sprites.GetSheet(name, state, flip ? "sw" : "se")
                     ?? _sprites.GetSheet(name, "idle", flip ? "sw" : "se")
+                    ?? _sprites.GetSheet("husk", state, flip ? "sw" : "se")
                     ?? _sprites.GetSheet("husk", "idle", flip ? "sw" : "se");
         var feet = cellCenter + new Vector2(0, TH / 4f + 2);
         if (sheet != null)
@@ -1784,8 +1786,11 @@ public sealed class GauntletGame : Game, IRunFx
         }
         else
         {
-            _prim.DiscAt(_sb, cellCenter, 14, tint * 0.85f);
-            _font.DrawCentered(_sb, f.Archetype[..1].ToUpperInvariant(), (int)cellCenter.X, (int)cellCenter.Y - 4, 2, Mono.Bg);
+            // Last resort if even the committed default silhouettes are somehow absent:
+            // a plain upright body-blob, never a lettered ball (owner report).
+            _prim.FillRect(_sb, new Rectangle((int)cellCenter.X - 6, (int)cellCenter.Y - (int)h + 6,
+                12, (int)h - 6), tint * 0.9f);
+            _prim.DiscAt(_sb, cellCenter + new Vector2(0, -h + 4), 5, tint * 0.9f);
         }
     }
 

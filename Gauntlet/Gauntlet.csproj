@@ -14,7 +14,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Local (gitignored) art baked by DofusSlice/tools/bake_onebit.py — never committed. -->
+    <!-- Committed ORIGINAL silhouette fallbacks (tools/gen_default_sprites.py) so a clean
+         checkout / CI release always renders readable bodies, never placeholder letters. -->
+    <None Include="assets-default\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Local (gitignored) art baked by DofusSlice/tools/bake_onebit.py — never committed;
+         when dropped next to the exe it OVERRIDES the defaults above (SpriteBank indexes
+         assets-default first, then assets). -->
     <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

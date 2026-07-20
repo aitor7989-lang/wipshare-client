@@ -58,8 +58,13 @@ THE RUN:
     [ BLESSING ] instant relief: mend the crew / +bread / +stones
   Every win ALSO banks the Mewgenics level pick when a level is earned:
   draft 3 (new spell / spell rank / +stat), keep 1. No more point menus.
-- THE BELL: each fight costs its seconds; when it rings, the SEXTON ARRIVES
-  wherever you are (the He Is Coming clock). Beat him or be dragged out.
+- THE BELL (g4.8 repricing — the wall-clock is dead): the run grants 20 TOLLS
+  and every turn the leader takes tolls the bell once. Thinking is free;
+  stalling is not — kiting forever, turtling, wandering all spend tolls. At
+  zero the SEXTON ARRIVES after the current fight, wherever you are. Toll
+  Keeper pays +1 toll per kill; Oil for the Bell +5. (The original real-time
+  clock punished deliberation — the one thing a tactics game must never tax —
+  and rang mid-run in every QA playthrough regardless of skill.)
 - Falling mid-gauntlet = a SCAR on that crew member (permanent stat notch,
   named: "the Sexton's Kiss, -2 HP"). The campaign ends only when the leader
   falls with nobody left standing.

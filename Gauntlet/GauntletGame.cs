@@ -43,7 +43,7 @@ public sealed class GauntletGame : Game
     // ----- the run -------------------------------------------------------------------
     private int _banked;                 // stones safe at home, across runs
     private int _runStones;              // carried this run — lost in part if you fall
-    private float _bell;                 // seconds until the Sexton comes for you
+    private int _tolls;                  // the bell: every turn YOU take tolls once; at zero HE comes
     private int _fightIndex;             // 0..2 packs, 3 = THE SEXTON
     private bool _runWon, _sextonNow;
     private CampaignUnit _you = NewYou();
@@ -51,7 +51,7 @@ public sealed class GauntletGame : Game
     private readonly List<string> _essences = new();
     private int _bonusHp, _bonusDmg, _bonusMove, _bonusRegen;
     private int _pendingLevels;          // dings earned this run, each owed a draft of 3
-    private const float BellStart = 300f;
+    private const int TollStart = 20;    // turn-priced, not wall-clock: thinking is free, stalling is not
     private const int MateCost = 30;
 
     private static CampaignUnit NewYou(string classId = "cannon") =>
@@ -124,7 +124,7 @@ public sealed class GauntletGame : Game
 
     private void StartRun()
     {
-        _runStones = 0; _bell = BellStart; _fightIndex = 0; _sextonNow = false; _runWon = false;
+        _runStones = 0; _tolls = TollStart; _fightIndex = 0; _sextonNow = false; _runWon = false;
         _essences.Clear(); _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
         _pendingLevels = 0; _kills = 0; _falls = 0;
         _you.CurrentHp = null;
@@ -343,6 +343,19 @@ public sealed class GauntletGame : Game
                 {
                     _sfx.Play("yourturn", 0.55f, jitter: false);
                     Banner("YOUR TURN", Mono.Ink);
+                    // The bell is turn-priced: each of YOUR turns tolls it once. Think all
+                    // you like — the stopwatch is dead — but stalling has a bill.
+                    if (!_sextonNow && _fightIndex < 3)
+                    {
+                        _tolls--;
+                        if (_tolls <= 0)
+                        {
+                            _tolls = 0; _sextonNow = true;
+                            _sfx.Play("bell", 0.8f, jitter: false);
+                            Narrate("the last toll dies away. HE is coming.");
+                        }
+                        else if (_tolls <= 5) _sfx.Play("bell", 0.35f, jitter: false);
+                    }
                 }
                 else if (ts.Fighter.Archetype == "sexton") Banner("HE MOVES", Mono.Danger);
                 break;
@@ -393,7 +406,7 @@ public sealed class GauntletGame : Game
                               + (_essences.Contains("GRASP'S COIN") ? 1 : 0);
                     _runStones += pay;
                     Float($"+{pay} st", Mono.Ink, Center(fd.At) + new Vector2(0, -20));
-                    if (_essences.Contains("TOLL KEEPER")) _bell += 8f;
+                    if (_essences.Contains("TOLL KEEPER")) _tolls += 1;
                     if (!fell) Narrate(fd.Fighter.Archetype == "sexton"
                         ? "the gravedigger digs his own."
                         : "another mouth for the earth.");
@@ -465,10 +478,6 @@ public sealed class GauntletGame : Game
 
     private void UpdateFight(float dt)
     {
-        _bell = Math.Max(0, _bell - dt);   // rung is rung — no ledger of negative seconds
-        if (_bell <= 0 && !_sextonNow && _fightIndex < 3)
-        { _sextonNow = true; }   // he arrives after this fight, wherever you are
-
         if (_engine.Outcome != FightOutcome.Ongoing)
         {
             if (!_resolved)
@@ -592,14 +601,14 @@ public sealed class GauntletGame : Game
             ("HOUR THIEF", "+1 MANA A TURN\n\nstolen seconds,\nspent as fire", () => _bonusRegen += 1),
             ("MEND", "FULL HEAL NOW\n\nthe bread is\nstale. eat.", () => _you.CurrentHp = null),
             ("COIN OF THE GRASP", "+25 STONES NOW\n\nit hums when\nyou hold it", () => _runStones += 25),
-            ("OIL FOR THE BELL", "+45 BELL SECONDS\n\nhe waits.\nbarely.", () => _bell += 45f),
+            ("OIL FOR THE BELL", "+5 TOLLS\n\nhe waits.\nbarely.", () => _tolls += 5),
         };
         var essencePool = new List<(string, string, Action)>();
         void Ess(string name, string body)
         { if (!_essences.Contains(name)) essencePool.Add((name, body + "\n\nESSENCE — forever", () => { _essences.Add(name); _sfx.Play("chime", 0.7f, jitter: false); })); }
         Ess("WARDEN'S HIDE", "SHIELD 3 AT\nEVERY FIGHT'S START");
         Ess("GRASP'S COIN", "+1 STONE ON\nEVERY KILL");
-        Ess("TOLL KEEPER", "+8 BELL SECONDS\nON EVERY KILL");
+        Ess("TOLL KEEPER", "+1 TOLL\nON EVERY KILL");
 
         var rnd = new Random(++_seed);
         _pickIsLevel = false;
@@ -717,7 +726,7 @@ public sealed class GauntletGame : Game
             _prim.DiscAt(_sb, p, i == 3 ? 4 : 3, i == 3 ? Mono.Danger : Mono.Dim);
         }
         _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 394, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "the bell gives you five minutes. he keeps the change.", W / 2, 408, 1, Mono.Faint);
+        _font.DrawCentered(_sb, "the bell grants twenty tolls. every turn you take is one.", W / 2, 408, 1, Mono.Faint);
         for (int i = 0; i < ClassIds.Length; i++)
         {
             var r = ClassRect(i);
@@ -903,11 +912,11 @@ public sealed class GauntletGame : Game
     private void DrawFightHud(bool myTurn)
     {
         // The bell, top center — the only clock that matters. Under a minute it flickers.
-        float frac = Math.Clamp(_bell / BellStart, 0f, 1f);
-        bool urgent = !_sextonNow && _bell < 60f;
+        float frac = Math.Clamp(_tolls / (float)TollStart, 0f, 1f);
+        bool urgent = !_sextonNow && _tolls <= 5;
         Mono.Bar(_sb, _prim, new Rectangle(W / 2 - 150, 8, 300, 10), frac,
             frac > 0.25f ? Mono.Ink : Mono.Danger);
-        _font.DrawCentered(_sb, $"{(int)MathF.Ceiling(Math.Max(0, _bell))}S — {FightLabel()}", W / 2, 24, 1,
+        _font.DrawCentered(_sb, (_sextonNow ? "THE BELL HAS RUNG — " : $"{_tolls} TOLLS — ") + FightLabel(), W / 2, 24, 1,
             _sextonNow ? Mono.Danger
             : urgent ? Color.Lerp(Mono.Dim, Mono.Danger, 0.5f + 0.5f * MathF.Sin(_time * 6f))
             : Mono.Dim);
@@ -1004,7 +1013,7 @@ public sealed class GauntletGame : Game
         _font.DrawCentered(_sb, _pickIsLevel
             ? "you grow harder. learn ONE."
             : "take ONE. the rest sink into the dirt.", W / 2, 168, 1, Mono.Dim);
-        _font.DrawCentered(_sb, $"{_runStones} st carried  ·  {(int)_bell}s on the bell  ·  next: {FightLabel()}",
+        _font.DrawCentered(_sb, $"{_runStones} st carried  ·  {_tolls} tolls on the bell  ·  next: {FightLabel()}",
             W / 2, 190, 1, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)
         {

@@ -189,15 +189,8 @@ public sealed class GauntletGame : Game
         _manaCarry.Clear(); _selected = -1; _turnOwner = ""; _resolved = false;
         _firstBlood = false; _firstSpike = false;
 
-        string[][] waves =
-        {
-            new[] { "barrow_husk" },
-            new[] { "barrow_husk", "gravehound" },
-            new[] { "marrow_spitter", "barrow_husk", "barrow_husk" },
-            new[] { "sexton", "barrow_husk" },
-        };
         bool boss = _sextonNow || _fightIndex >= 3;
-        var comp = waves[boss ? 3 : _fightIndex];
+        var comp = BuildWave(new Random(_seed * 31 + _fightIndex), boss);
 
         // A ragged island with clustered stones — regenerated until every grave can
         // be reached from the crew's ground (no sealed pockets, ever).
@@ -244,7 +237,7 @@ public sealed class GauntletGame : Game
         var fighters = new List<Fighter> { _avatar };
         if (_mate != null) fighters.Add(TitheContent.MakeCrewMember(_mate, mateSpawn));
         for (int i = 0; i < comp.Length; i++)
-            fighters.Add(TitheContent.MakeMob(comp[i], $"mob_{_fightIndex}_{i}", mobSpawns[i]));
+            fighters.Add(TitheContent.MakeMob(comp[i].Id, $"mob_{_fightIndex}_{i}", mobSpawns[i], comp[i].Grade));
 
         _engine = new CombatEngine(field, fighters, new SystemRng(_seed))
         // The Gauntlet's rules of engagement: coastlines kill, backs are worth finding.
@@ -317,6 +310,40 @@ public sealed class GauntletGame : Game
 
     private string FightLabel() => _sextonNow || _fightIndex >= 3 ? "THE SEXTON"
         : $"FIGHT {_fightIndex + 1} OF 3";
+
+    private readonly record struct WaveSlot(string Id, int Grade);
+
+    /// <summary>The host is drafted, not memorized: each fight spends a points budget on a
+    /// varied comp from the whole bestiary. Deeper fights buy heavier bodies and higher
+    /// grades, and the third pack always fields a grade-3 CHAMPION.</summary>
+    private WaveSlot[] BuildWave(Random rnd, bool boss)
+    {
+        if (boss) return new[] { new WaveSlot("sexton", 1), new WaveSlot("barrow_husk", 2) };
+
+        (string id, int cost)[] pool =
+        {
+            ("grave_mite", 1), ("barrow_husk", 2), ("marrow_spitter", 2), ("gravehound", 2),
+            ("tomb_wraith", 2), ("cairn_brute", 3), ("grave_ghoul", 3), ("crypt_warden", 3),
+        };
+        int budget = 3 + _fightIndex * 2;   // 3 / 5 / 7 points across the run
+        var comp = new List<WaveSlot>();
+        if (_fightIndex == 2)
+        {
+            // The champion: one of the heavy half, grown to grade 3 (+60% HP, +30% stats).
+            var c = pool[4 + rnd.Next(4)];
+            comp.Add(new WaveSlot(c.id, 3));
+            budget -= c.cost;
+        }
+        while (budget > 0 && comp.Count < 5)
+        {
+            var pick = pool[rnd.Next(pool.Length)];
+            if (pick.cost > budget) { budget--; continue; }   // small change buys nothing
+            comp.Add(new WaveSlot(pick.id, _fightIndex >= 1 && rnd.Next(3) == 0 ? 2 : 1));
+            budget -= pick.cost;
+        }
+        if (comp.Count == 0) comp.Add(new WaveSlot("barrow_husk", 1));
+        return comp.ToArray();
+    }
 
     /// <summary>The avatar carries the run's covenant: gear numbers, family sets, essences,
     /// transformations — all folded into one fighter at each fight's dawn.</summary>
@@ -1037,8 +1064,11 @@ public sealed class GauntletGame : Game
                 var fo = new Vector2((ff.Facing.X - ff.Facing.Y) * (TW / 4f), (ff.Facing.X + ff.Facing.Y) * (TH / 4f));
                 _prim.Line(_sb, cc + new Vector2(0, 5) + fo * 0.55f, cc + new Vector2(0, 5) + fo * 0.95f,
                     2f, Mono.Ink * 0.55f);
+                // Champions (grade 3) wear the danger color and stand a head taller.
+                bool champ = ff.Team == Team.Enemy && ff.Level >= 3 && ff.Archetype != "sexton";
                 DrawSprite(ff.Archetype, cc,
-                    ff.Archetype == "sexton" ? Mono.Danger : Mono.Ink, ff.Archetype == "sexton" ? 62 : 46);
+                    ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink,
+                    ff.Archetype == "sexton" ? 62 : champ ? 56 : 46);
                 _font.DrawCentered(_sb, ff.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
                     ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
                 // A sliver of life under the number — the state of the fight at a squint.
@@ -1102,8 +1132,9 @@ public sealed class GauntletGame : Game
 
         // Whoever the cursor rests on gets a name — know your dead before you make them.
         if (CellAt(MP) is { } tc && _engine.FighterAt(tc) is { } tf)
-            _font.Draw(_sb, $"{tf.Name.ToUpperInvariant()}  {tf.Hp}/{tf.MaxHp}", 16, 40, 1,
-                tf.Team == Team.Enemy ? Mono.Danger : Mono.Ally);
+            _font.Draw(_sb,
+                $"{tf.Name.ToUpperInvariant()}{(tf.Team == Team.Enemy && tf.Level >= 3 ? " · CHAMPION" : tf.Team == Team.Enemy && tf.Level == 2 ? " · GRADE 2" : "")}  {tf.Hp}/{tf.MaxHp}",
+                16, 40, 1, tf.Team == Team.Enemy ? Mono.Danger : Mono.Ally);
 
         // Turn order, top right.
         int ty = 10;
@@ -1275,6 +1306,7 @@ public sealed class GauntletGame : Game
         ["barrow_husk"] = "husk", ["gravehound"] = "hound", ["marrow_spitter"] = "spitter",
         ["grave_mite"] = "mite", ["bone_piper"] = "piper", ["tomb_wraith"] = "wraith",
         ["grave_ghoul"] = "ghoul", ["crypt_warden"] = "warden", ["sexton"] = "sexton",
+        ["cairn_brute"] = "warden",
     };
 
     private void DrawSprite(string archetype, Vector2 cellCenter, Color tint, float h)

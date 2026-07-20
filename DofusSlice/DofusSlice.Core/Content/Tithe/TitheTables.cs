@@ -68,6 +68,9 @@ public static class TitheTables
       { "id": "grave_ghoul",   "name": "Grave Ghoul",   "policy": "melee",   "maxHp": 44, "ap": 6, "mp": 4,
         "strength": 24, "agility": 10, "initiative": 12, "skills": ["ghoul_rend"], "xp": 150, "stones": 24,
         "essence": "Seize", "drop": 5, "gear": 5, "resEarth": 20, "resWater": -20 },
+      { "id": "cairn_brute",   "name": "Cairn Brute",   "policy": "melee",   "maxHp": 40, "ap": 6, "mp": 3,
+        "strength": 20, "agility": 8,  "initiative": 8,  "skills": ["slam"], "xp": 140, "stones": 22,
+        "essence": "Seize", "drop": 5, "gear": 5, "resEarth": 15 },
       { "id": "sexton",        "name": "The Sexton",    "policy": "melee",   "maxHp": 190, "ap": 8, "mp": 2,
         "strength": 22, "agility": 6,  "initiative": 7,  "skills": ["sexton_smash", "husk_strike"], "xp": 700, "stones": 120,
         "essence": "Sexton's Toll", "drop": 100, "gear": 65, "resEarth": 20, "resFire": 20, "resAir": 20, "resWater": 20 }

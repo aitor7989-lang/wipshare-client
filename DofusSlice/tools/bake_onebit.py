@@ -116,6 +116,8 @@ ICON_MAP = {
     "icon_spell_flashfire": "RPG_Item_Weapon_Torch_Light_Flame_Fire",
     "icon_spell_blood_pact": "RPG_Buff_Enraged_Anger_Bloodlust_Taunt",
     "icon_spell_blink": "RPG_Buff_Blink_Teleport_Invisibility",
+    "icon_spell_barbed_quill": "RPG_Skill_Poison_Arrow_Bleeding_Shot",
+    "icon_spell_backblast": "RPG_Spell_Skill_Magic_Explosive_Explosion",
     # mob signatures (enemy hover cards + essence-taught spells)
     "icon_spell_husk_strike": "Boardgames_Card_Attack_Sword",
     "icon_spell_marrow_spit": "Misc_Poison_Venom_Skull_Drop_Death",

@@ -136,7 +136,9 @@ public partial class SliceGame
             + $"   ·   INITIATIVE {s.Initiative}", L, w.Y + 458, 1, Mono.Dim);
 
         int set = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
-        _font.Draw(_sb, $"ADVENTURER SET: {set}/7 PIECES", L, w.Y + 476, 1, set > 0 ? Mono.Ink : Mono.Faint);
+        int bone = TitheContent.SetPiecesEquipped(a, TitheContent.CryptSet);
+        _font.Draw(_sb, $"ADVENTURER SET: {set}/7" + (bone > 0 ? $"   ·   BONEWROUGHT: {bone}/5" : " PIECES"),
+            L, w.Y + 476, 1, set + bone > 0 ? Mono.Ink : Mono.Faint);
 
         var mercs = _campaign.Crew.Where(c => !c.IsAvatar).ToList();
         if (mercs.Count > 0)
@@ -351,11 +353,16 @@ public partial class SliceGame
         }
         _font.Draw(_sb, $"{_campaign.Stones} ESSENCE STONES", w.X + 414, w.Y + 521, 2, Mono.Ink);
         int adv = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
-        _font.Draw(_sb, $"ADVENTURER {adv}/7", w.X + 414, w.Y + 545, 1, adv > 0 ? Mono.Ink : Mono.Faint);
-        // The panoply ladder: the tier you HOLD in ink, the next rung as the goal line.
-        var tiers = TitheContent.SetTierSummaries(TitheContent.GraveyardSet).ToList();
-        var held = tiers.LastOrDefault(t => t.Pieces <= adv);
-        var goal = tiers.FirstOrDefault(t => t.Pieces > adv);
+        int bone = TitheContent.SetPiecesEquipped(a, TitheContent.CryptSet);
+        _font.Draw(_sb, $"ADVENTURER {adv}/7" + (bone > 0 ? $"  ·  BONEWROUGHT {bone}/5" : ""),
+            w.X + 414, w.Y + 545, 1, adv + bone > 0 ? Mono.Ink : Mono.Faint);
+        // The panoply ladder follows the set you're actually building (more pieces wins):
+        // the tier you HOLD in ink, the next rung as the goal line.
+        string ladderSet = bone > adv ? TitheContent.CryptSet : TitheContent.GraveyardSet;
+        int ladderN = Math.Max(adv, bone);
+        var tiers = TitheContent.SetTierSummaries(ladderSet).ToList();
+        var held = tiers.LastOrDefault(t => t.Pieces <= ladderN);
+        var goal = tiers.FirstOrDefault(t => t.Pieces > ladderN);
         int sy = w.Y + 559;
         if (held.Pieces > 0)
         { _font.Draw(_sb, Trunc($"{held.Pieces} PC: {held.Text}", 40), w.X + 414, sy, 1, Mono.Ink); sy += 12; }

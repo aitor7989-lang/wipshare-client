@@ -301,6 +301,8 @@ public static class TitheContent
 
     /// <summary>The Graveyard's one starter panoply (Bible §5): the set its mobs and the Sexton drop.</summary>
     public const string GraveyardSet = "adventurer";
+    /// <summary>The Crypt's panoply — five Bonewrought pieces, +1 AP at the full set.</summary>
+    public const string CryptSet = "bonewrought";
 
     // ----- Essences (Bible §6.5): consumables that teach their mob's signature skill -----
 
@@ -372,10 +374,11 @@ public static class TitheContent
         ["gravehound"] = new[] { "adv_boots", "adv_ring" },
         ["marrow_spitter"] = new[] { "adv_amulet", "adv_ring" },
         ["grave_mite"] = new[] { "adv_ring" },
-        ["bone_piper"] = new[] { "adv_amulet", "adv_hat" },
-        ["tomb_wraith"] = new[] { "adv_cape", "adv_amulet" },
-        ["grave_ghoul"] = new[] { "adv_blade", "adv_belt" },
-        ["crypt_warden"] = new[] { "adv_blade", "adv_hat" },
+        ["bone_piper"] = new[] { "adv_amulet", "adv_hat", "bone_crown", "bone_loop" },
+        ["tomb_wraith"] = new[] { "adv_cape", "adv_amulet", "bone_mantle", "bone_loop" },
+        ["grave_ghoul"] = new[] { "adv_blade", "adv_belt", "bone_girdle", "bone_maul" },
+        ["crypt_warden"] = new[] { "adv_blade", "adv_hat", "bone_maul", "bone_crown" },
+        ["sexton"] = new[] { "bone_maul", "bone_crown", "bone_mantle", "bone_loop", "bone_girdle" },
     };
 
     /// <summary>Resolve a gear roll AGAINST THE FAMILY'S POOL: ~15% a unique, else an unowned

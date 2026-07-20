@@ -785,3 +785,21 @@ Frontier round 1 of 3 (owner: "do everything you mentioned").
   offers "CRUSH <NAME> INTO STONES (+60 st) — THE KNOWLEDGE IS LOST". Same
   substance, lesser form: the dark bargain made explicit.
 - Sims: effects 18/18, survey 40+40 clean, progression completes.
+
+## v9.6: THE DEEP — the Bonewrought set, fourth spells, a longer Crypt
+Frontier round 2 of 3.
+- THE BONEWROUGHT SET: five crypt pieces (Maul/Crown/Mantle/Loop/Girdle), stronger
+  per piece than Adventurer, tier ladder to a full-set +1 AP — the counterpart
+  scream to Adventurer's +1 MP. Deep families carry it to their graves (piper,
+  wraith, ghoul, warden pools extended); the SEXTON now draws exclusively from it.
+  StatsOf already folds any worn set generically — no engine change needed. The
+  bag's ladder follows whichever set you hold more of; sheet + bag show both counts.
+- FOURTH SPELLS: every class now ladders to four. Archer L4 = BARBED QUILL (air
+  6-9 + poison 4/turn for 2 — the DoT niche; ranks extend range then drop the
+  cooldown). Cannon L4 = BACKBLAST (fire 10-15 + pushes 2 — the artillery panic
+  button; ranks extend range then cut it to 2 AP). Icons baked (46 now).
+  Progression sim proves the L4 build: "Backblast III (AP2, 1-4)" in the kit.
+- THE CRYPT DEEPENS: 4 -> 6 sealing-door rooms — THE WAILING GALLERY (wraiths +
+  piper) and THE BONE ORCHARD (ghouls + wraith + warden) now stand between the
+  Reliquary and the Sexton's Court. The big bet got longer and darker.
+- Sims: effects 18/18, crypt chain runs 6 rooms, survey clean.

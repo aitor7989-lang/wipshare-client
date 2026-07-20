@@ -25,7 +25,7 @@ public static class TitheTables
       { "id": "archer",  "name": "Archer",  "policy": "skirmisher", "passive": "long_shot", "element": "air", "baseHp": 26, "ap": 6, "mp": 4,
         "vitality": 14, "strength": 6, "intelligence": 4, "chance": 4, "agility": 20, "wisdom": 14, "initiative": 15, "prefRangeMin": 4, "prefRangeMax": 8,
         "growth": { "vitality": 1, "agility": 4 },
-        "skills": ["piercing_shot", "crippling_arrow", "deadeye"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
+        "skills": ["piercing_shot", "crippling_arrow", "deadeye", "barbed_quill"], "blurb": "An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage." },
       { "id": "bulwark", "name": "Bulwark", "policy": "bruiser", "passive": "rage_below", "element": "earth", "baseHp": 48, "ap": 6, "mp": 3,
         "vitality": 52, "strength": 20, "intelligence": 4, "chance": 4, "agility": 12, "wisdom": 10, "initiative": 8,  "prefRangeMin": 1, "prefRangeMax": 1,
         "growth": { "vitality": 3, "strength": 2 },
@@ -33,7 +33,7 @@ public static class TitheTables
       { "id": "cannon",  "name": "Cannon",  "policy": "artillery", "passive": "overchannel", "element": "fire", "baseHp": 34, "ap": 7, "mp": 3,
         "vitality": 24, "strength": 6, "intelligence": 30, "chance": 4, "agility": 10, "wisdom": 12, "initiative": 11, "prefRangeMin": 3, "prefRangeMax": 6,
         "growth": { "vitality": 2, "intelligence": 3 },
-        "skills": ["ruin_bolt", "flashfire", "blood_pact"], "blurb": "A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage." }
+        "skills": ["ruin_bolt", "flashfire", "blood_pact", "backblast"], "blurb": "A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage." }
     ]
     """;
 
@@ -91,6 +91,12 @@ public static class TitheTables
       { "key": "ruin_bolt", "name": "Ruin Bolt", "ap": 4, "min": 3, "max": 6, "los": true,
         "ranks": [ { "max": 7 }, { "ap": 3 } ],
         "effects": [ { "kind": "damage", "element": "fire", "min": 18, "max": 24 } ] },
+      { "key": "barbed_quill", "name": "Barbed Quill", "ap": 3, "min": 4, "max": 7, "los": true, "cooldown": 1,
+        "ranks": [ { "max": 8 }, { "cooldown": 0 } ],
+        "effects": [ { "kind": "damage", "element": "air", "min": 6, "max": 9 }, { "kind": "status", "status": "poison", "mag": 4, "turns": 2 } ] },
+      { "key": "backblast", "name": "Backblast", "ap": 3, "min": 1, "max": 3, "los": true, "cooldown": 1,
+        "ranks": [ { "max": 4 }, { "ap": 2 } ],
+        "effects": [ { "kind": "damage", "element": "fire", "min": 10, "max": 15 }, { "kind": "push", "cells": 2 } ] },
       { "key": "husk_strike", "name": "Husk Strike", "ap": 3, "min": 1, "max": 1, "los": true,
         "effects": [ { "kind": "damage", "element": "earth", "min": 12, "max": 18 } ] },
       { "key": "marrow_spit", "name": "Marrow Spit", "ap": 3, "min": 3, "max": 6, "los": true,
@@ -297,6 +303,8 @@ public static class TitheTables
       { "name": "The Ossuary",        "comp": ["barrow_husk", "barrow_husk", "gravehound"], "grade": 1 },
       { "name": "The Nave",           "comp": ["crypt_warden", "grave_mite", "grave_mite", "gravehound"], "grade": 2 },
       { "name": "The Reliquary",      "comp": ["crypt_warden", "crypt_warden", "marrow_spitter", "gravehound", "gravehound"], "grade": 2 },
+      { "name": "The Wailing Gallery", "comp": ["tomb_wraith", "tomb_wraith", "bone_piper", "grave_mite"], "grade": 2 },
+      { "name": "The Bone Orchard",    "comp": ["grave_ghoul", "grave_ghoul", "tomb_wraith", "crypt_warden"], "grade": 3 },
       { "name": "The Sexton's Court", "comp": ["sexton", "crypt_warden", "crypt_warden", "grave_mite", "grave_mite", "bone_piper"], "boss": true, "grade": 3 }
     ]
     """;
@@ -320,6 +328,12 @@ public static class TitheTables
       { "id": "adv_belt",   "name": "Adventurer Belt",   "slot": "belt",   "set": "adventurer", "vitality": 8, "strength": 3, "power": 2 },
       { "id": "adv_boots",  "name": "Adventurer Boots",  "slot": "boots",  "set": "adventurer", "agility": 6, "chance": 4, "vitality": 6 },
 
+      { "id": "bone_maul",   "name": "Bonewrought Maul",   "slot": "weapon", "set": "bonewrought", "strength": 9, "intelligence": 9, "power": 5 },
+      { "id": "bone_crown",  "name": "Bonewrought Crown",  "slot": "hat",    "set": "bonewrought", "vitality": 14, "wisdom": 7, "intelligence": 6 },
+      { "id": "bone_mantle", "name": "Bonewrought Mantle", "slot": "cape",   "set": "bonewrought", "vitality": 10, "agility": 7, "power": 4 },
+      { "id": "bone_loop",   "name": "Bonewrought Loop",   "slot": "ring",   "set": "bonewrought", "strength": 6, "intelligence": 6, "chance": 6 },
+      { "id": "bone_girdle", "name": "Bonewrought Girdle", "slot": "belt",   "set": "bonewrought", "vitality": 12, "strength": 6, "power": 3 },
+
       { "id": "gravewalkers",  "name": "Gravewalkers",     "slot": "boots",  "agility": 4, "mp": 1 },
       { "id": "pipers_whistle","name": "Piper's Whistle",  "slot": "amulet", "wisdom": 4, "ap": 1 }
     ]
@@ -339,6 +353,12 @@ public static class TitheTables
         { "pieces": 5, "vitality": 40, "strength": 10, "intelligence": 10, "agility": 6,  "wisdom": 4,  "power": 6 },
         { "pieces": 6, "vitality": 55, "strength": 15, "intelligence": 15, "agility": 10, "wisdom": 8,  "power": 10 },
         { "pieces": 7, "vitality": 75, "strength": 22, "intelligence": 22, "agility": 15, "wisdom": 12, "power": 15, "mp": 1 }
+      ] },
+      { "id": "bonewrought", "name": "Bonewrought Set", "tiers": [
+        { "pieces": 2, "vitality": 14, "power": 3 },
+        { "pieces": 3, "vitality": 26, "strength": 8,  "intelligence": 8,  "power": 6 },
+        { "pieces": 4, "vitality": 42, "strength": 14, "intelligence": 14, "wisdom": 8,  "power": 10 },
+        { "pieces": 5, "vitality": 60, "strength": 20, "intelligence": 20, "agility": 10, "wisdom": 12, "power": 14, "ap": 1 }
       ] }
     ]
     """;

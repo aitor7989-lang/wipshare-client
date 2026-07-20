@@ -372,7 +372,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                        _campaign.Stones >= P.HardBread, () => _campaign.BuyBread()));
                 if (_campaign.Essences.Count > 0)
                     a.Add(($"CRUSH {_campaign.Essences[0].ToUpperInvariant()} INTO STONES  (+{P.EssenceSell} st) — THE KNOWLEDGE IS LOST",
-                           true, () => _campaign.CrushEssence(_campaign.Essences[0])));
+                           true, () => { if (_campaign.CrushEssence(_campaign.Essences[0]))
+                                             _sfx.Play("crush", 0.8f, jitter: false); }));
                 break;
             case 1: // the Temple Sister
                 var w = _campaign.Crew.FirstOrDefault(u => u.Wounded);
@@ -547,7 +548,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _campaign.Essences.Add(g.essence);
                 SpawnWorldFloat($"+{g.essence.ToUpperInvariant()}", Mono.Cast,
                     _proj.CellCenter(g.cell) + new Vector2(0, -40));
-                _sfx.Play("coin", 0.9f);
+                _sfx.Play("chime", 0.8f, jitter: false); // the soul acknowledges its keeper
             }
         if (UpdateHunters(dt)) return; // a hunting pack may catch the crew mid-stride
 
@@ -774,6 +775,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _turnOwner = _engine.Current.Id;
             _turnClock = TurnSeconds; _enemyTimer = 0f; _enemyActed = false;
             _autoTurn = false; _selectedSpell = -1;
+            if (AvatarTurn) _sfx.Play("yourturn", 0.6f, jitter: false); // the baton, audibly
         }
         if (AvatarTurn && !_autoTurn) UpdateAvatarTurn(dt);   // YOUR turn, by hand
         else UpdateWatchedTurn(sdt);                          // everyone else plays themselves
@@ -1999,10 +2001,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void UpdateAmbient()
     {
         string? want = null;
-        if (_loop && _scene == Scene.Graveyard) want = "wind";
+        if (_loop && _scene == Scene.City) want = "dirge";     // the town beside a grave
+        else if (_loop && _scene == Scene.Graveyard) want = "wind";
         else if (_loop && _scene == Scene.Combat && _cryptRun) want = "drone";
         else if (_loop && _scene == Scene.Combat) want = "wind";
-        _sfx.SetAmbient(want, want == "drone" ? 0.2f : 0.13f);
+        _sfx.SetAmbient(want, want switch { "drone" => 0.2f, "dirge" => 0.10f, _ => 0.13f });
 
         if (_dive != null && !_dive.Ended)
         {

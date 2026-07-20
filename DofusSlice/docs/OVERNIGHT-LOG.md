@@ -803,3 +803,18 @@ Frontier round 2 of 3.
   piper) and THE BONE ORCHARD (ghouls + wraith + warden) now stand between the
   Reliquary and the Sexton's Court. The big bet got longer and darker.
 - Sims: effects 18/18, crypt chain runs 6 rooms, survey clean.
+
+## v9.7: THE DIRGE — sound depth (the frontier run closes)
+Frontier round 3 of 3. Four synthesized additions to the SoundBank (all pure math,
+loop-safe tremolo rates on the bed):
+- THE CITY'S DIRGE: the city was silent — now it hums a slow minor lament (C2 root,
+  minor third, fifth, faint filtered breath) at 0.10 volume. Every scene has a bed:
+  city dirge, graveyard wind, crypt drone.
+- YOUR TURN cue: a soft rising two-note pluck the moment the piloted turn begins —
+  you hear the baton before you read the banner.
+- The essence CHIME: claiming a fallen essence rings two glassy partials instead
+  of the coin clink.
+- The Keeper's CRUSH: grinding an essence into stones sounds like what it is — a
+  grind collapsing to a crack.
+- Build + boot smoke clean (recipes synthesize at startup; zero exceptions).
+THE FRONTIER RUN IS COMPLETE: v9.5 Ledger, v9.6 Deep, v9.7 Dirge.

@@ -100,11 +100,31 @@ public sealed class SoundBank
             Gain(Env(Tone(1.6, _ => 220 * 5.40, Sin), 0.004, 0.16), 0.25),
             Gain(Env(Tone(1.6, _ => 220 * 1.02, Sin), 0.004, 0.55), 0.4)));
 
+        // -- the dirge round (v9.7) ---------------------------------------------------
+        // The essence CHIME: two glassy partials — the soul acknowledging its new keeper.
+        yield return ("chime", Gain(Mix(
+            Env(Tone(0.25, _ => 1318, Sin), 0.002, 0.18),
+            At(Env(Tone(0.4, _ => 1976, Sin), 0.002, 0.28), 0.12)), 0.45));
+        // The Keeper's wheel CRUSHING knowledge into coin: a grind collapsing to a crack.
+        yield return ("crush", Env(Mix(
+            Gain(Noise(0.3), 1.0), Tone(0.28, Glide(180, 40, 0.26), Saw)), 0.004, 0.1));
+        // YOUR TURN: a soft rising two-note pluck — the baton passed to your hand.
+        yield return ("yourturn", Gain(Mix(
+            Env(Tone(0.09, _ => 440, Tri), 0.004, 0.07),
+            At(Env(Tone(0.16, _ => 587, Tri), 0.004, 0.12), 0.1)), 0.5));
+
         // -- ambient loops (frequencies chosen to loop seamlessly) --------------------
         yield return ("wind", Gain(Tremolo(LowPass(Noise(4.0), 28), 0.5, 0.55), 2.2));
         yield return ("drone", Gain(Mix(
             Tone(4.0, _ => 55, Sin), Gain(Tone(4.0, _ => 82.5, Sin), 0.5),
             Gain(Tremolo(LowPass(Noise(4.0), 40), 0.25, 0.5), 1.2)), 0.7));
+        // The CITY'S DIRGE: a slow minor lament (C2 root, minor third, fifth breathing at
+        // loop-safe tremolo rates) under faint filtered breath — the town beside a grave.
+        yield return ("dirge", Gain(Mix(
+            Tremolo(Tone(4.0, _ => 65, Sin), 0.25, 0.35),
+            Gain(Tremolo(Tone(4.0, _ => 77.75, Sin), 0.25, 0.4), 0.55),
+            Gain(Tone(4.0, _ => 97.5, Sin), 0.3),
+            Gain(Tremolo(LowPass(Noise(4.0), 22), 0.5, 0.5), 0.8)), 0.6));
     }
 
     /// <summary>Fire-and-forget with a per-sound cooldown and a touch of pitch jitter.</summary>

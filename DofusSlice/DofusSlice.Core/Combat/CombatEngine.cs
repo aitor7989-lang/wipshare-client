@@ -32,6 +32,15 @@ public sealed class CombatEngine
     /// Off by default so the classic TITHE fights keep their original arithmetic.</summary>
     public bool Backstabs { get; set; }
 
+    /// <summary>Extra per-cell danger the game layers on top of the board (ember graves).
+    /// AI policies read <see cref="DangerAt"/> so they stop parking on hot ground.</summary>
+    public Func<CellCoord, int>? TileDanger { get; set; }
+
+    /// <summary>How much a fighter expects to bleed for standing on this cell — spikes the
+    /// engine knows about plus whatever the game registered via <see cref="TileDanger"/>.</summary>
+    public int DangerAt(CellCoord cell) =>
+        (Field.TileAt(cell) == TileKind.Spikes ? SpikeDamage : 0) + (TileDanger?.Invoke(cell) ?? 0);
+
     /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
     public IRng Rng => _rng;
     public IReadOnlyList<Fighter> Fighters => _order;
@@ -214,7 +223,10 @@ public sealed class CombatEngine
         if (!range.TryGetValue(dest, out int cost) || cost > f.CurrentMp) return false;
 
         bool paidLock = TackleSurcharge(f) > 0 && cost > 0; // the surcharge is folded into cost
-        var path = Pathfinding.FindPath(Field, f.Pos, dest, c => c != f.Pos && IsOccupied(c))
+        // Danger rides the route as a tie-break: same MP spent, but among equally short
+        // walks the mover threads BETWEEN the spikes and embers instead of through them.
+        var path = Pathfinding.FindPath(Field, f.Pos, dest, c => c != f.Pos && IsOccupied(c),
+                       stepDanger: f.HazardImmune ? null : DangerAt)
                    ?? new List<CellCoord> { f.Pos, dest };
         f.Pos = dest;
         f.CurrentMp -= cost;

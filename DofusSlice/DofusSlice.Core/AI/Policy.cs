@@ -33,9 +33,29 @@ public static class Policy
                 AiPolicy.Flanker => Charge(engine, self, preferSoftest: true),
                 _ => Charge(engine, self, preferSoftest: false),
             };
-            if (!acted) return;
+            if (!acted) { StepOffHazard(engine, self); return; }
         }
     }
+
+    /// <summary>The floor is lava awareness (owner report: a mob stood in an ember grave doing
+    /// nothing). A turn that ends with MP to spare and fire underfoot steps to safe ground —
+    /// preferring a cell that can still shoot, then the policy's preferred distance.</summary>
+    private static void StepOffHazard(CombatEngine engine, Fighter self)
+    {
+        if (self.CurrentMp <= 0 || self.HazardImmune || engine.DangerAt(self.Pos) <= 0) return;
+        var reachable = engine.MovementRange(self);
+        bool ranged = self.Policy is AiPolicy.Skirmisher or AiPolicy.Artillery or AiPolicy.Support;
+        var safe = reachable.Keys.Where(c => engine.DangerAt(c) <= 0)
+            .OrderByDescending(c => CanHitAnyEnemyFrom(engine, self, c))
+            .ThenBy(c => ranged ? -DistToNearestEnemy(engine, self, c) : DistToNearestEnemy(engine, self, c))
+            .ThenBy(c => reachable[c])
+            .Cast<CellCoord?>().FirstOrDefault();
+        if (safe is { } cell) engine.TryMove(self, cell);
+    }
+
+    /// <summary>What stopping on this cell costs in blood — 0 for the hazard-immune.</summary>
+    private static int Danger(CombatEngine engine, Fighter self, CellCoord c) =>
+        self.HazardImmune ? 0 : engine.DangerAt(c);
 
     /// <summary>Cast a self-shield (Ironhide) once when an enemy is closing and we're unshielded.</summary>
     private static void TrySelfBuff(CombatEngine engine, Fighter self)
@@ -144,9 +164,11 @@ public static class Policy
         // itself happily spends its last MP on a DIAGONAL neighbor — adjacent to the eye,
         // yet outside every orthogonal melee range, so the turn's blow is wasted (QA runs:
         // hounds, husks and the Sexton all parked diagonally for whole turns).
+        // A hot attack cell is worth a short detour, not a long one: danger rides the
+        // distance as a soft cost, so a spike-free flank wins when it's near.
         var goal = engine.Field.Orthogonal(target.Pos)
             .Where(c => engine.Field.IsWalkable(c) && (c == self.Pos || !engine.IsOccupied(c)))
-            .OrderBy(c => c.DistanceTo(self.Pos))
+            .OrderBy(c => c.DistanceTo(self.Pos) + Danger(engine, self, c))
             .Cast<CellCoord?>()
             .FirstOrDefault() ?? target.Pos;
         return StepToward(engine, self, goal);
@@ -170,7 +192,8 @@ public static class Policy
         // (furthest from the nearest enemy) so the kiter keeps its distance while still firing.
         CellCoord? firing = reachable.Keys
             .Where(cell => CanHitAnyEnemyFrom(engine, self, cell))
-            .OrderByDescending(cell => DistToNearestEnemy(engine, self, cell))
+            .OrderBy(cell => Danger(engine, self, cell))   // never snipe from inside a grave
+            .ThenByDescending(cell => DistToNearestEnemy(engine, self, cell))
             .ThenBy(cell => reachable[cell])
             .Cast<CellCoord?>()
             .FirstOrDefault();
@@ -186,7 +209,7 @@ public static class Policy
         if (here > band) return StepToward(engine, self, target.Pos);
 
         var safest = reachable.Keys
-            .OrderByDescending(cell => DistToNearestEnemy(engine, self, cell))
+            .OrderByDescending(cell => DistToNearestEnemy(engine, self, cell) * 3 - Danger(engine, self, cell))
             .ThenBy(cell => reachable[cell])
             .First();
         if (DistToNearestEnemy(engine, self, safest) > here) return engine.TryMove(self, safest);
@@ -254,7 +277,9 @@ public static class Policy
         var field = Pathfinding.DistanceField(engine.Field, goal);
         int Geo(CellCoord c) => field.TryGetValue(c, out int d) ? d : int.MaxValue;
 
-        var next = reachable.Keys.OrderBy(Geo).ThenBy(c => reachable[c]).First();
+        // Advance first, but among equally-advancing cells take the one that isn't on fire.
+        var next = reachable.Keys.OrderBy(Geo).ThenBy(c => Danger(engine, self, c))
+            .ThenBy(c => reachable[c]).First();
         if (Geo(next) < Geo(self.Pos)) return engine.TryMove(self, next);
         return false;
     }

@@ -32,12 +32,15 @@ THE RUN:
 
 ## 2. THE GAUNTLET — TITHE v10 specification
 
-### 2.1 Combat, reshaped (engine reused, economy replaced)
-- THE TURN: MOVE once (range = the MOVE stat) + STRIKE once (each class gets a
-  free basic attack: the Bulwark's shove, the Archer's loosed arrow, the
-  Cannon's spark) + spells funded by MANA (regen +2/turn, cap from a stat).
-  AP RETIRES. The 30s clock, SPACE-to-auto, END TURN button, undo-nothing —
-  all unchanged.
+### 2.1 Combat, reshaped (engine reused; the AP/MP purse RESTORED in g10)
+- THE TURN (g10 owner's call: "the PA/PM system was working better — it was
+  more fun"): the full Dofus purse is back. AP refills every turn and funds
+  spells INCLUDING the class weapon (Spark/Loosed Arrow/Shove, 3 AP, twice a
+  turn); MP refills every turn and buys movement — as many separate walks as
+  the points allow. The mana trickle retired. The DEAD keep the one-blow law:
+  mob AP is capped at their priciest skill (+1 small change) — you are one
+  body against a host, and the sim priced full mob AP at sub-8% winrates.
+- SPACE toggles AUTOPLAY (the Policy plays your hand); ENTER ends the turn.
 - BACKSTAB: +25% from the back arc (we track Facing4 already). The fight log
   says "from behind!"; the float goes gold.
 - HAZARD TILES on every board: ember graves (Burn 2), open pits (fall = gone),
@@ -158,5 +161,23 @@ panels during runs (the pick replaces them), the wide city.
 - g8 THE KEEPER: the Sexton rebuilt — retuned smash, the Gravedigger's Hook
   (pull 2), the ritual turning at half health (graves open), the dark stage,
   the guaranteed pre-boss mend.
-STILL OPEN: class-spell level drafts (dings offering real abilities), more
-events/roads, retiring old TITHE once the Gauntlet has clearly won.
+- g9 THE LESSON: level drafts offer real class spells (LEARN ahead of the
+  ladder, DEEPEN a known rank).
+- g10 THE MOTION: bodies WALK their paths (145 px/s, per-cell facing), attack
+  lunges and flying projectiles, impact FX sequenced behind the walk queue;
+  hover a cell for the path preview, hover/arm a spell for its painted reach
+  (geometric reach dim, legal targets bright — visible even off-turn); click
+  an enemy to INSPECT (kit, prices, ranges, damage-vs-you, threat painted red
+  on the ground); click-away cancels an armed spell; SPACE autoplay. The AP/MP
+  purse restored (§2.1). AI reads tile danger: no parking on spikes/embers,
+  danger-aware route tie-breaks, step-off-the-coals fallback; walking THROUGH
+  an ember grave now burns per cell. RunCore.cs split the run's rules out of
+  the renderer, and `Gauntlet --sim N` plays hundreds of full headless runs a
+  minute: the ledger caught the Bulwark at 0% (now braced: +14 HP, +1 AP,
+  Shield 3-4/turn, a vampiric 8-11 Shove — 17%), the screaming row cliff
+  (+2 budget -> +1), and the pre-boss MEND being crowded out of a full hand
+  (the last supper now keeps its seat). Bot winrates: 21/19/17% across
+  cannon/archer/bulwark at level ~2; humans with coastlines do better.
+STILL OPEN: more events/roads, mob walk/attack strips for the six unmapped
+mobs (husk/hound/spitter/mite/piper/wraith still single-frame), retiring old
+TITHE once the Gauntlet has clearly won.

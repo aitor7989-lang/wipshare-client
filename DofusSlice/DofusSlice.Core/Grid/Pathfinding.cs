@@ -42,14 +42,18 @@ public static class Pathfinding
     /// path *adjacent* to a target rather than onto it).
     /// </summary>
     public static List<CellCoord>? FindPath(Battlefield field, CellCoord start, CellCoord goal,
-        Func<CellCoord, bool> occupied, bool allowOccupiedGoal = false)
+        Func<CellCoord, bool> occupied, bool allowOccupiedGoal = false,
+        Func<CellCoord, int>? stepDanger = null)
     {
         if (start == goal) return new List<CellCoord> { start };
 
+        // Steps dominate (each costs 1000); per-cell danger from stepDanger breaks ties,
+        // so among equally-short routes the walker picks the one that isn't on fire —
+        // without ever paying extra MP to detour.
         var open = new PriorityQueue<CellCoord, int>();
         var cameFrom = new Dictionary<CellCoord, CellCoord>();
         var gScore = new Dictionary<CellCoord, int> { [start] = 0 };
-        open.Enqueue(start, start.DistanceTo(goal));
+        open.Enqueue(start, start.DistanceTo(goal) * 1000);
 
         while (open.Count > 0)
         {
@@ -62,12 +66,12 @@ public static class Pathfinding
                 if (!field.IsWalkable(n) && !isGoal) continue;
                 if (occupied(n) && !(isGoal && allowOccupiedGoal)) continue;
 
-                int tentative = gScore[cur] + 1;
+                int tentative = gScore[cur] + 1000 + Math.Clamp(stepDanger?.Invoke(n) ?? 0, 0, 999);
                 if (gScore.TryGetValue(n, out int existing) && tentative >= existing) continue;
 
                 cameFrom[n] = cur;
                 gScore[n] = tentative;
-                open.Enqueue(n, tentative + n.DistanceTo(goal));
+                open.Enqueue(n, tentative + n.DistanceTo(goal) * 1000);
             }
         }
 

@@ -125,6 +125,31 @@ fiction flip, the least reuse. Shelved unless the others stale.
 Keep the grid; make it Into the Breach: deterministic damage, enemy intents, free
 undo, yard as stops. The evolution path if A/B feel like too much surgery.
 
+### Swing E — "THE BONE BOARD"  (the Die in the Dungeon shape — owner's pick to study)
+Die in the Dungeon (ALARTS, itch.io -> Steam, 93% positive): a dice-building
+roguelite. Draw dice from your BAG, roll them, PLACE them on a small battle
+board. Color is role — red attacks, blue shields, green heals, purple MULTIPLIES
+its neighbors. Placement is the whole puzzle: multiplier zones, adjacency
+bonuses, board tiles with their own rules, relics that bend both. The enemy
+telegraphs; your placed board resolves against it. One screen, four colors, one
+decision type (where does this die go) — easy to learn, endlessly buildable
+(31 dice, 142 relics, 4 frogs with unique bags).
+- TITHE version: THE CREW BECOMES THE BAG. Every crew member contributes their
+  spells as carved bone dice (hire a bulwark -> his slam and bastion dice drop
+  into the bag; he stands behind the board and swings when his die resolves).
+  Draw, roll, place on the BONE BOARD — a 3x3+ slab of grave-tiles. Attack dice
+  red, shield dice blue, heal dice green: OUR COLOR LAW ALREADY SAYS THIS
+  (HP red / AP blue / MP green — the palette was waiting for it). Essences =
+  unique dice (Seize pulls, Ironhide shields the row). Gear = relics and board
+  tiles (the Bonewrought set could BE board tiles). Wounds crack dice blank.
+  Level-ups upgrade faces. The pack telegraphs its strike over the board.
+- Keeps: the entire campaign shell (city, bell, dives, stones, tithe, crushing,
+  hires, traitors, sets-as-relics, drops, the celebration, the color law, the
+  icons — spell glyphs become die faces 1:1). Retires: the tactical grid,
+  movement, AP/MP, LoS — the whole heavy half of the engine.
+- Why it beats plain Slice & Dice for us: PLACEMENT keeps a board — TITHE stays
+  a game about ground, formation and position, just distilled to one slab.
+
 ### The honest comparison
 - Swing A: boldest, most "cool and easy", one-screen fights, medium build (new
   combat resolver, ~all campaign code survives). The crew-as-bone-dice image is
@@ -134,9 +159,16 @@ undo, yard as stops. The evolution path if A/B feel like too much surgery.
   Hero's proven heartbeat (commit-or-retreat) is already our bell.
 - Swing D: safest, keeps the most; also keeps the most COMPLEXITY (grid, AP/MP,
   LoS) — the thing the owner wants less of.
-- RECOMMENDATION: B as the spine (it is nearly built), with A's dice as the
-  POSSIBLE combat resolver inside it later if watched fights need more player
-  hands. Decide after one B prototype dive.
+- Swing E: the owner's own reference game, and the best fit found: one-screen
+  placement-puzzle fights (the fun), radical simplification (the ask), the crew
+  and the whole campaign survive as the bag and the shell, and even our color
+  law and spell icons carry straight over. Medium-large build: a new combat
+  scene + dice model; everything outside combat stands.
+- RECOMMENDATION (revised after Swing E research): E is the swing. The Bone
+  Board replaces grid combat; the campaign shell stays whole; B's lap-procession
+  can still frame the yard BETWEEN fights later if wanted. Prototype the board
+  fight first as its own scene (keep the old combat behind a flag until the new
+  one proves out).
 
 ## Sources
 - https://after-strategy.com/en/into-the-breach-complete-guide-tactical-strategy-2026/

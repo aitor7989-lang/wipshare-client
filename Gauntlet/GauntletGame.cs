@@ -85,8 +85,58 @@ public sealed class GauntletGame : Game
     private readonly Random _rng = new();
 
     // ----- the pick ------------------------------------------------------------------
-    private List<(string title, string body, Action apply)> _cards = new();
+    private List<(string title, string body, string kind, Action apply)> _cards = new();
     private bool _pickIsLevel;           // this pick is a ding's word of ruin, not the spoils
+
+    // ----- the covenant (g5): gear in four slots, essences in three themes -------------
+    // Isaac's law: an item is a RULE on a shared verb (strike/push/kill/toll), and rules
+    // stack. Mewgenics' law: pieces belong to FAMILIES, and three of a family pays a set
+    // bonus. Essences follow Isaac (three of a THEME transforms you); gear follows both.
+    private sealed record GearDef(string Slot, string Name, string Family, int Power, string? Keyword, string Blurb);
+    private readonly Dictionary<string, GearDef> _gear = new();   // slot -> the worn piece
+    private readonly HashSet<string> _transformed = new();        // themes already announced
+
+    private static readonly GearDef[] GearPool =
+    {
+        new("BLADE", "GRAVE BLADE",  "GRAVE", 3, null,       "+3 DMG"),
+        new("BLADE", "EMBER BLADE",  "EMBER", 2, "burning",  "+2 DMG\nstrikes BURN 2\nfor 2 turns"),
+        new("BLADE", "BONE CLEAVER", "BONE",  2, "heavy",    "+2 DMG\nyour pushes\ngo +1 cell"),
+        new("PLATE", "GRAVE PLATE",  "GRAVE", 8, null,       "+8 MAX HP"),
+        new("PLATE", "EMBER PLATE",  "EMBER", 6, "warm",     "+6 MAX HP\nember graves\ndon't burn you"),
+        new("PLATE", "BONE PLATE",   "BONE",  6, "thorns",   "+6 MAX HP\nreflect 15% of\nspell damage"),
+        new("BOOTS", "GRAVE BOOTS",  "GRAVE", 1, null,       "+1 MOVE"),
+        new("BOOTS", "BONE HOBNAILS","BONE",  1, "surefoot", "+1 MOVE\nbone spikes\nspare you"),
+        new("CHARM", "GRAVE CHARM",  "GRAVE", 1, null,       "+1 MANA A TURN"),
+        new("CHARM", "EMBER CHARM",  "EMBER", 1, "kindling", "+1 MANA A TURN\n+1 more when\nbloodied"),
+        new("CHARM", "BONE KNUCKLE", "BONE",  1, "slam",     "+1 MANA A TURN\nwall slams\ndeal +4"),
+    };
+
+    private static readonly (string Name, string Theme, string Blurb)[] EssencePool =
+    {
+        ("SPITTER'S GIFT", "MARROW", "your strikes\nPOISON 1, 2 turns"),
+        ("GRAVE DAMP",     "MARROW", "+1 to every poison\nand burn you inflict"),
+        ("WRAITH'S BREATH","MARROW", "your poisons and burns\nlast +1 turn"),
+        ("MITE'S HUNGER",  "MARROW", "heal 2 when a\npoisoned enemy dies"),
+        ("PIPER'S ROT",    "MARROW", "poisoned enemies spread\n1 poison on death"),
+        ("HUSK'S GRIP",    "BONE",   "+1 cell on\nevery push"),
+        ("WARDEN'S HIDE",  "BONE",   "SHIELD 3 at\nevery fight's start"),
+        ("GHOUL'S WEIGHT", "BONE",   "wall slams\ndeal +4"),
+        ("OSSUARY DUST",   "BONE",   "the void pays\nDOUBLE stones"),
+        ("MASON'S FIST",   "BONE",   "+2 DMG"),
+        ("TOLL KEEPER",    "BELL",   "+1 toll on\nevery kill"),
+        ("GRASP'S COIN",   "BELL",   "+1 stone on\nevery kill"),
+        ("HOUR THIEF",     "BELL",   "+1 mana\na turn"),
+        ("QUIET STEP",     "BELL",   "+1 MOVE"),
+        ("LAST ECHO",      "BELL",   "enter every fight with\na quarter of you, at least"),
+    };
+
+    private int FamilyCount(string family) => _gear.Values.Count(g => g.Family == family);
+    private bool HasKeyword(string k) => _gear.Values.Any(g => g.Keyword == k);
+    private static string ThemeOf(string essence) => EssencePool.First(p => p.Name == essence).Theme;
+    private int ThemeCount(string theme) => _essences.Count(e => ThemeOf(e) == theme);
+    private bool Transformed(string theme) => ThemeCount(theme) >= 3;
+    private static Color ThemeInk(string theme) => theme switch
+    { "MARROW" => Mono.Heal, "BELL" => Gold, _ => Mono.Ink };
 
     public GauntletGame()
     {
@@ -125,7 +175,8 @@ public sealed class GauntletGame : Game
     private void StartRun()
     {
         _runStones = 0; _tolls = TollStart; _fightIndex = 0; _sextonNow = false; _runWon = false;
-        _essences.Clear(); _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
+        _essences.Clear(); _gear.Clear(); _transformed.Clear();
+        _bonusHp = _bonusDmg = _bonusMove = _bonusRegen = 0;
         _pendingLevels = 0; _kills = 0; _falls = 0;
         _you.CurrentHp = null;
         if (_mate != null) _mate.CurrentHp = null;   // the city rests everyone
@@ -267,27 +318,72 @@ public sealed class GauntletGame : Game
     private string FightLabel() => _sextonNow || _fightIndex >= 3 ? "THE SEXTON"
         : $"FIGHT {_fightIndex + 1} OF 3";
 
-    /// <summary>The avatar carries the run's picks: gear numbers, essences, scars.</summary>
+    /// <summary>The avatar carries the run's covenant: gear numbers, family sets, essences,
+    /// transformations — all folded into one fighter at each fight's dawn.</summary>
     private Fighter Bless(Fighter f)
     {
+        int hp = _bonusHp, dmg = _bonusDmg, move = _bonusMove;
+        foreach (var piece in _gear.Values)
+            switch (piece.Slot)
+            {
+                case "PLATE": hp += piece.Power; break;
+                case "BLADE": dmg += piece.Power; break;
+                case "BOOTS": move += piece.Power; break;
+            }
+        if (FamilyCount("GRAVE") >= 3) hp += 12;   // the dirt holds its own
+        if (FamilyCount("EMBER") >= 3) dmg += 2;   // and the fire feeds
+        if (_essences.Contains("MASON'S FIST")) dmg += 2;
+        if (_essences.Contains("QUIET STEP")) move += 1;
+
         var g = new Fighter
         {
             Id = f.Id, Name = f.Name, Team = f.Team, PlayerControlled = true,
             Archetype = f.Archetype, Policy = f.Policy, Passive = f.Passive,
             PreferredRangeMin = f.PreferredRangeMin, PreferredRangeMax = f.PreferredRangeMax,
-            Level = f.Level, MaxHp = f.MaxHp + _bonusHp,
-            Hp = Math.Min(f.Hp + _bonusHp, f.MaxHp + _bonusHp),
-            BaseAp = f.BaseAp, BaseMp = f.BaseMp + _bonusMove,
-            Strength = f.Strength, Intelligence = f.Intelligence + _bonusDmg,
+            Level = f.Level, MaxHp = f.MaxHp + hp,
+            Hp = Math.Min(f.Hp + hp, f.MaxHp + hp),
+            BaseAp = f.BaseAp, BaseMp = f.BaseMp + move,
+            Strength = f.Strength, Intelligence = f.Intelligence,
             Chance = f.Chance, Agility = f.Agility,
-            Power = f.Power, Wisdom = f.Wisdom, Initiative = f.Initiative,
+            // Damage bonuses ride on Power: it scales EVERY element, where the old
+            // Intelligence route silently fed only the cannon's fire.
+            Power = f.Power + dmg, Wisdom = f.Wisdom, Initiative = f.Initiative,
             Pos = f.Pos,
             Spells = f.Spells.Concat(new[] { Strike() }).ToArray(),
+            PushBonus = (HasKeyword("heavy") ? 1 : 0)
+                        + (_essences.Contains("HUSK'S GRIP") ? 1 : 0)
+                        + (FamilyCount("BONE") >= 3 ? 1 : 0),
+            SlamBonus = (HasKeyword("slam") ? 4 : 0) + (_essences.Contains("GHOUL'S WEIGHT") ? 4 : 0),
+            HazardImmune = HasKeyword("surefoot") || Transformed("BONE"),
         };
         foreach (var (k, v) in f.Resistances) g.Resistances[k] = v;
         if (_essences.Contains("WARDEN'S HIDE"))
             g.Statuses.Add(new StatusEffect(StatusKind.Shield, 3, 99));
+        if (HasKeyword("thorns"))
+            g.Statuses.Add(new StatusEffect(StatusKind.Reflect, 15, 99));
+        if (_essences.Contains("LAST ECHO") && g.Hp * 4 < g.MaxHp)
+            g.Hp = g.MaxHp / 4;   // the echo carries what the body cannot
         return g;
+    }
+
+    /// <summary>Mana granted to the avatar on top of the base trickle, from charms and essences.</summary>
+    private int RegenBonus() => _bonusRegen
+        + _gear.Values.Where(p => p.Slot == "CHARM").Sum(p => p.Power)
+        + (_essences.Contains("HOUR THIEF") ? 1 : 0)
+        + (HasKeyword("kindling") && _avatar.Hp * 2 <= _avatar.MaxHp ? 1 : 0);
+
+    /// <summary>Rot or fire, it ticks the same: apply a poison the MARROW rules then deepen.</summary>
+    private void Afflict(Fighter target, int magnitude)
+    {
+        magnitude += _essences.Contains("GRAVE DAMP") ? 1 : 0;
+        int turns = 2 + (_essences.Contains("WRAITH'S BREATH") ? 1 : 0);
+        var existing = target.Statuses.FirstOrDefault(s => s.Kind == StatusKind.Poison);
+        if (existing != null)
+        {
+            existing.Magnitude = Math.Max(existing.Magnitude, magnitude);
+            existing.Remaining = Math.Max(existing.Remaining, turns);
+        }
+        else target.Statuses.Add(new StatusEffect(StatusKind.Poison, magnitude, turns));
     }
 
     /// <summary>The free basic attack (Mewgenics: costs nothing, once a turn), per class:
@@ -325,14 +421,20 @@ public sealed class GauntletGame : Game
                 if (ts.Fighter.Team == Team.Player)
                     ts.Fighter.CurrentAp = Math.Min(ts.Fighter.BaseAp,
                         _manaCarry.GetValueOrDefault(ts.Fighter.Id, 3)
-                        + 2 + (ts.Fighter == _avatar ? _bonusRegen : 0));
+                        + 2 + (ts.Fighter == _avatar ? RegenBonus() : 0));
+                // THE BLIGHTED: the rot is an aura now — whatever stands beside you sickens.
+                if (ts.Fighter == _avatar && Transformed("MARROW"))
+                    foreach (var near in _engine.Fighters.Where(x => x.IsAlive && x.Team == Team.Enemy
+                                 && x.Pos.DistanceTo(ts.Fighter.Pos) == 1))
+                    { Afflict(near, 1); Float("rot", Mono.Heal, Center(near.Pos)); }
                 // The dead swing ONCE a turn, like you: full Dofus AP let a husk land two
                 // or three blows to your one (a 2 HP hound mauled a 44 HP bulwark dead in
                 // a single phase in QA). Cap their purse at their priciest skill.
                 else
                     ts.Fighter.CurrentAp = Math.Min(ts.Fighter.CurrentAp,
                         ts.Fighter.Spells.Count > 0 ? ts.Fighter.Spells.Max(s => s.ApCost) : ts.Fighter.CurrentAp);
-                if (_embers.Contains(ts.Fighter.Pos) && ts.Fighter.IsAlive && ts.Fighter.Hp > 2)
+                if (_embers.Contains(ts.Fighter.Pos) && ts.Fighter.IsAlive && ts.Fighter.Hp > 2
+                    && !(ts.Fighter == _avatar && (HasKeyword("warm") || Transformed("BONE"))))
                 {
                     ts.Fighter.Hp = Math.Max(1, ts.Fighter.Hp - 2);
                     Splatter(Center(ts.Fighter.Pos), 3);
@@ -371,6 +473,16 @@ public sealed class GauntletGame : Game
                 if (!_firstBlood) { _firstBlood = true; Narrate("first blood feeds the ground."); }
                 if (!_firstSpike && _engine.Field.TileAt(d.At) == TileKind.Spikes && d.Element == Element.Neutral)
                 { _firstSpike = true; Narrate("the bones underfoot are hungry."); }
+                // On-strike rules (Isaac's verbs): your elemental hits carry rot and fire.
+                if (_engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar
+                    && d.Target.Team == Team.Enemy && d.Target.IsAlive
+                    && d.Element != Element.Neutral && d.Amount > 0)
+                {
+                    if (_essences.Contains("SPITTER'S GIFT"))
+                    { Afflict(d.Target, 1); Float("rot", Mono.Heal, Center(d.At) + new Vector2(18, -6)); }
+                    if (HasKeyword("burning"))
+                    { Afflict(d.Target, 2); Float("burns", Mono.Element(Element.Fire), Center(d.At) + new Vector2(-18, -6)); }
+                }
                 break;
 
             case HealApplied h:
@@ -404,9 +516,21 @@ public sealed class GauntletGame : Game
                     if (!fell) _kills++;   // the fallen are the void's ledger, not the earth's
                     int pay = TitheContent.MobStonesOf(fd.Fighter)
                               + (_essences.Contains("GRASP'S COIN") ? 1 : 0);
+                    if (fell && _essences.Contains("OSSUARY DUST")) pay *= 2;   // the void pays double
                     _runStones += pay;
                     Float($"+{pay} st", Mono.Ink, Center(fd.At) + new Vector2(0, -20));
                     if (_essences.Contains("TOLL KEEPER")) _tolls += 1;
+                    if (Transformed("BELL")) _tolls += 1;   // THE TITHED: every death buys time
+                    bool wasPoisoned = fd.Fighter.Statuses.Any(s => s.Kind == StatusKind.Poison);
+                    if (wasPoisoned && _essences.Contains("MITE'S HUNGER") && _avatar.IsAlive)
+                    {
+                        int fed = Math.Min(2, _avatar.MaxHp - _avatar.Hp);
+                        if (fed > 0) { _avatar.Hp += fed; Float($"+{fed}", Mono.Heal, Center(_avatar.Pos)); }
+                    }
+                    if (wasPoisoned && _essences.Contains("PIPER'S ROT"))
+                        foreach (var near in _engine.Fighters.Where(x => x.IsAlive && x.Team == Team.Enemy
+                                     && x.Pos.DistanceTo(fd.At) == 1))
+                        { Afflict(near, 1); Float("rot", Mono.Heal, Center(near.Pos)); }
                     if (!fell) Narrate(fd.Fighter.Archetype == "sexton"
                         ? "the gravedigger digs his own."
                         : "another mouth for the earth.");
@@ -593,44 +717,77 @@ public sealed class GauntletGame : Game
 
     private void RollCards()
     {
-        var pool = new List<(string, string, Action)>
-        {
-            ("BLADE OATH", "+4 DAMAGE\n\none number,\nno fine print", () => _bonusDmg += 4),
-            ("GRAVE PLATE", "+8 MAX HP\n\nthe dirt holds\nyou tighter", () => _bonusHp += 8),
-            ("QUIET STEP", "+1 MOVE\n\nthe dead hear\nnothing", () => _bonusMove += 1),
-            ("HOUR THIEF", "+1 MANA A TURN\n\nstolen seconds,\nspent as fire", () => _bonusRegen += 1),
-            ("MEND", "FULL HEAL NOW\n\nthe bread is\nstale. eat.", () => _you.CurrentHp = null),
-            ("COIN OF THE GRASP", "+25 STONES NOW\n\nit hums when\nyou hold it", () => _runStones += 25),
-            ("OIL FOR THE BELL", "+5 TOLLS\n\nhe waits.\nbarely.", () => _tolls += 5),
-        };
-        var essencePool = new List<(string, string, Action)>();
-        void Ess(string name, string body)
-        { if (!_essences.Contains(name)) essencePool.Add((name, body + "\n\nESSENCE — forever", () => { _essences.Add(name); _sfx.Play("chime", 0.7f, jitter: false); })); }
-        Ess("WARDEN'S HIDE", "SHIELD 3 AT\nEVERY FIGHT'S START");
-        Ess("GRASP'S COIN", "+1 STONE ON\nEVERY KILL");
-        Ess("TOLL KEEPER", "+1 TOLL\nON EVERY KILL");
-
         var rnd = new Random(++_seed);
         _pickIsLevel = false;
         _cards = new();
-        if (essencePool.Count > 0) _cards.Add(essencePool[rnd.Next(essencePool.Count)]);
+
+        // 1) An essence — Isaac's rule-card, one per hand while any remain untaken.
+        var essChoices = EssencePool.Where(p => !_essences.Contains(p.Name)).ToList();
+        if (essChoices.Count > 0)
+        {
+            var p = essChoices[rnd.Next(essChoices.Count)];
+            _cards.Add((p.Name, $"{p.Blurb}\n\n{p.Theme} {ThemeCount(p.Theme) + 1} OF 3\nforever", "ESSENCE",
+                () => TakeEssence(p.Name)));
+        }
+
+        // 2) Gear — Loop Hero's one number, Mewgenics' families. Shows what it replaces.
+        var gearChoices = GearPool.Where(g => _gear.GetValueOrDefault(g.Slot)?.Name != g.Name).ToList();
+        for (int k = 0; k < 2 && _cards.Count < 3 && gearChoices.Count > 0; k++)
+        {
+            var g = gearChoices[rnd.Next(gearChoices.Count)];
+            gearChoices.RemoveAll(x => x.Name == g.Name);
+            var worn = _gear.GetValueOrDefault(g.Slot);
+            string body = g.Blurb + $"\n\n{g.Slot} · {g.Family} SET"
+                + (worn != null ? $"\nsheds {worn.Name}" : "");
+            _cards.Add((g.Name, body, "GEAR", () => { _gear[g.Slot] = g; _sfx.Play("coin", 0.7f); }));
+        }
+
+        // 3) A blessing tops the hand off — instant relief, no strings.
+        var blessings = new List<(string t, string b, string k, Action a)>
+        {
+            ("MEND", "FULL HEAL NOW\n\nthe bread is\nstale. eat.", "BLESSING", () => _you.CurrentHp = null),
+            ("COIN OF THE GRASP", "+25 STONES NOW\n\nit hums when\nyou hold it", "BLESSING", () => _runStones += 25),
+            ("OIL FOR THE BELL", "+5 TOLLS\n\nhe waits.\nbarely.", "BLESSING", () => _tolls += 5),
+        };
         while (_cards.Count < 3)
         {
-            var c = pool[rnd.Next(pool.Count)];
+            var c = blessings[rnd.Next(blessings.Count)];
             if (!_cards.Contains(c)) _cards.Add(c);
+        }
+    }
+
+    /// <summary>Take an essence; the third of a theme is a TRANSFORMATION (Isaac's Guppy law).</summary>
+    private void TakeEssence(string name)
+    {
+        _essences.Add(name);
+        _sfx.Play("chime", 0.7f, jitter: false);
+        string theme = ThemeOf(name);
+        if (ThemeCount(theme) == 3 && _transformed.Add(theme))
+        {
+            string form = theme switch
+            { "MARROW" => "THE BLIGHTED", "BONE" => "THE REVENANT", _ => "THE TITHED" };
+            if (theme == "BELL") _tolls += 6;   // THE TITHED: the bell owes you
+            Banner(form, ThemeInk(theme));
+            Narrate(theme switch
+            {
+                "MARROW" => "the rot takes root in you. you are THE BLIGHTED.",
+                "BONE" => "half-dead already — the ground has no claim. you are THE REVENANT.",
+                _ => "the bell tolls for you now. you are THE TITHED.",
+            });
+            _sfx.Play("levelup", 0.85f, jitter: false);
         }
     }
 
     /// <summary>The Mewgenics ding: every level earned drafts three words of ruin — keep one.</summary>
     private void RollLevelCards()
     {
-        var pool = new List<(string, string, Action)>
+        var pool = new List<(string t, string b, string k, Action a)>
         {
-            ("IRON MARROW", "+10 MAX HP\n\nthe grave gives\nback a little", () => _bonusHp += 10),
-            ("KILLING WORD", "+5 DAMAGE\n\nsay it and\nsomething breaks", () => _bonusDmg += 5),
-            ("SECOND WIND", "+1 MOVE\n\nthe body learns\nwhat the bell asks", () => _bonusMove += 1),
-            ("DEEP WELL", "+1 MANA A TURN\n\nyou drink where\nno water is", () => _bonusRegen += 1),
-            ("OLD BLOOD", "FULL HEAL\n+4 MAX HP\n\nyours, again", () => { _bonusHp += 4; _you.CurrentHp = null; }),
+            ("IRON MARROW", "+10 MAX HP\n\nthe grave gives\nback a little", "RUIN", () => _bonusHp += 10),
+            ("KILLING WORD", "+5 DAMAGE\n\nsay it and\nsomething breaks", "RUIN", () => _bonusDmg += 5),
+            ("SECOND WIND", "+1 MOVE\n\nthe body learns\nwhat the bell asks", "RUIN", () => _bonusMove += 1),
+            ("DEEP WELL", "+1 MANA A TURN\n\nyou drink where\nno water is", "RUIN", () => _bonusRegen += 1),
+            ("OLD BLOOD", "FULL HEAL\n+4 MAX HP\n\nyours, again", "RUIN", () => { _bonusHp += 4; _you.CurrentHp = null; }),
         };
         var rnd = new Random(++_seed);
         _pickIsLevel = true;
@@ -867,6 +1024,15 @@ public sealed class GauntletGame : Game
                 bool current = _engine.Outcome == FightOutcome.Ongoing && ff == _engine.Current;
                 _prim.HaloAt(_sb, cc + new Vector2(0, 5),
                     (ff.Team == Team.Player ? Mono.Ally : Mono.Danger) * (current ? 1f : 0.6f));
+                // Transformations are WORN (Isaac's law: every pickup shows): extra halo rings.
+                if (ff == _avatar)
+                {
+                    int ring = 0;
+                    foreach (var theme in new[] { "MARROW", "BONE", "BELL" })
+                        if (Transformed(theme))
+                            _prim.HaloAt(_sb, cc + new Vector2(0, 5 - ++ring * 3),
+                                ThemeInk(theme) * (0.4f + 0.15f * MathF.Sin(_time * 3f + ring)));
+                }
                 // The facing tick: which way they look is which way you flank.
                 var fo = new Vector2((ff.Facing.X - ff.Facing.Y) * (TW / 4f), (ff.Facing.X + ff.Facing.Y) * (TH / 4f));
                 _prim.Line(_sb, cc + new Vector2(0, 5) + fo * 0.55f, cc + new Vector2(0, 5) + fo * 0.95f,
@@ -962,14 +1128,57 @@ public sealed class GauntletGame : Game
         for (int i = 0; i < _avatar.BaseMp; i++)
             _prim.DiscAt(_sb, new Vector2(70 + i * 16, H - 47), 6,
                 i < _avatar.CurrentMp ? Mono.Mp : Mono.Faint);
-        // Isaac wears its essences on its sleeve: one row, always visible, forever.
+        // Isaac wears its essences on its sleeve: one row, colored by theme; transformations
+        // announce themselves first. A crowded late-run row compacts into theme counts.
         int ex = 20;
-        foreach (var e in _essences)
+        foreach (var theme in new[] { "MARROW", "BONE", "BELL" })
+            if (Transformed(theme))
+            {
+                string form = theme switch { "MARROW" => "THE BLIGHTED", "BONE" => "THE REVENANT", _ => "THE TITHED" };
+                _font.Draw(_sb, form, ex, H - 26, 1, ThemeInk(theme));
+                ex += _font.Measure(form, 1) + 18;
+            }
+        if (_essences.Count <= 6)
+            foreach (var e in _essences)
+            {
+                string t = "* " + e;
+                _font.Draw(_sb, t, ex, H - 26, 1, ThemeInk(ThemeOf(e)) * 0.8f);
+                ex += _font.Measure(t, 1) + 14;
+            }
+        else
+            foreach (var theme in new[] { "MARROW", "BONE", "BELL" })
+            {
+                int n = ThemeCount(theme);
+                if (n == 0) continue;
+                string t = $"{theme} {n}";
+                _font.Draw(_sb, t, ex, H - 26, 1, ThemeInk(theme) * 0.8f);
+                ex += _font.Measure(t, 1) + 16;
+            }
+
+        // The wardrobe, Loop Hero style: four slots, one number each, families at a glance.
+        string[] slots = { "BLADE", "PLATE", "BOOTS", "CHARM" };
+        _font.Draw(_sb, "GEAR", 810, H - 104, 1, Mono.Faint);
+        for (int i = 0; i < slots.Length; i++)
         {
-            string t = "* " + e;
-            _font.Draw(_sb, t, ex, H - 26, 1, Mono.Cast);
-            ex += _font.Measure(t, 1) + 14;
+            var r = new Rectangle(810 + i * 44, H - 92, 40, 40);
+            var worn = _gear.GetValueOrDefault(slots[i]);
+            Mono.Slot(_sb, _prim, r, hover: r.Contains(MP));
+            _font.DrawCentered(_sb, slots[i] == "BOOTS" ? "S" : slots[i][..1], r.Center.X, r.Y + 8, 2,
+                worn != null ? Mono.Ink : Mono.Faint);
+            _font.DrawCentered(_sb, worn != null ? $"+{worn.Power}" : "-", r.Center.X, r.Bottom + 4, 1,
+                worn != null ? Mono.Dim : Mono.Faint);
+            if (r.Contains(MP) && worn != null)
+            {
+                int wdt = Math.Max(120, _font.Measure(worn.Name, 1) + 20);
+                var tip = new Rectangle(Math.Min(r.X, W - wdt - 8), r.Y - 40, wdt, 30);
+                Mono.Frame(_sb, _prim, tip, emphasis: true);
+                _font.Draw(_sb, worn.Name, tip.X + 10, tip.Y + 6, 1, Mono.Ink);
+                _font.Draw(_sb, worn.Family + " SET", tip.X + 10, tip.Y + 18, 1, Mono.Dim);
+            }
         }
+        foreach (var fam in new[] { "GRAVE", "EMBER", "BONE" })
+            if (FamilyCount(fam) >= 3)
+            { _font.Draw(_sb, fam + " SET WHOLE", 810, H - 38, 1, Mono.Cast); break; }
 
         var spells = _avatar.Spells;
         int hoveredWell = -1;
@@ -1022,16 +1231,20 @@ public sealed class GauntletGame : Game
             // Hovered cards lift out of the dirt (Loop Hero's hand feel).
             var r = hov ? new Rectangle(r0.X, r0.Y - 6, r0.Width, r0.Height) : r0;
             Mono.Frame(_sb, _prim, r, emphasis: hov);
-            var (title, body, _) = _cards[i];
-            bool isEss = body.Contains("ESSENCE");
-            var kindInk = _pickIsLevel ? Gold : isEss ? Mono.Cast : Mono.Dim;
+            var (title, body, kind, _) = _cards[i];
+            var kindInk = kind switch
+            { "RUIN" => Gold, "ESSENCE" => Mono.Cast, "GEAR" => Mono.Ink, _ => Mono.Dim };
             _prim.FillRect(_sb, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, 3), kindInk);
-            _font.DrawCentered(_sb, _pickIsLevel ? "WORD OF RUIN" : isEss ? "ESSENCE" : "SPOILS",
+            _font.DrawCentered(_sb, kind == "RUIN" ? "WORD OF RUIN" : kind,
                 r.Center.X, r.Y + 14, 1, kindInk);
-            _font.DrawCentered(_sb, title, r.Center.X, r.Y + 36, 1, isEss ? Mono.Cast : Mono.Ink);
+            _font.DrawCentered(_sb, title, r.Center.X, r.Y + 36, 1, kind == "ESSENCE" ? Mono.Cast : Mono.Ink);
             int ly = r.Y + 78;
             foreach (var line in body.Split('\n'))
-            { _font.DrawCentered(_sb, line, r.Center.X, ly, 1, line.Contains("ESSENCE") ? Mono.Cast : Mono.Dim); ly += 16; }
+            {
+                var ink = line.Contains(" OF 3") || line == "forever" ? Mono.Cast
+                    : line.Contains(" SET") ? Mono.Dim : Mono.Dim;
+                _font.DrawCentered(_sb, line, r.Center.X, ly, 1, ink); ly += 16;
+            }
             var take = new Rectangle(r.Center.X - 46, r.Bottom - 38, 92, 24);
             Mono.Button(_sb, _prim, take, hover: hov);
             _font.DrawCentered(_sb, $"TAKE ({i + 1})", take.Center.X, take.Y + 8, 1, Mono.ButtonInk(hov));

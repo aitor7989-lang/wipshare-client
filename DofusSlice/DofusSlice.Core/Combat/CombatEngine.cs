@@ -230,6 +230,7 @@ public sealed class CombatEngine
     /// the ground is a combatant). Applied per cell entered, so a careless sprint bleeds twice.</summary>
     private void ApplyHazards(Fighter f, IEnumerable<CellCoord> entered)
     {
+        if (f.HazardImmune) return;   // THE REVENANT: half-dead already — the ground has no claim
         foreach (var cell in entered)
         {
             if (!f.IsAlive) return;
@@ -588,6 +589,7 @@ public sealed class CombatEngine
     /// <summary>Push (away) or pull (toward) the caster along one orthogonal axis.</summary>
     private void ApplyShift(Fighter caster, Fighter victim, int cells, bool pull)
     {
+        if (!pull) cells += caster.PushBonus;   // Husk's Grip: every shove carries further
         if (victim.Pos == caster.Pos || cells <= 0) return;
         if (victim.IsStabilized)
         {
@@ -625,7 +627,7 @@ public sealed class CombatEngine
             }
             if (!Field.IsWalkable(next) || IsOccupied(next))
             {
-                int collision = pull ? 0 : (cells - moved) * 5; // only shoves deal collision damage
+                int collision = pull ? 0 : (cells - moved) * 5 + caster.SlamBonus; // only shoves deal collision damage
                 var at = victim.Pos;
                 if (collision > 0)
                 {

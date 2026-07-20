@@ -87,6 +87,18 @@ Starter pool (15, three themes):
   (+1 MOVE) · Grasp's Coin (+1 stone per kill)
   → 3 BELL = THE TITHED: the Sexton arrives 60s later; you hear him coming.
 
+### 2.3.1 THE COVENANT (g5, built) — the two synergy engines, stolen whole
+Research (July 2026): Isaac's synergy engine works because an item is a RULE on a
+shared verb (every item modifies the same tear pipeline, so any two stack), and
+three themed pickups TRANSFORM you (Guppy). Mewgenics' engine works through
+FAMILIES: 2-3 pieces of a set pay a bonus line, and committing to one set beats
+stat soup; statuses (Burn stacks) glue abilities together.
+OURS: essences are Isaac (rules on our verbs — strike, push, kill, corpse, toll;
+three of a theme = transformation); gear is Loop Hero numbers in Mewgenics
+families (GRAVE plain-and-big, EMBER fire rules, BONE push rules; 3 of a family
+= a set line). Rot and fire both ride the Poison status so MARROW essences
+(magnitude/duration/on-death rules) amplify EMBER gear — cross-system synergy.
+
 ### 2.4 Gear, Loop Hero clarity
 Four slots (weapon / armor / boots / trinket), ONE number each:
 Blade +2 DMG · Plate +6 HP · Boots +1 MOVE · Charm +1 mana regen · rare pieces

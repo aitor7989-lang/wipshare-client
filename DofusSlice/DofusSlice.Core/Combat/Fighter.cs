@@ -78,6 +78,17 @@ public sealed class Fighter
     /// turns a fighter along its last step and toward whatever it casts at.</summary>
     public CellCoord Facing { get; set; } = new(1, 0);
 
+    // ----- Item/essence hooks (the Gauntlet's covenant rules; all default to inert) ----
+
+    /// <summary>Extra cells added to every push this fighter causes (Husk's Grip, heavy blades).</summary>
+    public int PushBonus { get; set; }
+
+    /// <summary>Extra collision damage when this fighter slams a victim into an obstacle.</summary>
+    public int SlamBonus { get; set; }
+
+    /// <summary>Spikes (and kindred ground hazards) no longer wound this fighter (THE REVENANT).</summary>
+    public bool HazardImmune { get; set; }
+
     public IReadOnlyList<SpellDef> Spells { get; init; } = Array.Empty<SpellDef>();
 
     /// <summary>Active timed states (buffs, shields, poison, drains).</summary>

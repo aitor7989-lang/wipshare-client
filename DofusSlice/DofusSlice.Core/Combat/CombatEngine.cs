@@ -626,7 +626,7 @@ public sealed class CombatEngine
         {
             var next = victim.Pos.Offset(dx, dy);
             // The fall: sent over a coastline (or off the map entirely), the victim is simply gone.
-            if (LethalVoid && Field.TileAt(next) == TileKind.Void)
+            if (LethalVoid && Field.TileAt(next) == TileKind.Void && !victim.VoidAnchored)
             {
                 path.Add(next);
                 victim.Pos = next;

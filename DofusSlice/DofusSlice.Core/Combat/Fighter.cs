@@ -89,6 +89,10 @@ public sealed class Fighter
     /// <summary>Spikes (and kindred ground hazards) no longer wound this fighter (THE REVENANT).</summary>
     public bool HazardImmune { get; set; }
 
+    /// <summary>Cannot be shoved or dragged into the void: a push toward a coastline stops at
+    /// the rim and slams instead (the Sexton — you must earn the kill, not toss him off the map).</summary>
+    public bool VoidAnchored { get; set; }
+
     public IReadOnlyList<SpellDef> Spells { get; init; } = Array.Empty<SpellDef>();
 
     /// <summary>Active timed states (buffs, shields, poison, drains).</summary>

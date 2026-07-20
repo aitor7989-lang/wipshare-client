@@ -448,7 +448,15 @@ public static class RunRules
         var fighters = new List<Fighter> { avatar };
         if (mate != null) fighters.Add(TitheContent.MakeCrewMember(mate, mateSpawn));
         for (int i = 0; i < comp.Length; i++)
-            fighters.Add(TitheContent.MakeMob(comp[i].Id, $"mob_{st.Room}_{i}", mobSpawns[i], comp[i].Grade));
+        {
+            var mob = TitheContent.MakeMob(comp[i].Id, $"mob_{st.Room}_{i}", mobSpawns[i], comp[i].Grade);
+            // THE SEXTON DOES NOT FALL (audit fix): a single Attraction could otherwise drag the
+            // 150-HP boss over a rim void for a one-cast instant kill, skipping the whole climax.
+            // He is void-anchored — still shove-able for tempo, slam and ember drags, but a push
+            // toward the coast stops at the rim. The kill must be earned. (Champions stay tossable.)
+            if (mob.Archetype == "sexton") mob.VoidAnchored = true;
+            fighters.Add(mob);
+        }
 
         var engine = new CombatEngine(field, fighters, new SystemRng(seed))
         // The Gauntlet's rules of engagement: coastlines kill, backs are worth finding.
@@ -459,6 +467,25 @@ public static class RunRules
     }
 
     // ----- the verbs (Isaac's law, event-driven) ------------------------------------------
+
+    /// <summary>An ember grave cooks whoever's on <paramref name="cell"/> for 2 (never to
+    /// death) — the avatar's warm/REVENANT exemption honoured. Shared by the dawn tick, the
+    /// walk path, and (audit fix) the push/pull path so a drag over embers actually burns.</summary>
+    private static void TryEmberBurn(RunState st, Fighter avatar, Fighter f, CellCoord cell, IRunFx? fx)
+    {
+        if (!st.Embers.Contains(cell) || !f.IsAlive || f.Hp <= 2) return;
+        if (f == avatar && (st.HasKeyword("warm") || st.Transformed("BONE"))) return;
+        f.Hp = Math.Max(1, f.Hp - 2);
+        fx?.EmberBurn(f, cell);
+    }
+
+    /// <summary>Feed the avatar up to <paramref name="amount"/> blood, clamped to its wound —
+    /// the Sacrier law and Mite's Hunger both drink through here.</summary>
+    private static void HealAvatar(Fighter avatar, int amount, IRunFx? fx)
+    {
+        int fed = Math.Min(amount, avatar.MaxHp - avatar.Hp);
+        if (fed > 0) { avatar.Hp += fed; fx?.FedByMite(avatar, fed); }
+    }
 
     /// <summary>Rot or fire, it ticks the same: apply a poison the MARROW rules then deepen.</summary>
     public static void Afflict(RunState st, Fighter target, int magnitude)
@@ -512,12 +539,7 @@ public static class RunRules
                                  && x.Pos.DistanceTo(ts.Fighter.Pos) == 1))
                     { Afflict(st, near, 1); fx?.Afflicted(near, burn: false); }
                 // Standing on an ember grave cooks you at dawn (never to death).
-                if (st.Embers.Contains(ts.Fighter.Pos) && ts.Fighter.IsAlive && ts.Fighter.Hp > 2
-                    && !(ts.Fighter == avatar && (st.HasKeyword("warm") || st.Transformed("BONE"))))
-                {
-                    ts.Fighter.Hp = Math.Max(1, ts.Fighter.Hp - 2);
-                    fx?.EmberBurn(ts.Fighter, ts.Fighter.Pos);
-                }
+                TryEmberBurn(st, avatar, ts.Fighter, ts.Fighter.Pos, fx);
                 // The bell is turn-priced: each of YOUR turns tolls it once.
                 if (ts.Fighter == avatar && !st.SextonNow && !st.BossFight)
                 {
@@ -529,13 +551,15 @@ public static class RunRules
 
             case FighterMoved fm:
                 // g10: you WALK now — so an ember grave crossed is an ember grave felt.
-                if (!(fm.Fighter == avatar && (st.HasKeyword("warm") || st.Transformed("BONE"))))
-                    foreach (var c in fm.Path.Skip(1))
-                        if (st.Embers.Contains(c) && fm.Fighter.IsAlive && fm.Fighter.Hp > 2)
-                        {
-                            fm.Fighter.Hp = Math.Max(1, fm.Fighter.Hp - 2);
-                            fx?.EmberBurn(fm.Fighter, c);
-                        }
+                foreach (var c in fm.Path.Skip(1)) TryEmberBurn(st, avatar, fm.Fighter, c, fx);
+                break;
+
+            case FighterPushed fp:
+                // Shoved or DRAGGED across an ember grave burns the same as walking it
+                // (audit: Attraction's "over embers" fed nothing — pushes raise this event,
+                // not FighterMoved, so the crossing went uncharged). Spikes already applied
+                // engine-side; embers are ours, so we tick them here.
+                foreach (var c in fp.Path.Skip(1)) TryEmberBurn(st, avatar, fp.Fighter, c, fx);
                 break;
 
             case DamageDealt d:
@@ -563,10 +587,7 @@ public static class RunRules
                 if (engine.Outcome == FightOutcome.Ongoing && engine.Current == avatar
                     && avatar.Archetype == "bulwark" && avatar.IsAlive
                     && d.Target.Team == Team.Enemy && d.Amount > 1)
-                {
-                    int fed = Math.Min(d.Amount / 2, avatar.MaxHp - avatar.Hp);
-                    if (fed > 0) { avatar.Hp += fed; fx?.FedByMite(avatar, fed); }
-                }
+                    HealAvatar(avatar, d.Amount / 2, fx);
                 // On-strike rules (Isaac's verbs): your elemental hits carry rot and fire.
                 if (engine.Outcome == FightOutcome.Ongoing && engine.Current == avatar
                     && d.Target.Team == Team.Enemy && d.Target.IsAlive
@@ -598,10 +619,7 @@ public static class RunRules
                     if (st.Transformed("BELL")) st.Tolls += 1;   // THE TITHED: every death buys time
                     bool wasPoisoned = fd.Fighter.Statuses.Any(s => s.Kind == StatusKind.Poison);
                     if (wasPoisoned && st.Essences.Contains("MITE'S HUNGER") && avatar.IsAlive)
-                    {
-                        int fed = Math.Min(2, avatar.MaxHp - avatar.Hp);
-                        if (fed > 0) { avatar.Hp += fed; fx?.FedByMite(avatar, fed); }
-                    }
+                        HealAvatar(avatar, 2, fx);
                     if (wasPoisoned && st.Essences.Contains("PIPER'S ROT"))
                         foreach (var near in engine.Fighters.Where(x => x.IsAlive && x.Team == Team.Enemy
                                      && x.Pos.DistanceTo(fd.At) == 1))

@@ -136,6 +136,10 @@ public static class TitheContent
     public static string? SkillKeyById(int id) =>
         SkillIds.FirstOrDefault(kv => kv.Value == id).Key;
 
+    /// <summary>Does this skill key exist in the content tables? Callers validate
+    /// save-loaded keys against it so a renamed/removed skill can't crash the build.</summary>
+    public static bool HasSkill(string key) => SkillRows.ContainsKey(key);
+
     /// <summary>The class kit as a LADDER (Pass 3): one spell at level 1, a new one
     /// unlocked at every level after, until the class list runs dry.</summary>
     public static IEnumerable<string> ClassSkillsAt(string classId, int level) =>

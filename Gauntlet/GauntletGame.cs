@@ -225,19 +225,27 @@ public sealed class GauntletGame : Game, IRunFx
             using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(SavePath));
             var r = doc.RootElement;
             _banked = r.GetProperty("banked").GetInt32();
-            _you = NewYou(r.GetProperty("classId").GetString() ?? "cannon");
+            // A class/skill id from an older build or a hand-edited save that no longer
+            // exists would sail past the parse and then hard-crash at fight start (the
+            // content tables index it raw). Validate against the live content here (audit).
+            string cid = r.GetProperty("classId").GetString() ?? "cannon";
+            _you = NewYou(TitheContent.ClassIds.Contains(cid) ? cid : "cannon");
             _you.Level = Math.Max(1, r.GetProperty("level").GetInt32());
             _you.Xp = Math.Max(0, r.GetProperty("xp").GetInt32());
             string mate = r.GetProperty("mate").GetString() ?? "";
-            if (mate != "") _mate = new CampaignUnit { Id = "mate", ClassId = mate, Name = "Sellsword" };
-            // Newer fields read tolerantly, so an old save still opens the gate.
+            if (mate != "" && TitheContent.ClassIds.Contains(mate))
+                _mate = new CampaignUnit { Id = "mate", ClassId = mate, Name = "Sellsword" };
+            // Newer fields read tolerantly, so an old save still opens the gate. Unknown
+            // skill keys are dropped (same raw-index crash if a learned word was renamed).
             if (r.TryGetProperty("learned", out var lp))
-                _learned.AddRange((lp.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries));
+                _learned.AddRange((lp.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(TitheContent.HasSkill));
             if (r.TryGetProperty("ranks", out var rp))
                 foreach (var pair in (rp.GetString() ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
                 {
                     var kv = pair.Split(':');
-                    if (kv.Length == 2 && int.TryParse(kv[1], out int rank)) _you.SpellRanks[kv[0]] = rank;
+                    if (kv.Length == 2 && TitheContent.HasSkill(kv[0]) && int.TryParse(kv[1], out int rank))
+                        _you.SpellRanks[kv[0]] = rank;
                 }
             if (r.TryGetProperty("fs", out var fp)) _fullscreen = fp.GetBoolean();
         }
@@ -994,6 +1002,12 @@ public sealed class GauntletGame : Game, IRunFx
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
         DrawFightHud(myTurn, pilots);
+        // The armed word rides the cursor (Dofus carries the spell on the pointer) — there
+        // is never a doubt about WHAT will fire. Drawn in the UNTRANSLATED batch so it stays
+        // pinned to the OS pointer while the world shakes underneath it.
+        if (_selected >= 0 && _selected < _avatar.Spells.Count && CellAt(MP) != null)
+            _font.Draw(_sb, _avatar.Spells[_selected].Name.ToUpperInvariant(),
+                MP.X + 16, MP.Y + 14, 2, Mono.Cast);
         var inspected = _inspectId == ""
             ? null : _engine.Fighters.FirstOrDefault(f => f.IsAlive && f.Id == _inspectId);
         if (inspected != null) DrawInspector(inspected);
@@ -1028,12 +1042,6 @@ public sealed class GauntletGame : Game, IRunFx
                 _font.DrawCentered(_sb, "FROM BEHIND +25%", (int)Center(hc).X, (int)Center(hc).Y - 42, 2,
                     legal ? Gold : Mono.Faint);
         }
-
-        // The armed word rides the cursor (Dofus carries the spell on the pointer) —
-        // there is never a doubt about WHAT will fire when you click.
-        if (_selected >= 0 && _selected < _avatar.Spells.Count && hovCell != null)
-            _font.Draw(_sb, _avatar.Spells[_selected].Name.ToUpperInvariant(),
-                MP.X + 16, MP.Y + 14, 2, Mono.Cast);
 
         // The exact count appears over a hovered body's bar — never uninvited.
         foreach (var f in _engine.Fighters.Where(f => f.IsAlive))
@@ -1621,7 +1629,8 @@ public sealed class GauntletGame : Game, IRunFx
         DrawRoadStrip(30);
         _font.DrawCentered(_sb, _pickTitle, W / 2, 120, 4, _pickInk);
         _font.DrawCentered(_sb, _pickSub, W / 2, 168, 2, Mono.Dim);
-        string next = _st.Room + 1 < _st.Road.Count ? RunRules.RoomWord(_st.Road[_st.Room + 1]) : "THE SEXTON";
+        string next = _st.SextonNow ? "THE SEXTON"
+            : _st.Room + 1 < _st.Road.Count ? RunRules.RoomWord(_st.Road[_st.Room + 1]) : "THE SEXTON";
         _font.DrawCentered(_sb, $"{_st.RunStones} st carried  ·  {_st.Tolls} tolls on the bell  ·  ahead: {next}",
             W / 2, 190, 2, Mono.Faint);
         for (int i = 0; i < _cards.Count; i++)

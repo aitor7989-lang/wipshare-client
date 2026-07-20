@@ -89,6 +89,13 @@ public sealed class GauntletGame : Game, IRunFx
     // the Crawl/Powerhoof law: spend pixels on motion, not on rendering. UI stays native.
     private RenderTarget2D _worldRT = null!;
 
+    // g12.1: the whole frame composes into one fixed 1280x760 canvas, then scales onto
+    // whatever the screen is — borderless fullscreen with letterboxing, F11 to toggle.
+    private RenderTarget2D _frameRT = null!;
+    private bool _fullscreen = true;
+    private float _viewScale = 1f;
+    private Vector2 _viewOff;
+
     // ----- the feel (the Crawl layer) -------------------------------------------------
     private float _freeze, _shake;
     private readonly List<(Vector2 p, int seed)> _blood = new();
@@ -146,7 +153,45 @@ public sealed class GauntletGame : Game, IRunFx
             }
         _vignette.SetData(vd);
         _worldRT = new RenderTarget2D(GraphicsDevice, W / 2, H / 2);
+        _frameRT = new RenderTarget2D(GraphicsDevice, W, H);
         LoadMeta();
+        ApplyDisplayMode();
+    }
+
+    /// <summary>Borderless fullscreen at the desktop's resolution (no mode switch), or the
+    /// classic window — either way the game keeps thinking in 1280x760 and the presenter
+    /// scales the finished frame, black bars where the aspect disagrees.</summary>
+    private void ApplyDisplayMode()
+    {
+        if (_fullscreen)
+        {
+            _gfx.HardwareModeSwitch = false;
+            _gfx.PreferredBackBufferWidth = GraphicsDevice.Adapter.CurrentDisplayMode.Width;
+            _gfx.PreferredBackBufferHeight = GraphicsDevice.Adapter.CurrentDisplayMode.Height;
+            _gfx.IsFullScreen = true;
+        }
+        else
+        {
+            _gfx.IsFullScreen = false;
+            _gfx.PreferredBackBufferWidth = W;
+            _gfx.PreferredBackBufferHeight = H;
+        }
+        _gfx.ApplyChanges();
+        int bw = GraphicsDevice.PresentationParameters.BackBufferWidth;
+        int bh = GraphicsDevice.PresentationParameters.BackBufferHeight;
+        _viewScale = MathF.Min(bw / (float)W, bh / (float)H);
+        _viewOff = new Vector2((bw - W * _viewScale) / 2f, (bh - H * _viewScale) / 2f);
+    }
+
+    /// <summary>Blit the finished 1280x760 frame onto the real backbuffer, scaled and centred.</summary>
+    private void PresentFrame()
+    {
+        GraphicsDevice.SetRenderTarget(null);
+        GraphicsDevice.Clear(Color.Black);
+        _sb.Begin(samplerState: SamplerState.PointClamp);
+        _sb.Draw(_frameRT, new Rectangle((int)_viewOff.X, (int)_viewOff.Y,
+            (int)(W * _viewScale), (int)(H * _viewScale)), Color.White);
+        _sb.End();
     }
 
     // ----- what survives the night: a tiny save of the meta (g7) -----------------------
@@ -164,6 +209,7 @@ public sealed class GauntletGame : Game, IRunFx
                 mate = _mate?.ClassId ?? "",
                 learned = string.Join(",", _learned),
                 ranks = string.Join(",", _you.SpellRanks.Select(kv => kv.Key + ":" + kv.Value)),
+                fs = _fullscreen,
             }));
         }
         catch { /* a lost save must never take the game down with it */ }
@@ -191,6 +237,7 @@ public sealed class GauntletGame : Game, IRunFx
                     var kv = pair.Split(':');
                     if (kv.Length == 2 && int.TryParse(kv[1], out int rank)) _you.SpellRanks[kv[0]] = rank;
                 }
+            if (r.TryGetProperty("fs", out var fp)) _fullscreen = fp.GetBoolean();
         }
         catch { /* an unreadable save is a fresh start, not a crash */ }
     }
@@ -456,6 +503,7 @@ public sealed class GauntletGame : Game, IRunFx
         _prevKeys = _keys; _keys = Keyboard.GetState();
         _prevMouse = _mouse; _mouse = Mouse.GetState();
         if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
+        if (Pressed(Keys.F11)) { _fullscreen = !_fullscreen; ApplyDisplayMode(); SaveMeta(); }
         _shake = Math.Max(0, _shake - dt * 40f);
         for (int i = _smears.Count - 1; i >= 0; i--)
         { var s = _smears[i]; s.ttl -= dt; if (s.ttl <= 0) _smears.RemoveAt(i); else _smears[i] = s; }
@@ -857,7 +905,11 @@ public sealed class GauntletGame : Game, IRunFx
         _prim.Line(_sb, t, r, th, col); _prim.Line(_sb, r, b, th, col);
         _prim.Line(_sb, b, l, th, col); _prim.Line(_sb, l, t, th, col);
     }
-    private Point MP => new(_mouse.X, _mouse.Y);
+    // The mouse lives in SCREEN pixels; the game thinks in its 1280x760 canvas —
+    // unproject through the fullscreen scale/letterbox so clicks land where they look.
+    private Point MP => new(
+        (int)((_mouse.X - _viewOff.X) / Math.Max(0.01f, _viewScale)),
+        (int)((_mouse.Y - _viewOff.Y) / Math.Max(0.01f, _viewScale)));
     private bool Pressed(Keys k) => _keys.IsKeyDown(k) && _prevKeys.IsKeyUp(k);
     private bool Clicked() => _mouse.LeftButton == ButtonState.Pressed && _prevMouse.LeftButton == ButtonState.Released;
     private bool RightClicked() => _mouse.RightButton == ButtonState.Pressed && _prevMouse.RightButton == ButtonState.Released;
@@ -875,8 +927,9 @@ public sealed class GauntletGame : Game, IRunFx
 
     protected override void Draw(GameTime gt)
     {
-        if (_scene == Scene.Fight) { DrawFightFrame(); base.Draw(gt); return; }
+        if (_scene == Scene.Fight) { DrawFightFrame(); PresentFrame(); base.Draw(gt); return; }
 
+        GraphicsDevice.SetRenderTarget(_frameRT);
         GraphicsDevice.Clear(Mono.Bg);
         _sb.Begin(samplerState: SamplerState.PointClamp);
         switch (_scene)
@@ -889,6 +942,7 @@ public sealed class GauntletGame : Game, IRunFx
             _font.DrawCentered(_sb, _narration.ToUpperInvariant(), W / 2, 62, 2,
                 Mono.Ink * Math.Min(1f, (_narrationUntil - _time) / 0.6f));
         _sb.End();
+        PresentFrame();
         base.Draw(gt);
     }
 
@@ -906,7 +960,7 @@ public sealed class GauntletGame : Game, IRunFx
         _sb.Begin(samplerState: SamplerState.PointClamp, transformMatrix: Matrix.CreateScale(0.5f));
         DrawFight(myTurn, pilots);
         _sb.End();
-        GraphicsDevice.SetRenderTarget(null);
+        GraphicsDevice.SetRenderTarget(_frameRT);
 
         GraphicsDevice.Clear(Mono.Bg);
         var shakeOff = _shake > 0
@@ -1024,7 +1078,7 @@ public sealed class GauntletGame : Game, IRunFx
         bool hov = DepartRect.Contains(MP);
         Mono.Button(_sb, _prim, DepartRect, hover: hov);
         _font.DrawCentered(_sb, "DEPART", DepartRect.Center.X, DepartRect.Y + 15, 2, Mono.ButtonInk(hov));
-        _font.DrawCentered(_sb, "(SPACE)", W / 2, 530, 1, Mono.Faint);
+        _font.DrawCentered(_sb, "(SPACE)  ·  F11 FULLSCREEN", W / 2, 530, 1, Mono.Faint);
 
         // The Post: one hire, paid in banked stones, dead when he's dead.
         if (_mate != null)

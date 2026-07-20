@@ -1,0 +1,59 @@
+name: Gauntlet Windows build
+
+# Builds a self-contained Windows package of THE GAUNTLET OF THE BELL and publishes it
+# two ways, exactly like the DofusSlice workflow:
+#  - as a workflow artifact (needs a GitHub login to download), and
+#  - as a GitHub *Release* asset (public, permanent link, no login, works on mobile).
+# Unzip and double-click Gauntlet.exe — no .NET install required. The 1-bit art packs
+# are local-only (never committed), so the CI build runs on the built-in fallbacks.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "claude/dofus-engine-vertical-slice-7ijlfm" ]
+    paths:
+      - "Gauntlet/**"
+      - "DofusSlice/DofusSlice.Core/**"
+      - ".github/workflows/gauntlet-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish Gauntlet/Gauntlet.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=false
+          -o publish
+
+      - name: Zip the build
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath Gauntlet-windows.zip -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gauntlet-windows
+          path: publish
+
+      - name: Publish GitHub Release (public download, no login)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete gauntlet-latest --yes --cleanup-tag 2>$null
+          gh release create gauntlet-latest Gauntlet-windows.zip `
+            --title "THE GAUNTLET OF THE BELL - latest build" `
+            --notes "Self-contained Windows build. Download Gauntlet-windows.zip, unzip it, and run Gauntlet.exe. No .NET install needed." `
+            --prerelease `
+            --target $env:GITHUB_SHA

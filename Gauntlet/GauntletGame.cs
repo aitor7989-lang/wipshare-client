@@ -975,6 +975,7 @@ public sealed class GauntletGame : Game, IRunFx
         // but renders at native resolution — blocky world, legible numbers.
         _sb.Begin(samplerState: SamplerState.PointClamp,
             transformMatrix: Matrix.CreateTranslation(shakeOff.X, shakeOff.Y, 0));
+        DrawBodies();
         DrawWorldText(myTurn, pilots);
         _sb.End();
 
@@ -1206,6 +1207,15 @@ public sealed class GauntletGame : Game, IRunFx
             DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
         // (The damage-preview NUMBERS moved to DrawWorldText — text stays native-crisp.)
 
+    }
+
+    /// <summary>The Crawl law, second half (owner's call): chunky-pixel BODIES that move
+    /// at NATIVE resolution — sprites, projectiles, motes and rings render over the
+    /// low-res ground with smooth sub-pixel motion, still depth-sorted against the props.
+    /// The sprites stay blocky (they're point-scaled from 16-24px sources); only their
+    /// MOTION gains the full pixel grid. Powerhoof's exact recipe.</summary>
+    private void DrawBodies()
+    {
         // Entities: stones, corpses and fighters share ONE depth-sorted pass, so a
         // sprite behind a rock cluster is properly buried by it. Depth follows the
         // VISUAL position — a body mid-walk sorts where it stands, not where it will.

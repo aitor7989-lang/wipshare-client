@@ -22,8 +22,9 @@ public sealed class GauntletGame : Game
 {
     // ----- shell ---------------------------------------------------------------------
     private const int W = 1280, H = 760;
-    private const int Cols = 13, Rows = 8, Tile = 72;
-    private const int OX = (W - Cols * Tile) / 2, OY = 64;
+    private const int Cols = 13, Rows = 8;
+    private const int TW = 80, TH = 40;   // the iso diamond footprint
+    private const int OX = W / 2 - (Cols - Rows) * TW / 4, OY = 96;
 
     private readonly GraphicsDeviceManager _gfx;
     private SpriteBatch _sb = null!;
@@ -89,7 +90,7 @@ public sealed class GauntletGame : Game
     protected override void LoadContent()
     {
         _sb = new SpriteBatch(GraphicsDevice);
-        _prim = new Primitives(GraphicsDevice, Tile, Tile, 24);
+        _prim = new Primitives(GraphicsDevice, TW, TH, 24);
         var px = new Texture2D(GraphicsDevice, 1, 1);
         px.SetData(new[] { Color.White });
         _font = new PixelFont(px);
@@ -420,13 +421,22 @@ public sealed class GauntletGame : Game
 
     // ================= GEOMETRY ========================================================
 
-    private static Rectangle CellRect(CellCoord c) => new(OX + c.X * Tile, OY + c.Y * Tile, Tile, Tile);
-    private static Vector2 Center(CellCoord c) => new(OX + c.X * Tile + Tile / 2f, OY + c.Y * Tile + Tile / 2f);
+    private static Vector2 Center(CellCoord c) =>
+        new(OX + (c.X - c.Y) * (TW / 2f), OY + (c.X + c.Y) * (TH / 2f));
     private static CellCoord? CellAt(Point m)
     {
-        int x = (m.X - OX) / Tile, y = (m.Y - OY) / Tile;
-        if (m.X < OX || m.Y < OY || x >= Cols || y >= Rows) return null;
+        float lx = (m.X - OX) / (TW / 2f), ly = (m.Y - OY) / (TH / 2f);
+        int x = (int)MathF.Floor((lx + ly) / 2f + 0.5f), y = (int)MathF.Floor((ly - lx) / 2f + 0.5f);
+        if (x < 0 || y < 0 || x >= Cols || y >= Rows) return null;
         return new CellCoord(x, y);
+    }
+
+    private void DiamondOutline(Vector2 c, float th, Color col)
+    {
+        var t = c + new Vector2(0, -TH / 2f); var r = c + new Vector2(TW / 2f, 0);
+        var b = c + new Vector2(0, TH / 2f); var l = c + new Vector2(-TW / 2f, 0);
+        _prim.Line(_sb, t, r, th, col); _prim.Line(_sb, r, b, th, col);
+        _prim.Line(_sb, b, l, th, col); _prim.Line(_sb, l, t, th, col);
     }
     private Point MP => new(_mouse.X, _mouse.Y);
     private bool Pressed(Keys k) => _keys.IsKeyDown(k) && _prevKeys.IsKeyUp(k);
@@ -480,32 +490,31 @@ public sealed class GauntletGame : Game
 
     private void DrawFight()
     {
-        // The board: bare slabs, candle-lit ember graves, the blood of the evening.
+        // The board: iso grave-slabs, candle-lit ember graves, the blood of the evening.
         for (int x = 0; x < Cols; x++)
             for (int y = 0; y < Rows; y++)
             {
-                var r = CellRect(new CellCoord(x, y));
-                _prim.FillRect(_sb, r, (x + y) % 2 == 0 ? Mono.Floor : Mono.FloorAlt);
-                _prim.StrokeRect(_sb, r, 1, Mono.Seam);
+                var cc = Center(new CellCoord(x, y));
+                _prim.DiamondAt(_sb, cc, (x + y) % 2 == 0 ? Mono.Floor : Mono.FloorAlt);
+                DiamondOutline(cc, 1f, Mono.Seam * 0.55f);
             }
         foreach (var e in _embers)
         {
-            var r = CellRect(e);
             float fl = 0.55f + 0.25f * MathF.Sin(_time * 6f + e.X * 3 + e.Y);
-            _prim.FillRect(_sb, r, Mono.Element(Element.Fire) * (0.18f * fl));
-            _prim.DiscAt(_sb, Center(e) + new Vector2(18, -16), 3, Mono.Element(Element.Fire) * fl);
+            _prim.DiamondAt(_sb, Center(e), Mono.Element(Element.Fire) * (0.20f * fl));
+            _prim.DiscAt(_sb, Center(e) + new Vector2(14, -10), 3, Mono.Element(Element.Fire) * fl);
         }
         foreach (var (p, seed) in _blood)
         {
             var rr = new Random(seed);
             for (int i = 0; i < 3; i++)
-                _prim.FillRect(_sb, new Rectangle((int)p.X + rr.Next(-6, 7), (int)p.Y + rr.Next(-5, 6),
-                    rr.Next(2, 5), rr.Next(2, 4)), Mono.Danger * 0.55f);
+                _prim.FillRect(_sb, new Rectangle((int)p.X + rr.Next(-8, 9), (int)p.Y + rr.Next(-4, 5),
+                    rr.Next(2, 5), rr.Next(1, 3)), Mono.Danger * 0.55f);
         }
         foreach (var (f, at) in _corpses)
         {
-            _prim.DiscAt(_sb, Center(at) + new Vector2(0, 12), 15, Mono.Danger * 0.35f);
-            DrawSprite(f.Archetype, Center(at) + new Vector2(0, 8), Mono.Faint, 34);
+            _prim.HaloAt(_sb, Center(at) + new Vector2(0, 6), Mono.Danger * 0.45f);
+            DrawSprite(f.Archetype, Center(at) + new Vector2(0, 4), Mono.Faint, 32);
         }
 
         bool myTurn = _engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar;
@@ -513,23 +522,23 @@ public sealed class GauntletGame : Game
         // Piloting overlays: green ground, blue reach, in the old color law.
         if (myTurn && _selected < 0)
             foreach (var c in _moveRange.Keys)
-                _prim.FillRect(_sb, CellRect(c), Mono.Walk * 0.30f);
+                _prim.DiamondAt(_sb, Center(c), Mono.Walk * 0.32f);
         if (myTurn && _selected >= 0 && _selected < _avatar.Spells.Count)
             foreach (var c in _engine.CastableCells(_avatar, _avatar.Spells[_selected]))
-                _prim.FillRect(_sb, CellRect(c), Mono.Cast * 0.30f);
+                _prim.DiamondAt(_sb, Center(c), Mono.Cast * 0.32f);
         if (CellAt(MP) is { } hc && _engine.Field.InBounds(hc))
-            _prim.StrokeRect(_sb, CellRect(hc), 2, Mono.Ink * 0.7f);
+            DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
 
-        // Fighters: team ring, sprite, HP chip. Staccato — they stand, they strike, they fall.
-        foreach (var f in _engine.Fighters.Where(f => f.IsAlive))
+        // Fighters: team halo at the feet, sprite, HP chip — depth-sorted front to back.
+        foreach (var f in _engine.Fighters.Where(f => f.IsAlive).OrderBy(f => f.Pos.X + f.Pos.Y))
         {
-            var r = CellRect(f.Pos);
+            var cc = Center(f.Pos);
             bool current = _engine.Outcome == FightOutcome.Ongoing && f == _engine.Current;
-            _prim.StrokeRect(_sb, new Rectangle(r.X + 6, r.Y + 6, Tile - 12, Tile - 12),
-                current ? 3 : 2, f.Team == Team.Player ? Mono.Ally : Mono.Danger);
-            DrawSprite(f.Archetype, Center(f.Pos) + new Vector2(0, 6),
+            _prim.HaloAt(_sb, cc + new Vector2(0, 5),
+                (f.Team == Team.Player ? Mono.Ally : Mono.Danger) * (current ? 1f : 0.6f));
+            DrawSprite(f.Archetype, cc,
                 f.Archetype == "sexton" ? Mono.Danger : Mono.Ink, f.Archetype == "sexton" ? 62 : 46);
-            _font.DrawCentered(_sb, f.Hp.ToString(), r.Center.X, r.Bottom - 14, 1,
+            _font.DrawCentered(_sb, f.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
                 f.Hp * 4 <= f.MaxHp ? Mono.Danger : Mono.Ink);
         }
 
@@ -657,16 +666,17 @@ public sealed class GauntletGame : Game
         ["grave_ghoul"] = "ghoul", ["crypt_warden"] = "warden", ["sexton"] = "sexton",
     };
 
-    private void DrawSprite(string archetype, Vector2 feetAnchor, Color tint, float h)
+    private void DrawSprite(string archetype, Vector2 cellCenter, Color tint, float h)
     {
         var name = SpriteOf.GetValueOrDefault(archetype, "husk");
         var sheet = _sprites.GetSheet(name, "idle", "se");
+        var feet = cellCenter + new Vector2(0, TH / 4f + 2);
         if (sheet != null)
-            SpriteDraw.Feet(_sb, sheet, feetAnchor + new Vector2(0, h / 2f - 6), tint, h, 0);
+            SpriteDraw.Feet(_sb, sheet, feet, tint, h, 0);
         else
         {
-            _prim.DiscAt(_sb, feetAnchor, 14, tint * 0.85f);
-            _font.DrawCentered(_sb, archetype[..1].ToUpperInvariant(), (int)feetAnchor.X, (int)feetAnchor.Y - 4, 1, Mono.Bg);
+            _prim.DiscAt(_sb, cellCenter, 14, tint * 0.85f);
+            _font.DrawCentered(_sb, archetype[..1].ToUpperInvariant(), (int)cellCenter.X, (int)cellCenter.Y - 4, 1, Mono.Bg);
         }
     }
 

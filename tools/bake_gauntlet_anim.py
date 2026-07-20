@@ -51,10 +51,14 @@ def recolor(img: Image.Image, invert: bool) -> Image.Image:
     return img
 
 
-def strip(sheet: Image.Image, row: int, cell: int) -> Image.Image:
-    out = Image.new("RGBA", (cell * 4, cell), (0, 0, 0, 0))
+def strip(sheet: Image.Image, row: int, cell: int, crop_top: int = 0) -> Image.Image:
+    """One horizontal strip of 4 frames. crop_top trims dead headroom (the 48px unit
+    frames hold a ~16px figure at the bottom; keeping the empty sky made every unit
+    render a third of its intended size in-game). Bottom stays anchored."""
+    h = cell - crop_top
+    out = Image.new("RGBA", (cell * 4, h), (0, 0, 0, 0))
     for i in range(4):
-        out.paste(sheet.crop((i * cell, row * cell, (i + 1) * cell, (row + 1) * cell)), (i * cell, 0))
+        out.paste(sheet.crop((i * cell, row * cell + crop_top, (i + 1) * cell, (row + 1) * cell)), (i * cell, 0))
     return out
 
 
@@ -75,13 +79,15 @@ def main() -> None:
             continue
         sheet = recolor(Image.open(path), invert=True)
         for row, state in enumerate(STATES):
-            s = strip(sheet, row, 48)
+            # All seven sheets keep their figures in the bottom 24px (attack swooshes
+            # reach to y=25 at worst) — crop the sky, keep the swing room.
+            s = strip(sheet, row, 48, crop_top=24)
             if args.flip:
                 s = s.transpose(Image.FLIP_LEFT_RIGHT)
                 # re-order frames so animation order survives the mirror
                 fixed = Image.new("RGBA", s.size, (0, 0, 0, 0))
                 for i in range(4):
-                    fixed.paste(s.crop(((3 - i) * 48, 0, (4 - i) * 48, 48)), (i * 48, 0))
+                    fixed.paste(s.crop(((3 - i) * 48, 0, (4 - i) * 48, s.height)), (i * 48, 0))
                 s = fixed
             s.save(out / f"{name}_{state}_se_4.png")
         print(f"  {fname} -> {name}_(idle|attack|walk|die)_se_4.png")

@@ -36,7 +36,7 @@ public sealed class Primitives
         Disc = BuildDisc(gd, discSize);
         FaceL = BuildFace(gd, tileW / 2, tileH / 2, BlockH, left: true);
         FaceR = BuildFace(gd, tileW / 2, tileH / 2, BlockH, left: false);
-        Halo = BuildHalo(gd, 46, 23, 3);
+        Halo = BuildHalo(gd, 54, 27, 3);   // wide enough that 44px bodies stand inside it
     }
 
     /// <summary>One extruded side of a raised tile: the diamond's lower edge swept down by

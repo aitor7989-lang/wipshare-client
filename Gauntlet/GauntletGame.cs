@@ -26,7 +26,9 @@ public sealed class GauntletGame : Game, IRunFx
     private const int W = 1280, H = 760;
     private const int Cols = RunRules.Cols, Rows = RunRules.Rows;
     private const int TW = 80, TH = 40;   // the iso diamond footprint
-    private const int OX = W / 2 - (Cols - Rows) * TW / 4, OY = 88;
+    // The island sits a touch lower now that bodies stand ~1.5 tiles tall — heads and
+    // overhead bars must clear the road strip, and the dead space above the band shrinks.
+    private const int OX = W / 2 - (Cols - Rows) * TW / 4, OY = 118;
     private const int BandTop = H - 120;
 
     private readonly GraphicsDeviceManager _gfx;
@@ -948,6 +950,8 @@ public sealed class GauntletGame : Game, IRunFx
         bool pilots = myTurn && !_autoPlay;
 
         // The board: a ragged iso island — void is the night, stones cluster like graves.
+        // Every coast edge gets a brighter rim: the coastline KILLS here, so the eye must
+        // find it without counting cells (and the island stops looking like torn paper).
         for (int x = 0; x < Cols; x++)
             for (int y = 0; y < Rows; y++)
             {
@@ -955,7 +959,20 @@ public sealed class GauntletGame : Game, IRunFx
                 if (_engine.Field.TileAt(cell) == TileKind.Void) continue;
                 var cc = Center(cell);
                 _prim.DiamondAt(_sb, cc, (x + y) % 2 == 0 ? Mono.Floor : Mono.FloorAlt);
-                DiamondOutline(cc, 1f, Mono.Seam * 0.55f);
+                DiamondOutline(cc, 1f, Mono.Seam * 0.7f);
+
+                bool VoidAt(int dx, int dy)
+                {
+                    var n = new CellCoord(x + dx, y + dy);
+                    return !_engine.Field.InBounds(n) || _engine.Field.TileAt(n) == TileKind.Void;
+                }
+                var t = cc + new Vector2(0, -TH / 2f); var r = cc + new Vector2(TW / 2f, 0);
+                var b = cc + new Vector2(0, TH / 2f); var l = cc + new Vector2(-TW / 2f, 0);
+                var rim = Mono.Dim * 0.85f;
+                if (VoidAt(1, 0)) _prim.Line(_sb, r, b, 2f, rim);    // SE coast
+                if (VoidAt(0, 1)) _prim.Line(_sb, b, l, 2f, rim);    // SW coast
+                if (VoidAt(-1, 0)) _prim.Line(_sb, l, t, 2f, rim);   // NW coast
+                if (VoidAt(0, -1)) _prim.Line(_sb, t, r, 2f, rim);   // NE coast
             }
         foreach (var e in _st.Embers)
         {
@@ -1057,7 +1074,7 @@ public sealed class GauntletGame : Game, IRunFx
                     {
                         _prim.BlockAt(_sb, cc, new Color(30, 30, 29), new Color(17, 17, 16), new Color(23, 23, 22));
                         var rock = _sprites.GetSheet("onebit_rock", "idle", "se");
-                        if (rock != null) SpriteDraw.Feet(_sb, rock, cc + new Vector2(0, -4), Mono.Ink, 26, 0);
+                        if (rock != null) SpriteDraw.Feet(_sb, rock, cc + new Vector2(0, -4), Mono.Ink, 30, 0);
                     }));
                 else if (kind == TileKind.Spikes)
                     pass.Add(((x + y) * 4 + 1, () =>
@@ -1077,7 +1094,7 @@ public sealed class GauntletGame : Game, IRunFx
             pass.Add(((at.X + at.Y) * 4, () =>
             {
                 _prim.HaloAt(_sb, cc + new Vector2(0, 6), Mono.Danger * 0.45f);
-                DrawSprite(f, cc + new Vector2(0, 4), Mono.Faint, 32, "die");
+                DrawSprite(f, cc + new Vector2(0, 4), Mono.Faint, SizeOf(f.Archetype).frame * 0.72f, "die");
             }));
         }
         foreach (var f in _engine.Fighters.Where(f => f.IsAlive))
@@ -1103,13 +1120,15 @@ public sealed class GauntletGame : Game, IRunFx
                     2f, Mono.Ink * 0.55f);
                 // Champions (grade 3) wear the danger color and stand a head taller.
                 bool champ = ff.Team == Team.Enemy && ff.Level >= 3 && ff.Archetype != "sexton";
-                float sh = ff.Archetype == "sexton" ? 62 : champ ? 56 : 46;
+                var (frameH, figH) = SizeOf(ff.Archetype);
+                float scale = champ ? 1.15f : 1f;
+                float sh = frameH * scale;
                 DrawSprite(ff, cc,
                     ff.Archetype == "sexton" || champ ? Mono.Danger : Mono.Ink, sh, StateOf(ff));
                 // The life bar rides ABOVE the head (owner's law) — no numbers unless asked:
                 // hover the body and the exact count appears over the bar.
                 float hf = Math.Clamp(ff.Hp / (float)ff.MaxHp, 0f, 1f);
-                int barY = (int)(cc.Y + TH / 4f + 2 - sh) - 8;
+                int barY = (int)(cc.Y + TH / 4f + 2 - figH * scale) - 8;
                 _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, 26, 3), Mono.Faint);
                 _prim.FillRect(_sb, new Rectangle((int)cc.X - 13, barY, (int)(26 * hf), 3),
                     ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : ff.Team == Team.Player ? Mono.Ally : Mono.Ink);
@@ -1133,7 +1152,7 @@ public sealed class GauntletGame : Game, IRunFx
             if (sheet != null)
             {
                 int fr = (int)(_time * 16) % sheet.FrameCount;
-                var srcW = sheet.FrameWidth; int s = 3;
+                var srcW = sheet.FrameWidth; int s = 2;   // 32px missiles beside 44px bodies
                 bool flip = to.X < from.X;
                 _sb.Draw(sheet.Texture,
                     new Rectangle((int)at.X - srcW * s / 2, (int)at.Y - sheet.FrameHeight * s / 2, srcW * s, sheet.FrameHeight * s),
@@ -1547,6 +1566,26 @@ public sealed class GauntletGame : Game, IRunFx
         ["grave_mite"] = "mite", ["bone_piper"] = "piper", ["tomb_wraith"] = "wraith",
         ["grave_ghoul"] = "ghoul", ["crypt_warden"] = "warden", ["sexton"] = "sexton",
         ["cairn_brute"] = "brute",
+    };
+
+    /// <summary>The size law (frame height drawn, figure height inside it). The animated
+    /// sheets keep attack-swing headroom above the body (figure fills ~2/3 of the frame);
+    /// the single-frame mobs are near-tight. One table so a mite reads SMALL, a husk
+    /// man-sized, a champion a head taller, and the Sexton towers — instead of every
+    /// body rendering at whatever its file's padding happened to be.</summary>
+    private static (float frame, float fig) SizeOf(string archetype) => archetype switch
+    {
+        "grave_mite" => (34, 30),
+        "gravehound" => (42, 39),
+        "marrow_spitter" => (46, 35),
+        "tomb_wraith" => (46, 40),
+        "bone_piper" => (48, 45),
+        "barrow_husk" => (50, 47),
+        "grave_ghoul" => (70, 47),
+        "crypt_warden" => (72, 48),
+        "cairn_brute" => (74, 49),
+        "sexton" => (96, 64),
+        _ => (66, 44),   // the heroes
     };
 
     private void DrawSprite(Fighter f, Vector2 cellCenter, Color tint, float h, string state)

@@ -21,10 +21,11 @@ public static class Mono
     public static readonly Color Faint = new(52, 52, 50);      // hairlines, grid seams
     public static readonly Color Danger = new(224, 60, 48);    // THE accent: enemies, damage, alarms
 
-    // The tactical board: two barely-different floor tones + a visible seam.
-    public static readonly Color Floor = new(20, 20, 19);
-    public static readonly Color FloorAlt = new(16, 16, 15);
-    public static readonly Color Seam = new(46, 46, 44);
+    // The tactical board: a readable checker (the old tones were near-twins) + a seam
+    // that actually seams. The grid should read at a glance, like 1.29's tactical mode.
+    public static readonly Color Floor = new(23, 23, 22);
+    public static readonly Color FloorAlt = new(15, 15, 14);
+    public static readonly Color Seam = new(52, 52, 50);
 
     // FUNCTIONAL color (designer's call): board information may speak green/blue —
     // walk = green, cast = blue, heal = green, AP = blue — while art stays ink-on-black.

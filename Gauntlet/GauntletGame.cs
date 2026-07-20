@@ -51,8 +51,8 @@ public sealed class GauntletGame : Game
     private int _bonusHp, _bonusDmg, _bonusMove, _bonusRegen;
     private const float BellStart = 300f;
 
-    private static CampaignUnit NewYou() =>
-        new() { Id = "avatar", ClassId = "cannon", Name = "You", IsAvatar = true };
+    private static CampaignUnit NewYou(string classId = "cannon") =>
+        new() { Id = "avatar", ClassId = classId, Name = "You", IsAvatar = true };
 
     // ----- the fight -----------------------------------------------------------------
     private CombatEngine _engine = null!;
@@ -113,15 +113,6 @@ public sealed class GauntletGame : Game
         _blood.Clear(); _smears.Clear(); _floats.Clear(); _corpses.Clear();
         _manaCarry.Clear(); _selected = -1; _turnOwner = ""; _resolved = false; _firstBlood = false;
 
-        var field = new Battlefield(Cols, Rows);
-        _embers.Clear();
-        var rnd = new Random(++_seed);
-        for (int i = 0; i < 5; i++)   // candle-lit ember graves: stand there and burn
-            _embers.Add(new CellCoord(3 + rnd.Next(Cols - 6), rnd.Next(Rows)));
-
-        _avatar = Bless(TitheContent.MakeCrewMember(_you, new CellCoord(2, 3)));
-        var fighters = new List<Fighter> { _avatar };
-
         string[][] waves =
         {
             new[] { "barrow_husk" },
@@ -131,9 +122,35 @@ public sealed class GauntletGame : Game
         };
         bool boss = _sextonNow || _fightIndex >= 3;
         var comp = waves[boss ? 3 : _fightIndex];
+
+        // A ragged island with clustered stones — regenerated until every grave can
+        // be reached from the crew's ground (no sealed pockets, ever).
+        var rnd = new Random(++_seed);
+        Battlefield field;
+        CellCoord aSpawn; var mobSpawns = new List<CellCoord>();
+        for (int attempt = 0; ; attempt++)
+        {
+            field = BuildBoard(rnd);
+            var taken = new HashSet<CellCoord>();
+            aSpawn = Spawn(field, left: true, 0, taken);
+            mobSpawns.Clear();
+            for (int i = 0; i < comp.Length; i++) mobSpawns.Add(Spawn(field, left: false, i, taken));
+            bool ok = mobSpawns.All(mc => Pathfinding.FindPath(field, aSpawn, mc,
+                _ => false, allowOccupiedGoal: true) != null);
+            if (ok || attempt > 24) break;
+        }
+
+        _embers.Clear();
+        for (int i = 0; i < 24 && _embers.Count < 5; i++)
+        {
+            var c = new CellCoord(2 + rnd.Next(Cols - 4), rnd.Next(Rows));
+            if (field.IsWalkable(c) && c != aSpawn && !mobSpawns.Contains(c)) _embers.Add(c);
+        }
+
+        _avatar = Bless(TitheContent.MakeCrewMember(_you, aSpawn));
+        var fighters = new List<Fighter> { _avatar };
         for (int i = 0; i < comp.Length; i++)
-            fighters.Add(TitheContent.MakeMob(comp[i], $"mob_{_fightIndex}_{i}",
-                new CellCoord(Cols - 3, 1 + i * 2 + (Rows - comp.Length * 2) / 2)));
+            fighters.Add(TitheContent.MakeMob(comp[i], $"mob_{_fightIndex}_{i}", mobSpawns[i]));
 
         _engine = new CombatEngine(field, fighters, new SystemRng(_seed));
         _engine.Emitted += OnCombatEvent;
@@ -141,6 +158,59 @@ public sealed class GauntletGame : Game
         _scene = Scene.Fight;
         _sfx.SetAmbient("wind", 0.12f);
         Narrate(boss ? "the bell falls silent. HE is here." : $"the dead notice you. ({FightLabel()})");
+    }
+
+    /// <summary>Bite the rectangle ragged with void from the rim, then drop 2-3 CLUSTERS
+    /// of grave-stones grown by random walk — never a perfect square, never bare.</summary>
+    private static Battlefield BuildBoard(Random rnd)
+    {
+        var f = new Battlefield(Cols, Rows);
+        int bites = 4 + rnd.Next(3);
+        for (int b = 0; b < bites; b++)
+        {
+            int edge = rnd.Next(4);
+            var c = new CellCoord(
+                edge == 0 ? 0 : edge == 1 ? Cols - 1 : rnd.Next(Cols),
+                edge == 2 ? 0 : edge == 3 ? Rows - 1 : rnd.Next(Rows));
+            int size = 2 + rnd.Next(4);
+            for (int i = 0; i < size; i++)
+            {
+                f.SetHole(c);
+                var opts = f.Orthogonal(c).ToList();
+                if (opts.Count == 0) break;
+                c = opts[rnd.Next(opts.Count)];
+            }
+        }
+        int clusters = 2 + rnd.Next(2);
+        for (int k = 0; k < clusters; k++)
+        {
+            var c = new CellCoord(3 + rnd.Next(Cols - 6), 1 + rnd.Next(Math.Max(1, Rows - 2)));
+            int stones = 2 + rnd.Next(4);
+            for (int i = 0; i < stones; i++)
+            {
+                if (f.TileAt(c) != TileKind.Void) f.SetObstacle(c);
+                var opts = f.Orthogonal(c).ToList();
+                if (opts.Count == 0) break;
+                c = opts[rnd.Next(opts.Count)];
+            }
+        }
+        return f;
+    }
+
+    /// <summary>A walkable cell as far to one side as the island allows, spread by slot.</summary>
+    private static CellCoord Spawn(Battlefield f, bool left, int idx, HashSet<CellCoord> taken)
+    {
+        int yTarget = (Rows / 2 - 1 + idx * 2) % Rows;
+        for (int dx = 0; dx < Cols; dx++)
+        {
+            int x = left ? 1 + dx : Cols - 2 - dx;
+            if (x < 0 || x >= Cols) continue;
+            var best = Enumerable.Range(0, Rows).Select(y => new CellCoord(x, y))
+                .Where(c => f.IsWalkable(c) && !taken.Contains(c))
+                .OrderBy(c => Math.Abs(c.Y - yTarget)).ToList();
+            if (best.Count > 0) { taken.Add(best[0]); return best[0]; }
+        }
+        return new CellCoord(Cols / 2, Rows / 2);
     }
 
     private string FightLabel() => _sextonNow || _fightIndex >= 3 ? "THE SEXTON"
@@ -169,12 +239,28 @@ public sealed class GauntletGame : Game
         return g;
     }
 
-    /// <summary>The free basic attack (Mewgenics: costs nothing, once a turn): the spark.</summary>
-    private static SpellDef Strike() => new()
+    /// <summary>The free basic attack (Mewgenics: costs nothing, once a turn), per class:
+    /// the Cannon's spark, the Archer's loosed arrow, the Bulwark's shove.</summary>
+    private SpellDef Strike() => _you.ClassId switch
     {
-        Id = 950, Name = "Spark", ApCost = 0, MinRange = 1, MaxRange = 3,
-        RequiresLineOfSight = true, MaxCastsPerTurn = 1,
-        Effects = new[] { SpellEffect.Damage(Element.Fire, 5, 7) },
+        "archer" => new SpellDef
+        {
+            Id = 951, Name = "Loosed Arrow", ApCost = 0, MinRange = 2, MaxRange = 5,
+            RequiresLineOfSight = true, MaxCastsPerTurn = 1,
+            Effects = new[] { SpellEffect.Damage(Element.Air, 5, 7) },
+        },
+        "bulwark" => new SpellDef
+        {
+            Id = 952, Name = "Shove", ApCost = 0, MinRange = 1, MaxRange = 1,
+            RequiresLineOfSight = true, MaxCastsPerTurn = 1,
+            Effects = new[] { SpellEffect.Damage(Element.Earth, 6, 8), SpellEffect.Push(1) },
+        },
+        _ => new SpellDef
+        {
+            Id = 950, Name = "Spark", ApCost = 0, MinRange = 1, MaxRange = 3,
+            RequiresLineOfSight = true, MaxCastsPerTurn = 1,
+            Effects = new[] { SpellEffect.Damage(Element.Fire, 5, 7) },
+        },
     };
 
     // ================= COMBAT EVENTS (the feel hangs off these) ========================
@@ -264,9 +350,16 @@ public sealed class GauntletGame : Game
         base.Update(gt);
     }
 
+    private static readonly string[] ClassIds = { "cannon", "archer", "bulwark" };
+    private static Rectangle ClassRect(int i) => new(W / 2 - 205 + i * 140, 430, 130, 26);
+
     private void UpdateCity()
     {
         _sfx.SetAmbient("dirge", 0.09f);
+        if (Clicked())
+            for (int i = 0; i < ClassIds.Length; i++)
+                if (ClassRect(i).Contains(MP) && _you.ClassId != ClassIds[i])
+                { _you = NewYou(ClassIds[i]); _sfx.Play("click"); return; }
         if (Pressed(Keys.Space) || Pressed(Keys.Enter) || (Clicked() && DepartRect.Contains(MP)))
         { _sfx.Play("bell", 0.7f, jitter: false); StartRun(); }
     }
@@ -371,7 +464,7 @@ public sealed class GauntletGame : Game
     {
         if (Pressed(Keys.Space) || Pressed(Keys.Enter) || Clicked())
         {
-            if (!_runWon) _you = NewYou();    // the fallen leader is buried; a new one rises
+            if (!_runWon) _you = NewYou(_you.ClassId); // the fallen leader is buried; kin answer
             _scene = Scene.City;
         }
     }
@@ -444,7 +537,7 @@ public sealed class GauntletGame : Game
 
     private static Rectangle WellRect(int i) => new(400 + i * 52, H - 92, 48, 48);
     private static Rectangle EndTurnRect => new(W - 190, H - 86, 130, 30);
-    private static Rectangle DepartRect => new(W / 2 - 90, 470, 180, 44);
+    private static Rectangle DepartRect => new(W / 2 - 90, 476, 180, 44);
     private static Rectangle CardRect(int i) => new(W / 2 - 340 + i * 240, 240, 200, 260);
 
     // ================= DRAW ============================================================
@@ -479,9 +572,18 @@ public sealed class GauntletGame : Game
         _font.DrawCentered(_sb, "THE GAUNTLET", W / 2, 170, 6, Mono.Ink);
         _font.DrawCentered(_sb, "OF THE BELL", W / 2, 230, 3, Mono.Dim);
         _font.DrawCentered(_sb, $"BANKED: {_banked} ESSENCE STONES", W / 2, 320, 2, Mono.Ink);
-        _font.DrawCentered(_sb, $"YOU — CANNON, LEVEL {_you.Level}", W / 2, 352, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 396, 1, Mono.Dim);
-        _font.DrawCentered(_sb, "the bell gives you five minutes. he keeps the change.", W / 2, 412, 1, Mono.Faint);
+        _font.DrawCentered(_sb, $"YOU — {_you.ClassId.ToUpperInvariant()}, LEVEL {_you.Level}", W / 2, 352, 1, Mono.Dim);
+        _font.DrawCentered(_sb, "three packs stand between you and the sexton.", W / 2, 388, 1, Mono.Dim);
+        _font.DrawCentered(_sb, "the bell gives you five minutes. he keeps the change.", W / 2, 404, 1, Mono.Faint);
+        for (int i = 0; i < ClassIds.Length; i++)
+        {
+            var r = ClassRect(i);
+            bool sel = _you.ClassId == ClassIds[i];
+            bool ch = r.Contains(MP);
+            Mono.Slot(_sb, _prim, r, hover: ch, selected: sel);
+            _font.DrawCentered(_sb, ClassIds[i].ToUpperInvariant(), r.Center.X, r.Y + 9, 1,
+                sel ? Mono.Ink : Mono.Dim);
+        }
         bool hov = DepartRect.Contains(MP);
         Mono.Button(_sb, _prim, DepartRect, hover: hov);
         _font.DrawCentered(_sb, "DEPART", DepartRect.Center.X, DepartRect.Y + 15, 2, Mono.ButtonInk(hov));
@@ -490,11 +592,13 @@ public sealed class GauntletGame : Game
 
     private void DrawFight()
     {
-        // The board: iso grave-slabs, candle-lit ember graves, the blood of the evening.
+        // The board: a ragged iso island — void is the night, stones cluster like graves.
         for (int x = 0; x < Cols; x++)
             for (int y = 0; y < Rows; y++)
             {
-                var cc = Center(new CellCoord(x, y));
+                var cell = new CellCoord(x, y);
+                if (_engine.Field.TileAt(cell) == TileKind.Void) continue;
+                var cc = Center(cell);
                 _prim.DiamondAt(_sb, cc, (x + y) % 2 == 0 ? Mono.Floor : Mono.FloorAlt);
                 DiamondOutline(cc, 1f, Mono.Seam * 0.55f);
             }
@@ -511,11 +615,6 @@ public sealed class GauntletGame : Game
                 _prim.FillRect(_sb, new Rectangle((int)p.X + rr.Next(-8, 9), (int)p.Y + rr.Next(-4, 5),
                     rr.Next(2, 5), rr.Next(1, 3)), Mono.Danger * 0.55f);
         }
-        foreach (var (f, at) in _corpses)
-        {
-            _prim.HaloAt(_sb, Center(at) + new Vector2(0, 6), Mono.Danger * 0.45f);
-            DrawSprite(f.Archetype, Center(at) + new Vector2(0, 4), Mono.Faint, 32);
-        }
 
         bool myTurn = _engine.Outcome == FightOutcome.Ongoing && _engine.Current == _avatar;
 
@@ -526,21 +625,50 @@ public sealed class GauntletGame : Game
         if (myTurn && _selected >= 0 && _selected < _avatar.Spells.Count)
             foreach (var c in _engine.CastableCells(_avatar, _avatar.Spells[_selected]))
                 _prim.DiamondAt(_sb, Center(c), Mono.Cast * 0.32f);
-        if (CellAt(MP) is { } hc && _engine.Field.InBounds(hc))
+        if (CellAt(MP) is { } hc && _engine.Field.InBounds(hc)
+            && _engine.Field.TileAt(hc) != TileKind.Void)
             DiamondOutline(Center(hc), 2f, Mono.Ink * 0.7f);
 
-        // Fighters: team halo at the feet, sprite, HP chip — depth-sorted front to back.
-        foreach (var f in _engine.Fighters.Where(f => f.IsAlive).OrderBy(f => f.Pos.X + f.Pos.Y))
+        // Entities: stones, corpses and fighters share ONE depth-sorted pass, so a
+        // sprite behind a rock cluster is properly buried by it.
+        var pass = new List<(int depth, Action draw)>();
+        for (int x = 0; x < Cols; x++)
+            for (int y = 0; y < Rows; y++)
+            {
+                var cell = new CellCoord(x, y);
+                if (_engine.Field.TileAt(cell) != TileKind.Rock) continue;
+                var cc = Center(cell);
+                pass.Add(((x + y) * 4 + 1, () =>
+                {
+                    _prim.BlockAt(_sb, cc, new Color(30, 30, 29), new Color(17, 17, 16), new Color(23, 23, 22));
+                    var rock = _sprites.GetSheet("onebit_rock", "idle", "se");
+                    if (rock != null) SpriteDraw.Feet(_sb, rock, cc + new Vector2(0, -4), Mono.Ink, 26, 0);
+                }));
+            }
+        foreach (var (f, at) in _corpses)
         {
-            var cc = Center(f.Pos);
-            bool current = _engine.Outcome == FightOutcome.Ongoing && f == _engine.Current;
-            _prim.HaloAt(_sb, cc + new Vector2(0, 5),
-                (f.Team == Team.Player ? Mono.Ally : Mono.Danger) * (current ? 1f : 0.6f));
-            DrawSprite(f.Archetype, cc,
-                f.Archetype == "sexton" ? Mono.Danger : Mono.Ink, f.Archetype == "sexton" ? 62 : 46);
-            _font.DrawCentered(_sb, f.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
-                f.Hp * 4 <= f.MaxHp ? Mono.Danger : Mono.Ink);
+            var cc = Center(at);
+            pass.Add(((at.X + at.Y) * 4, () =>
+            {
+                _prim.HaloAt(_sb, cc + new Vector2(0, 6), Mono.Danger * 0.45f);
+                DrawSprite(f.Archetype, cc + new Vector2(0, 4), Mono.Faint, 32);
+            }));
         }
+        foreach (var f in _engine.Fighters.Where(f => f.IsAlive))
+        {
+            var ff = f; var cc = Center(f.Pos);
+            pass.Add(((f.Pos.X + f.Pos.Y) * 4 + 2, () =>
+            {
+                bool current = _engine.Outcome == FightOutcome.Ongoing && ff == _engine.Current;
+                _prim.HaloAt(_sb, cc + new Vector2(0, 5),
+                    (ff.Team == Team.Player ? Mono.Ally : Mono.Danger) * (current ? 1f : 0.6f));
+                DrawSprite(ff.Archetype, cc,
+                    ff.Archetype == "sexton" ? Mono.Danger : Mono.Ink, ff.Archetype == "sexton" ? 62 : 46);
+                _font.DrawCentered(_sb, ff.Hp.ToString(), (int)cc.X, (int)cc.Y + TH / 2 - 4, 1,
+                    ff.Hp * 4 <= ff.MaxHp ? Mono.Danger : Mono.Ink);
+            }));
+        }
+        foreach (var (_, draw) in pass.OrderBy(p => p.depth)) draw();
 
         foreach (var (from, to, _) in _smears)
             _prim.Line(_sb, from, to, 5f, Mono.Ink * 0.5f);
@@ -604,7 +732,7 @@ public sealed class GauntletGame : Game
             var tint = canPay ? SpellInk(sp) : Mono.Faint;
             if (key == null || !DrawIcon("icon_spell_" + key, r, tint))
             {
-                if (sp.Id == 950) { if (!DrawIcon("icon_slot_weapon", r, tint)) _font.DrawCentered(_sb, "S", r.Center.X, r.Y + 16, 2, tint); }
+                if (sp.Id >= 950) { if (!DrawIcon("icon_slot_weapon", r, tint)) _font.DrawCentered(_sb, "S", r.Center.X, r.Y + 16, 2, tint); }
                 else _font.DrawCentered(_sb, sp.Name[..1], r.Center.X, r.Y + 16, 2, tint);
             }
             _font.DrawCentered(_sb, sp.ApCost == 0 ? "FREE" : sp.ApCost.ToString(),

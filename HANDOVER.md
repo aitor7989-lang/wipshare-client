@@ -1,0 +1,214 @@
+# HANDOVER — `wipshare-client` games (DofusSlice + Gauntlet)
+
+_Last updated: 2026-07-21 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · HEAD `4373803`_
+
+---
+
+## 0. TL;DR — where we are
+
+- **Go-forward decision: continue with _DofusSlice_** — the older "campaign" RPG (internally branded **TITHE**), which the owner finds more fun than the newer **Gauntlet** roguelite. Both stay in the repo; the Gauntlet is not deleted, just not the focus.
+- **Everything is committed and pushed. Working tree is clean.** A clean checkout / fresh environment loses nothing. HEAD = `4373803` on branch `claude/dofus-engine-vertical-slice-7ijlfm`, in sync with origin.
+- **Two games, one shared engine** (`DofusSlice.Core`). Both build clean on Linux; both have live, public Windows releases.
+- **Immediate next-up:** an adversarial bug-hunt found real AI issues in the shared `Policy` brain and the new `ForecastShift` engine helper. **These affect BOTH games** — the DofusSlice campaign runs on the same `Policy`. They are documented in §7a and are **not yet applied**.
+- **Heads-up correction:** this session's combat changes (risk/reward AI + mob-kit tweaks + `slam` push 1→2) were tuned against the **Gauntlet** balance sim, but they live in the shared engine/content, so they **also changed the DofusSlice campaign** — untested there. See §7c before shipping more balance work.
+
+---
+
+## 1. The two games
+
+| Game | Path | What it is | Download (public, no login) | Run |
+|---|---|---|---|---|
+| **DofusSlice** (TITHE) — _go-forward_ | `DofusSlice/DofusSlice.Game/` | Dark Dofus-1.29-flavored **campaign** dungeon crawl. Combat is **watched, not piloted** — the whole crew + enemy pack fight by AI policy; player skill = class/essence build, placement, engagement, speed control. | [`dofusslice-latest`](https://github.com/aitor7989-lang/wipshare-client/releases/download/dofusslice-latest/DofusSlice-windows.zip) | `DofusSlice.Game.exe` |
+| **Gauntlet** | `Gauntlet/` | Tighter **roguelite**: one dealt road of ~11 rooms, a bell/toll clock, run-and-done. Built later on the same engine. | [`gauntlet-latest`](https://github.com/aitor7989-lang/wipshare-client/releases/download/gauntlet-latest/Gauntlet-windows.zip) | `Gauntlet.exe` |
+
+Both are self-contained Windows zips — unzip, run the `.exe`, no .NET install needed.
+
+### DofusSlice campaign, in one screen each
+- **Crew:** avatar (chosen class + one drafted essence) + up to two hired mercenaries. Merc death is permanent; a downed avatar comes out Wounded; a full wipe ends the campaign.
+- **Scene flow** (`Scene` enum `Combat | City | Graveyard`, `SliceGame.cs:30`): City (Tithe-Keeper / Temple Sister / Hiring Post NPCs + Lychgate) → through the Lychgate → roam the Graveyard on a real-time floor clock → engage packs as watched fights → the Bell ejects you back to City with loot; repeat.
+- **Combat:** initiative-ordered PA/PM turns, LoS/range/AoE spells, pushback + hazards, a placement phase, 1×/2×/4× playback speed. Rules in `DofusSlice.Core/Combat/CombatEngine.cs`; presentation only in `SliceGame.cs`.
+- **Crypt:** level-3-gated linear sealing-door dungeon (Ossuary → Nave → Reliquary → Sexton's court → altar-out); clock + HP carry through. `DofusSlice.Core/Content/Tithe/DiveSession.cs`.
+- **Inventory doll + slots** (`LeaderPanels.cs`, `DollSlots` L193): Dofus slot doll (Weapon/Hat/Cape/Amulet/2×Ring/Belt/Boots), click-to-equip **and** drag-and-drop.
+- **Panels:** `C` = CARACTÉRISTIQUES sheet (`DrawCharacterWindow`, `LeaderPanels.cs:76`); `S` = SORTS spell book (`SpellWin`, L35).
+- **Sets/essences:** Adventurer starter set (+1 MP full-set) + behaviour-rule uniques; essences drop from mobs, consumed out of combat to teach a skill into one of 2 permanent essence slots.
+- **Audio:** fully **synthesized** chiptune SFX + looping ambient beds — no audio asset files. `Audio/Synth.cs`, `Audio/SoundBank.cs`.
+- **UI:** Dofus "oldUI" theme (`Rendering/DofusUi.cs`), a Gum HUD skin (`Ui/GumHud.cs`, `ui/TitheHud.gumx`), Emberwick combat chrome, a baked pixel font. All procedural — no Ankama assets committed.
+
+---
+
+## 2. Build & run (local, Linux-friendly)
+
+> **Do NOT run `dotnet build` at the repo root.** The root is a *different* project — a Windows-only WPF screen-capture app (`WipShare.Client.csproj`, `net8.0-windows…`). With no root `.sln`, a bare build resolves to it and fails on Linux with `NETSDK1100` **by design**. That failure is not a game problem.
+
+**DofusSlice (the go-forward):**
+```bash
+cd DofusSlice
+dotnet build DofusSlice.sln -c Release        # Core + Game + Sim; builds clean (0 errors)
+dotnet run --project DofusSlice.Game -c Release   # → DofusSlice.Game.exe, the TITHE campaign
+# one-off watched fights / seeds:
+dotnet run --project DofusSlice.Game -- boss      # Sexton's court
+dotnet run --project DofusSlice.Game -- pack      # a pack fight
+dotnet run --project DofusSlice.Game -- 4         # start on RNG seed 4
+dotnet run --project DofusSlice.Game dofus        # legacy PILOTED slice (not the campaign)
+# convenience: DofusSlice/run.sh  or  run.bat
+```
+`DofusSlice.Sim` (third project in the solution) is a **headless balance/QA simulator**, not a shipped game.
+
+**Gauntlet:**
+```bash
+cd Gauntlet
+dotnet build Gauntlet.csproj -c Release           # references ..\DofusSlice\DofusSlice.Core
+dotnet run -c Release                             # → Gauntlet.exe
+dotnet run -c Release -- --sim 500 all            # headless balance ledger (cannon/archer/bulwark)
+```
+
+**Build health (verified):** `DofusSlice.sln` → 0 errors / 24 benign warnings (Gum obsolete alias + unreachable debug branches). `Gauntlet.csproj` → 0 errors / 1 benign warning (`CS7022`, the secondary `RunSim.Main` is ignored in favour of top-level `Program.cs`).
+
+---
+
+## 3. Repo layout & shared engine
+
+```
+wipshare-client/
+├─ WipShare.Client.csproj        # UNRELATED WPF tray app (Windows-only) — ignore for games
+├─ HANDOVER.md                   # this file
+├─ DofusSlice/
+│  ├─ DofusSlice.sln             # the ONLY .sln (Core + Game + Sim)
+│  ├─ DofusSlice.Core/           # SHARED ENGINE + TITHE content tables (no deps)
+│  ├─ DofusSlice.Game/           # the campaign game (TITHE) → DofusSlice.Game.exe
+│  ├─ DofusSlice.Sim/            # headless balance simulator
+│  ├─ docs/                      # design bible + audits + roadmaps (the real backlog — see §7b)
+│  └─ tools/                     # DofusSlice asset scripts (Python + Pillow)
+├─ Gauntlet/                     # roguelite → Gauntlet.csproj (in NO .sln); refs ..\DofusSlice\DofusSlice.Core
+│  ├─ assets-default/            # committed original art (see §5)
+│  └─ assets/                    # gitignored pack art (see §5)
+├─ tools/                        # Gauntlet asset scripts
+└─ .github/workflows/            # dofusslice-build.yml, gauntlet-build.yml
+```
+
+- **Shared engine = `DofusSlice.Core`.** Combat (`CombatEngine`), AI (`Policy`, `MobBrain`), and all TITHE content tables live here. Both games depend on it, so **an engine change ripples into both**.
+- Gauntlet is standalone (`Gauntlet.csproj`), pulling the engine in via a cross-tree `ProjectReference` to `DofusSlice.Core`.
+
+### AI brains (important)
+- **`DofusSlice.Core/AI/Policy.cs`** — the real brain (per-unit `AiPolicy`: Bruiser / Flanker / Skirmisher / Artillery / Support). **Drives the DofusSlice TITHE campaign** (`SliceGame.cs:958`, `Policy.TakeTurn` in `UpdateWatchedTurn`) **AND** the Gauntlet mobs + autoplay + balance sim.
+- **`DofusSlice.Core/AI/MobBrain.cs`** — a simpler legacy greedy brain. Only reached by the old **piloted** `dofus` mode (`SliceGame.cs:987`). Not used by the TITHE campaign or the Gauntlet.
+- ⇒ **Any change to `Policy.cs` affects both games.** (This is why §7a matters for DofusSlice.)
+
+---
+
+## 4. Content & data
+
+All classes, mobs, skills, items, sets, arenas, encounters are **embedded JSON string constants** in
+`DofusSlice/DofusSlice.Core/Content/Tithe/TitheTables.cs` (`ClassesJson`, `MobsJson`, `SkillsJson`, `EssencesJson`, `ItemsJson`, arenas, prices…). Kept as strings so the games and the sim consume identical data with no file plumbing. **This file is in the shared `DofusSlice.Core`, so content edits change both games.** Key parsing/lookup lives in `TitheContent.cs` (`MakeMob`, `LoadSkills`, `HasSkill`, `ClassIds`, essence table).
+
+---
+
+## 5. Asset pipeline — the committed-vs-local art rule (CRITICAL, do not break)
+
+**Third-party art packs are NEVER committed to git** (their licenses forbid redistribution). **Only original, procedurally-generated art is committed.** This is enforced by `.gitignore`.
+
+- `Gauntlet/assets/.gitignore` = `*` (+ keep `.gitignore`). The only tracked file under `Gauntlet/assets/` is `.gitignore` itself. All pack-derived PNGs sitting there are **local-only**.
+- `Gauntlet/assets-default/` = **58 committed original PNGs** — procedural silhouette animation strips (`{name}_{state}_se_4.png`) + procedural icons (`icon_spell_*`, `icon_slot_*`) + `onebit_rock.png`. License-clean; these ship in git and in the CI binary.
+- **`SpriteBank` resolves default-first, then override** (`Gauntlet/Rendering/SpriteBank.cs:54-71`): it indexes `assets-default/` then `assets/`, and **later dir wins**, so any pack file dropped into `assets/` transparently overrides the committed default of the same name. Missing files fall back to procedural drawing. (The class XML-doc at `SpriteBank.cs:33-44` is stale — trust the constructor.)
+- **DofusSlice has the same setup**: `DofusSlice.Game/assets-default/` (committed originals: iop/boar/gobball/piou + `tile_*`) and a gitignored `assets/`.
+
+**Which script produces what:**
+
+| Script | Output | Source | Commit? |
+|---|---|---|---|
+| `tools/gen_default_sprites.py` | `Gauntlet/assets-default/` | own procedural code | ✅ COMMIT (original) |
+| `tools/gen_default_icons.py` | `Gauntlet/assets-default/` | own procedural code | ✅ COMMIT (original) |
+| `tools/bake_icons.py` | `Gauntlet/assets/` | owner's 1-bit Pixel Icons pack | ❌ LOCAL ONLY |
+| `tools/bake_gauntlet_anim.py` | `Gauntlet/assets/` | owner's 48px 1-bit anim pack | ❌ LOCAL ONLY |
+| `DofusSlice/tools/gen_default_sprites.py` | `DofusSlice.Game/assets-default/` | own procedural code | ✅ COMMIT (original) |
+| `DofusSlice/tools/bake_onebit.py`, `bake_assets.py`, `bake_dofus_ui.py` | `DofusSlice.Game/assets/` | Hexany CC0 / Batuhan UI / owner packs | ❌ LOCAL ONLY |
+
+**Rule of thumb: `gen_*` → `assets-default/` (commit); `bake_*` → `assets/` (never commit).**
+CI ships on the committed `assets-default/` fallbacks. To get the "real" pack look, run the `bake_*` scripts locally against the owner's private pack folders and deliver the resulting `assets/` zip out-of-band (never via git).
+
+_(Stale-comment note: `Gauntlet.csproj:21` names `bake_onebit.py` as the Gauntlet override baker — wrong; that script bakes DofusSlice art. The Gauntlet bakers are `bake_icons.py` / `bake_gauntlet_anim.py`. Mechanism is correct; only the name is off.)_
+
+---
+
+## 6. CI & releases
+
+Both workflows: `windows-latest`, `setup-dotnet 8.0.x`, `dotnet publish -c Release -r win-x64 --self-contained`, zip → upload artifact → `gh release create` (force-recreates the tag, `--prerelease`). Trigger: `workflow_dispatch` or a push to `claude/dofus-engine-vertical-slice-7ijlfm` on the matching paths.
+
+| Workflow | Builds | Path trigger | Tag | Asset | Exe |
+|---|---|---|---|---|---|
+| `.github/workflows/dofusslice-build.yml` | `DofusSlice.Game.csproj` | `DofusSlice/**` | `dofusslice-latest` | `DofusSlice-windows.zip` | `DofusSlice.Game.exe` |
+| `.github/workflows/gauntlet-build.yml` | `Gauntlet.csproj` | `Gauntlet/**`, `DofusSlice/DofusSlice.Core/**` | `gauntlet-latest` | `Gauntlet-windows.zip` | `Gauntlet.exe` |
+
+- A change under `DofusSlice/DofusSlice.Core/**` triggers **both** workflows (Core is inside `DofusSlice/`, and is an explicit Gauntlet trigger).
+- No CI for the root WPF client.
+- **CI status was last confirmed GREEN for HEAD `4373803`** (both `DofusSlice Windows build` and `Gauntlet Windows build` succeeded; both releases republished).
+
+---
+
+## 7. Open work / next-up
+
+### 7a. Pending bug-hunt fixes — shared `Policy` / `ForecastShift` (affects BOTH games) — NOT YET APPLIED
+
+An adversarial 3-agent review of this session's newest combat code found real defects. Because they're in the shared engine (`DofusSlice.Core`), they hit the DofusSlice campaign too. **Highest priority for the next session.** Fix, then re-run BOTH sims/QA.
+
+1. **HIGH — `ForecastShift` over-values embers as kills** (`DofusSlice.Core/Combat/CombatEngine.cs`, the new `ForecastShift`). It sums ember danger as flat stacking `+2/cell`, but embers are **non-lethal** (floor the victim at 1 HP, do nothing at ≤2 HP — see `Gauntlet/RunCore.cs` `TryEmberBurn`). So the AI predicts ember-drag "kills" that never land and wastes its setup. **Fix:** walk the victim's HP through the shove and apply **spikes** (lethal, respect `HazardImmune`) vs **soft hazards/embers** (`TileDanger` — never lethal, `Max(1, hp-n)`, skip at `hp<=2`, and note `TryEmberBurn` ignores `HazardImmune`) with their real rules; return actual HP lost.
+2. **HIGH — `TryShove` preempts a better/lethal plain attack** (`Policy.cs:32`, scoring at `~300`). It fires on an absolute threshold (`bestScore >= 200`) *before* the policy switch and never compares against what a normal swing/`TryShootBest` would do — so a low-value wall-slam or hazard chip can steal the AP a lethal hit needed, or shove a killable enemy out of reach. **Fix:** only pre-empt when the shove **kills** (void, or `direct + fc.Damage >= hp`) or **strictly beats** the best plain attack this turn; never fire a chip-shove that displaces a currently-killable enemy.
+3. **MED/HIGH — `TryShove` fires a PULL for ranged policies** (`Shovers` yields Push *and* Pull; `TryShove` runs for Skirmisher/Artillery). A kiter that owns a pull will drag an enemy *toward itself* across a hazard for a few chip damage, wrecking the kite. **Fix:** don't pull for ranged policies, and/or penalize a shift that reduces distance to the caster.
+4. **MED — `SettleTurn` retreats bruisers/tanks off any hazard cell to the *farthest* safe cell** (`Policy.cs`, the `Danger>0` branch isn't policy-gated). The doc says "bruisers hold the line," but a bruiser on an ember-adjacent melee cell gets sent to the farthest safe cell → charge-in / attack / settle-away / charge-back thrash. **Fix:** prefer a **safe cell that still threatens melee** (restore the old `StepOffHazard` ordering by `CanHitAnyEnemyFrom`), keep bruisers close.
+5. **LOW/MED — dead `StepOffHazard`, lost firing-cell logic.** `StepOffHazard` is now unreachable; `SettleTurn` replaced it but dropped its "keep a cell you can still shoot from" ordering, so a ranged unit can settle out of firing position. **Fix:** fold the `CanHitAnyEnemyFrom` preference back into `SettleTurn`; delete the dead method.
+6. **LOW — `Charge` push-setup bias** can detour past a nearer attack cell or onto fire (soft inefficiency; no loop). And the `>= 200` threshold comment is inaccurate (a single 3-dmg spike scores 120 < 200).
+
+**Not bugs (verified clean):** `ForecastShift` geometry/void/collision/spike math mirrors `ApplyShift` exactly; no infinite-loop/stalemate (all actions spend resources, loop is 24-guarded); null-shover handling is safe; `poison`/`lifesteal` are fully engine-supported; the mob-kit JSON is well-formed with no dangling refs; essence mappings intact; no save-compat break.
+
+### 7b. DofusSlice backlog (the go-forward game) — from `DofusSlice/docs/`
+
+- **`docs/AUDIT-129.md`** — Dofus-1.29 fidelity audit, **21 findings still open**. High-value: crits still fire in the hero path despite "no crits" (`CombatEngine.cs:281-289` + `SpellLibrary.cs`); `castsPerTarget` missing from the spell pipeline; linear/area shapes not expressible in Tithe skill data; party XP split missing the 1.29 group coefficient; Adventurer Set is 7 pieces incl. weapon vs the real 6-piece no-weapon set; items don't roll min–max jets; grade scaling too steep; aggro is one global 6-cell radius vs per-type; placement shows only blue cells not both teams.
+- **`docs/OVERNIGHT-LOG.md:113`** — open item **8: Balance pass (M5)** — give cautious play real risk, make the Crypt a fair big bet, tune income-per-dive, fix the survive-forever/wipe-fast bimodal spread. Plus (item 9) a second full set + more bestiary numbers.
+- **`docs/TITHE_slice_bible.md`** — **§9 Dofus-1.29 mining plan** is the big outstanding data task (extract experience.csv, xp_split, formulas, spell_schema, mob/item/set CSVs into a `/reference/` dir). §3.3 Deferred (elemental damage channels, traps/light economy, affixed elites, reinforcements, 2nd floor). §10 M5 Tuning is the remaining milestone. §12 Open Questions (title, essence-removal refund vs destroy, merc-death kit drop-vs-lost, currency name, betrayal-chase timing).
+- **`docs/COMBAT-PARITY.md:42`** — still missing: weapons as a distinct system, spell levels/variants, glyphs/traps/portals, flee, tombstones/resurrection, exact Dofus corner-based LoS (current is Bresenham centre-to-centre).
+- **`docs/ENGINE-GAP-ANALYSIS.md:59-99`** — ground elevation & overhead layers, summon turn-*end* queue.
+- `docs/ROADMAP-POLISH.md`, `docs/ROADMAP-LEADER.md` — fully ticked.
+- No literal `TODO`/`FIXME`/`HACK` in the C# source; "placeholder" comments only flag data numbers awaiting the §9 mining pass.
+
+### 7c. Cross-game caveat — this session's Gauntlet-tuned combat changes also touched DofusSlice
+
+These live in the shared engine/content and were balanced against the **Gauntlet** sim only. Their effect on the **DofusSlice campaign is untested** — review before building more balance work there, and decide per-change whether to keep, retune, or gate to the Gauntlet:
+- Risk/reward AI in `Policy.cs` (shove-into-void/hazard, `SettleTurn` retreat) — DofusSlice enemies + crew now use it.
+- `slam` push **1 → 2** (bulwark class skill) — buffs the bulwark in both games (in the Gauntlet it moved bulwark ~25% → ~39% win-rate; unknown in DofusSlice).
+- Mob kits: Cairn Brute `brute_hurl` (push 2), Grave Ghoul `ghoul_rend` now lifesteal 8-12, Marrow Spitter gains `marrow_rot` (ranged poison). Ghoul & spitter appear in DofusSlice packs; the brute does not.
+- If DofusSlice should NOT inherit these, the clean options are: (a) gate the AI shove logic behind an engine flag the Gauntlet sets, or (b) split the class/mob content that each game needs.
+
+---
+
+## 8. What we did this session (newest → older)
+
+Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent commits:
+- `4373803` **Risk/reward AI + mob variety** — `ForecastShift` predictor; AI shoves enemies into the void/hazards, sets up the drop on approach, wounded flankers retreat; Cairn Brute hurls, Ghoul feeds, Spitter rots; bulwark Slam → push 2 to play the same shove game. (See §7a for the follow-up bugs this introduced.)
+- `1125367` **Doubled the road's stranger things** — 3→6 events, 3→6 mysteries (Gauntlet). Balance-verified.
+- `9021bde` **Animated the default silhouettes** — real walk gaits + attack swings for the committed `assets-default/` sprites (they used to only breathe).
+- `4cc209d` **Audit pass** — Sexton void-anchor (can be shoved for tempo but not one-cast off the map), save-load hardening (validate class/skill ids), ember-on-push, dedup helpers.
+- `eb0888f` spell + gear icons wired through wells/slots. `8eadd3e` committed original silhouette fallbacks (fixed the placeholder letter-balls). `f69cd53` g13 THE HAND (deep UX/feel pass). Earlier: g10–g13 Gauntlet milestones, fullscreen, Crawl-style low-res world, size polish.
+
+---
+
+## 9. Conventions & constraints (must follow)
+
+- **Develop on branch `claude/dofus-engine-vertical-slice-7ijlfm`.** Both games build from it. Don't push elsewhere without explicit permission.
+- **Never commit third-party art** (see §5). Only original procedural art (`assets-default/`, `gen_*` scripts) is committable. Pack-baked art (`assets/`, `bake_*`) is delivered locally, never via git.
+- **Commit-message trailers** (end every commit with):
+  ```
+  Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+  Claude-Session: https://claude.ai/code/session_01SDSyNYemg1wWfQW7JzGyUq
+  ```
+- **Never** put the model identifier in commits, PRs, code, or any pushed artifact — chat replies only.
+- **No pull requests unless explicitly asked.** Pushing to the branch auto-triggers the CI release for the touched game.
+- After pushing, CI republishes the matching `*-latest` release; a new release does **not** disturb an already-downloaded copy.
+
+---
+
+## 10. Verification / QA methods
+
+- **Balance sim (deterministic):** `Gauntlet` → `dotnet run -c Release -- --sim 500 all [seed]` prints a per-class win-rate ledger in ~6s; `DofusSlice.Sim` is the campaign-side headless harness. Use these to catch balance regressions before shipping.
+- **Live QA (headless):** `Xvfb :7` + `xdotool` (held keys / clicks) + screenshot, then read the PNG. Run the built `.exe` directly (not `dotnet run`) when testing with pack art hidden to prove the committed defaults render. Kick the game, screenshot a sequence to confirm progression (start → combat → victory/loot) — a static scene usually means autoplay is off, not a stall.
+- **CI status:** the GitHub Actions list response is large; parse the saved tool-result file for `head_sha` / `status` / `conclusion`, or query a specific run/job by id.
+- **Adversarial review:** spin up parallel review agents (find → verify) on the newest diff before trusting complex logic — that's how §7a was found.

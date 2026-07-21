@@ -1,0 +1,11 @@
+Name,id,name,policy,maxHp,ap,mp,strength,agility,initiative,xp,stones,essence,drop,gear,chance,prefRangeMin,prefRangeMax,resAir,resEarth,resFire,resWater
+barrow_husk,barrow_husk,Barrow Husk,melee,54,6,3,18,8,5,110,18,Seize,6,4,,,,,,,
+marrow_spitter,marrow_spitter,Marrow Spitter,ranged,30,6,3,14,10,9,90,15,Marrow Spit,8,4,14,3,6,,,,
+gravehound,gravehound,Gravehound,flanker,36,6,5,20,16,15,130,22,Pounce,5,5,,,,20,,,
+crypt_warden,crypt_warden,Crypt Warden,melee,72,6,2,18,10,6,170,26,Ironhide,5,7,,,,,35,15,
+grave_mite,grave_mite,Grave Mite,flanker,12,6,4,8,12,11,35,6,Sap,10,2,,,,,,,
+bone_piper,bone_piper,Bone Piper,support,26,6,3,10,10,10,120,20,Piper's Gift,8,5,,3,6,,,,
+tomb_wraith,tomb_wraith,Tomb Wraith,ranged,24,6,3,8,18,14,140,24,Marrow Spit,6,5,,4,7,30,,,
+grave_ghoul,grave_ghoul,Grave Ghoul,melee,44,6,4,24,10,12,150,24,Seize,5,5,,,,,20,,-20
+cairn_brute,cairn_brute,Cairn Brute,melee,40,6,3,20,8,8,140,22,Seize,5,5,,,,,15,,
+sexton,sexton,The Sexton,melee,150,8,2,22,6,7,700,120,Sexton's Toll,100,65,,,,20,20,20,20

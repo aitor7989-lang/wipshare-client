@@ -1,0 +1,93 @@
+[
+  {
+    "Name": "adventurer",
+    "id": "adventurer",
+    "name": "Adventurer Set",
+    "tiers": [
+      {
+        "pieces": 2,
+        "vitality": 10
+      },
+      {
+        "pieces": 3,
+        "vitality": 18,
+        "strength": 3,
+        "intelligence": 3,
+        "power": 2
+      },
+      {
+        "pieces": 4,
+        "vitality": 28,
+        "strength": 6,
+        "intelligence": 6,
+        "agility": 3,
+        "power": 4
+      },
+      {
+        "pieces": 5,
+        "vitality": 40,
+        "strength": 10,
+        "intelligence": 10,
+        "agility": 6,
+        "wisdom": 4,
+        "power": 6
+      },
+      {
+        "pieces": 6,
+        "vitality": 55,
+        "strength": 15,
+        "intelligence": 15,
+        "agility": 10,
+        "wisdom": 8,
+        "power": 10
+      },
+      {
+        "pieces": 7,
+        "vitality": 75,
+        "strength": 22,
+        "intelligence": 22,
+        "agility": 15,
+        "wisdom": 12,
+        "power": 15,
+        "mp": 1
+      }
+    ]
+  },
+  {
+    "Name": "bonewrought",
+    "id": "bonewrought",
+    "name": "Bonewrought Set",
+    "tiers": [
+      {
+        "pieces": 2,
+        "vitality": 14,
+        "power": 3
+      },
+      {
+        "pieces": 3,
+        "vitality": 26,
+        "strength": 8,
+        "intelligence": 8,
+        "power": 6
+      },
+      {
+        "pieces": 4,
+        "vitality": 42,
+        "strength": 14,
+        "intelligence": 14,
+        "wisdom": 8,
+        "power": 10
+      },
+      {
+        "pieces": 5,
+        "vitality": 60,
+        "strength": 20,
+        "intelligence": 20,
+        "agility": 10,
+        "wisdom": 12,
+        "power": 14,
+        "ap": 1
+      }
+    ]
+  }
+]

@@ -1,0 +1,56 @@
+[
+  {
+    "Name": "Seize",
+    "name": "Seize",
+    "skill": "seize",
+    "blurb": "The husk's grip: a rooting strike."
+  },
+  {
+    "Name": "Marrow Spit",
+    "name": "Marrow Spit",
+    "skill": "marrow_spit",
+    "blurb": "The spitter's ranged bile."
+  },
+  {
+    "Name": "Pounce",
+    "name": "Pounce",
+    "skill": "grave_bite",
+    "blurb": "The hound's lunging bite."
+  },
+  {
+    "Name": "Ironhide",
+    "name": "Ironhide",
+    "skill": "warden_ironhide",
+    "blurb": "The warden's self-shield."
+  },
+  {
+    "Name": "Sap",
+    "name": "Sap",
+    "skill": "mite_sap",
+    "blurb": "The mite's leeching sting."
+  },
+  {
+    "Name": "Piper's Gift",
+    "name": "Piper's Gift",
+    "skill": "piper_gift",
+    "blurb": "The piper's gift of action."
+  },
+  {
+    "Name": "Sexton's Toll",
+    "name": "Sexton's Toll",
+    "skill": "sexton_smash",
+    "blurb": "The keeper's crushing toll."
+  },
+  {
+    "Name": "Blood Pact",
+    "name": "Blood Pact",
+    "skill": "blood_pact",
+    "blurb": "Temple exclusive: trade blood for action (1 AP + 10 HP \u2192 +3 AP, once a turn)."
+  },
+  {
+    "Name": "Blink",
+    "name": "Blink",
+    "skill": "blink",
+    "blurb": "Temple exclusive: a 2-cell escape leap, once a fight."
+  }
+]

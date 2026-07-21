@@ -1,0 +1,4 @@
+Name,id,name,policy,passive,element,baseHp,ap,mp,vitality,strength,intelligence,chance,agility,wisdom,initiative,prefRangeMin,prefRangeMax,blurb
+archer,archer,Archer,skirmisher,long_shot,air,26,6,4,14,6,4,4,20,14,15,4,8,"An Air archer: keeps max distance, shoots the softest target; Long Shot hits harder from afar. Agility is its damage."
+bulwark,bulwark,Bulwark,bruiser,rage_below,earth,48,6,3,52,20,4,4,12,10,8,1,1,"An Earth bulwark: advances, body-blocks, shoves with Slam; Rage Below hits harder when bloodied. Strength is its damage."
+cannon,cannon,Cannon,artillery,overchannel,fire,34,7,3,24,6,30,4,10,12,11,3,6,A Fire cannon: holds a sightline and nukes; Overchannel banks its unspent AP into the hit. Intelligence is its damage.

@@ -1,0 +1,565 @@
+[
+  {
+    "Name": "piercing_shot",
+    "key": "piercing_shot",
+    "name": "Piercing Shot",
+    "ap": 4,
+    "min": 4,
+    "max": 8,
+    "los": true,
+    "ranks": [
+      {
+        "min": 3
+      },
+      {
+        "max": 9
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 11,
+        "max": 16
+      }
+    ]
+  },
+  {
+    "Name": "slam",
+    "key": "slam",
+    "name": "Slam",
+    "ap": 4,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "ranks": [
+      {
+        "max": 2
+      },
+      {
+        "ap": 3
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 12,
+        "max": 18
+      },
+      {
+        "kind": "push",
+        "cells": 2
+      }
+    ]
+  },
+  {
+    "Name": "ruin_bolt",
+    "key": "ruin_bolt",
+    "name": "Ruin Bolt",
+    "ap": 4,
+    "min": 3,
+    "max": 6,
+    "los": true,
+    "ranks": [
+      {
+        "max": 7
+      },
+      {
+        "ap": 3
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "fire",
+        "min": 18,
+        "max": 24
+      }
+    ]
+  },
+  {
+    "Name": "barbed_quill",
+    "key": "barbed_quill",
+    "name": "Barbed Quill",
+    "ap": 3,
+    "min": 4,
+    "max": 7,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "max": 8
+      },
+      {
+        "cooldown": 0
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 6,
+        "max": 9
+      },
+      {
+        "kind": "status",
+        "status": "poison",
+        "mag": 4,
+        "turns": 2
+      }
+    ]
+  },
+  {
+    "Name": "backblast",
+    "key": "backblast",
+    "name": "Backblast",
+    "ap": 3,
+    "min": 1,
+    "max": 3,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "max": 4
+      },
+      {
+        "ap": 2
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "fire",
+        "min": 10,
+        "max": 15
+      },
+      {
+        "kind": "push",
+        "cells": 2
+      }
+    ]
+  },
+  {
+    "Name": "husk_strike",
+    "key": "husk_strike",
+    "name": "Husk Strike",
+    "ap": 3,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 12,
+        "max": 18
+      }
+    ]
+  },
+  {
+    "Name": "marrow_spit",
+    "key": "marrow_spit",
+    "name": "Marrow Spit",
+    "ap": 3,
+    "min": 3,
+    "max": 6,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "water",
+        "min": 10,
+        "max": 15
+      }
+    ]
+  },
+  {
+    "Name": "grave_bite",
+    "key": "grave_bite",
+    "name": "Grave Bite",
+    "ap": 3,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 16,
+        "max": 24
+      }
+    ]
+  },
+  {
+    "Name": "warden_ironhide",
+    "key": "warden_ironhide",
+    "name": "Ironhide",
+    "ap": 2,
+    "min": 0,
+    "max": 0,
+    "los": false,
+    "cooldown": 2,
+    "effects": [
+      {
+        "kind": "status",
+        "status": "shield",
+        "mag": 8,
+        "turns": 1
+      }
+    ]
+  },
+  {
+    "Name": "mite_sap",
+    "key": "mite_sap",
+    "name": "Sap",
+    "ap": 2,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 4,
+        "max": 7
+      },
+      {
+        "kind": "status",
+        "status": "mpdrain",
+        "mag": 1,
+        "turns": 1
+      }
+    ]
+  },
+  {
+    "Name": "wraith_wail",
+    "key": "wraith_wail",
+    "name": "Wraith Wail",
+    "ap": 3,
+    "min": 3,
+    "max": 7,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 11,
+        "max": 15
+      }
+    ]
+  },
+  {
+    "Name": "ghoul_rend",
+    "key": "ghoul_rend",
+    "name": "Ghoul Rend",
+    "ap": 3,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "effects": [
+      {
+        "kind": "lifesteal",
+        "element": "earth",
+        "min": 8,
+        "max": 12
+      }
+    ]
+  },
+  {
+    "Name": "marrow_rot",
+    "key": "marrow_rot",
+    "name": "Marrow Rot",
+    "ap": 3,
+    "min": 2,
+    "max": 6,
+    "los": true,
+    "cooldown": 3,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "water",
+        "min": 6,
+        "max": 10
+      },
+      {
+        "kind": "status",
+        "status": "poison",
+        "mag": 3,
+        "turns": 2
+      }
+    ]
+  },
+  {
+    "Name": "brute_hurl",
+    "key": "brute_hurl",
+    "name": "Hurl",
+    "ap": 4,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 8,
+        "max": 12
+      },
+      {
+        "kind": "push",
+        "cells": 2
+      }
+    ]
+  },
+  {
+    "Name": "piper_gift",
+    "key": "piper_gift",
+    "name": "Piper's Gift",
+    "ap": 3,
+    "min": 1,
+    "max": 4,
+    "los": true,
+    "castsPerTurn": 1,
+    "effects": [
+      {
+        "kind": "grant_ap",
+        "min": 2
+      }
+    ]
+  },
+  {
+    "Name": "sexton_smash",
+    "key": "sexton_smash",
+    "name": "Sexton's Toll",
+    "ap": 5,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "cooldown": 2,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 18,
+        "max": 26
+      },
+      {
+        "kind": "push",
+        "cells": 2
+      }
+    ]
+  },
+  {
+    "Name": "sexton_hook",
+    "key": "sexton_hook",
+    "name": "Gravedigger's Hook",
+    "ap": 4,
+    "min": 2,
+    "max": 5,
+    "los": true,
+    "cooldown": 1,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 8,
+        "max": 12
+      },
+      {
+        "kind": "pull",
+        "cells": 2
+      }
+    ]
+  },
+  {
+    "Name": "seize",
+    "key": "seize",
+    "name": "Seize",
+    "ap": 3,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "cooldown": 1,
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "earth",
+        "min": 8,
+        "max": 12
+      },
+      {
+        "kind": "status",
+        "status": "seized",
+        "mag": 0,
+        "turns": 1
+      }
+    ]
+  },
+  {
+    "Name": "bastion",
+    "key": "bastion",
+    "name": "Bastion",
+    "ap": 3,
+    "min": 0,
+    "max": 0,
+    "los": false,
+    "cooldown": 3,
+    "ranks": [
+      {
+        "cooldown": 2
+      }
+    ],
+    "effects": [
+      {
+        "kind": "status",
+        "status": "shield",
+        "mag": 10,
+        "turns": 1
+      }
+    ]
+  },
+  {
+    "Name": "crippling_arrow",
+    "key": "crippling_arrow",
+    "name": "Crippling Arrow",
+    "ap": 2,
+    "min": 3,
+    "max": 7,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "max": 8
+      },
+      {
+        "cooldown": 0
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 6,
+        "max": 10
+      },
+      {
+        "kind": "status",
+        "status": "mpdrain",
+        "mag": 1,
+        "turns": 1
+      }
+    ]
+  },
+  {
+    "Name": "flashfire",
+    "key": "flashfire",
+    "name": "Flashfire",
+    "ap": 3,
+    "min": 1,
+    "max": 2,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "ap": 2
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "fire",
+        "min": 12,
+        "max": 16
+      },
+      {
+        "kind": "push",
+        "cells": 1
+      }
+    ]
+  },
+  {
+    "Name": "blood_pact",
+    "key": "blood_pact",
+    "name": "Blood Pact",
+    "ap": 1,
+    "min": 0,
+    "max": 0,
+    "los": false,
+    "castsPerTurn": 1,
+    "effects": [
+      {
+        "kind": "self_damage",
+        "min": 10
+      },
+      {
+        "kind": "grant_ap",
+        "min": 3
+      }
+    ]
+  },
+  {
+    "Name": "blink",
+    "key": "blink",
+    "name": "Blink",
+    "ap": 2,
+    "min": 1,
+    "max": 2,
+    "los": false,
+    "cooldown": 30,
+    "targetsGround": true,
+    "effects": [
+      {
+        "kind": "teleport"
+      }
+    ]
+  },
+  {
+    "Name": "deadeye",
+    "key": "deadeye",
+    "name": "Deadeye",
+    "ap": 5,
+    "min": 5,
+    "max": 8,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "max": 9
+      },
+      {
+        "cooldown": 0
+      }
+    ],
+    "effects": [
+      {
+        "kind": "damage",
+        "element": "air",
+        "min": 16,
+        "max": 22
+      }
+    ]
+  },
+  {
+    "Name": "blood_price",
+    "key": "blood_price",
+    "name": "Blood Price",
+    "ap": 4,
+    "min": 1,
+    "max": 1,
+    "los": true,
+    "cooldown": 1,
+    "ranks": [
+      {
+        "cooldown": 0
+      }
+    ],
+    "effects": [
+      {
+        "kind": "lifesteal",
+        "element": "earth",
+        "min": 14,
+        "max": 20
+      }
+    ]
+  }
+]

@@ -770,7 +770,9 @@ public static class RunRules
     public static (string Title, string Sub, List<PickCard> Cards) RollEventCards(
         RunState st, CampaignUnit you, Random rnd)
     {
-        int hurt = Math.Max(1, (you.CurrentHp ?? TitheContent.UnitMaxHp(you)) - 8);
+        int maxHp = TitheContent.UnitMaxHp(you);
+        int hurt = Math.Max(1, (you.CurrentHp ?? maxHp) - 8);
+        int Mend(int amt) => Math.Min(maxHp, (you.CurrentHp ?? maxHp) + amt);
         (string title, string sub, PickCard[] options)[] events =
         {
             ("THE OPEN OSSUARY", "a stone lid, already ajar. something glints.", new[]
@@ -793,6 +795,27 @@ public static class RunRules
                     () => { st.Tolls += 6; st.GradeLift = 1; }),
                 new PickCard("LET IT SWAY", "+1 TOLL\n\nrestraint is\nits own coin", "EVENT",
                     () => st.Tolls += 1),
+            }),
+            ("THE COLLAPSED PEW", "a church bench split down the aisle. coins wink in the splinters.", new[]
+            {
+                new PickCard("PRISE IT UP", "+22 STONES\n\nbut the labour\nspends 3 tolls", "EVENT",
+                    () => { st.RunStones += 22; st.Tolls = Math.Max(0, st.Tolls - 3); }),
+                new PickCard("KNEEL AND BREATHE", "+3 TOLLS\n\na quiet moment,\nand the bell waits", "EVENT",
+                    () => st.Tolls += 3),
+            }),
+            ("THE OIL FONT", "a brass bowl of grave-oil, black and unmoving.", new[]
+            {
+                new PickCard("ANOINT YOUR WOUNDS", "HEAL 14\n\nthe oil clings —\nit costs 2 tolls", "EVENT",
+                    () => { you.CurrentHp = Mend(14); st.Tolls = Math.Max(0, st.Tolls - 2); }),
+                new PickCard("SKIM THE GOLD", "+12 STONES\n\nflakes of leaf\noff the cold rim", "EVENT",
+                    () => st.RunStones += 12),
+            }),
+            ("THE HANGED CENSER", "a censer on a long chain, still smoking over the empty nave.", new[]
+            {
+                new PickCard("ROB THE NAVE", "+30 STONES\n\nbut every pack ahead\nwakes a grade angrier", "EVENT",
+                    () => { st.RunStones += 30; st.GradeLift = 1; }),
+                new PickCard("LIGHT A CANDLE", "+2 TOLLS\n\nthe smoke stills\nand time forgives", "EVENT",
+                    () => st.Tolls += 2),
             }),
         };
         var open = Enumerable.Range(0, events.Length).Where(i => !st.EventsSeen.Contains(i)).ToList();
@@ -864,6 +887,36 @@ public static class RunRules
                 }),
                 new PickCard("LEAVE IT SEALED", "+2 TOLLS\n\nsome prayers are\nbest left unheard", "MYSTERY",
                     () => st.Tolls += 2)),
+            ("THE TOLLKEEPER'S PURSE", "a fat purse on a hook, stamped with the bell's own sign.",
+                new PickCard("CUT IT DOWN", "55 in 100: +40 STONES\n\notherwise the hook\nrings — 5 tolls lost", "MYSTERY", () =>
+                {
+                    if (roll < 55) { st.RunStones += 40; fx?.Narrate("the purse falls fat into your hand. forty stones."); }
+                    else { st.Tolls = Math.Max(0, st.Tolls - 5); fx?.Narrate("the hook sings. the bell hears, and five tolls burn."); }
+                }),
+                new PickCard("LEAVE THE COIN", "+8 STONES\n\na few that fell\nfrom the seam", "MYSTERY",
+                    () => st.RunStones += 8)),
+            ("THE PALE COMMUNION", "a wafer laid on a dead tongue. it looks, somehow, almost fresh.",
+                new PickCard("TAKE IT IN", "50 in 100: FULL HEAL\nand +2 tolls\n\notherwise it turns —\n12 blood", "MYSTERY", () =>
+                {
+                    if (roll < 50) { you.CurrentHp = null; st.Tolls += 2; fx?.Narrate("the host is kind. you are whole, and the bell waits."); }
+                    else { you.CurrentHp = Math.Max(1, (you.CurrentHp ?? TitheContent.UnitMaxHp(you)) - 12); fx?.Narrate("the host turns on your tongue. twelve blood, spat into the dark."); }
+                }),
+                new PickCard("BURY THE HOST", "+3 TOLLS\n\na small rite,\nkindly met", "MYSTERY",
+                    () => st.Tolls += 3)),
+            ("THE MASON'S WAGER", "fresh mortar, a trowel, a half-built cairn that wants a hand.",
+                new PickCard("BUILD IT UP", "50 in 100: an essence\nand +10 stones\n\notherwise you wake\nwhat it caged", "MYSTERY", () =>
+                {
+                    if (roll < 50)
+                    {
+                        var open = EssencePool.Where(p => !st.Essences.Contains(p.Name)).ToList();
+                        if (open.Count > 0) { TakeEssence(st, open[rnd.Next(open.Count)].Name, fx); st.RunStones += 10;
+                            fx?.Narrate("the cairn stands true. it gives up its ghost, and ten stones besides."); }
+                        else { st.RunStones += 30; fx?.Narrate("the cairn holds only stones. thirty of them."); }
+                    }
+                    else { st.GradeLift = 1; fx?.Narrate("you set the last stone wrong. something behind it wakes, angrier."); }
+                }),
+                new PickCard("TIP YOUR HAT", "+5 STONES\n\nleft for the next\npoor mason", "MYSTERY",
+                    () => st.RunStones += 5)),
         };
         var m = mysteries[rnd.Next(mysteries.Length)];
         return (m.title, m.sub, new List<PickCard> { m.risk, m.safe });

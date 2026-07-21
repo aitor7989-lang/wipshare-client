@@ -276,6 +276,9 @@ public static class RunRules
                         + (st.FamilyCount("BONE") >= 3 ? 1 : 0),
             SlamBonus = (st.HasKeyword("slam") ? 4 : 0) + (st.Essences.Contains("GHOUL'S WEIGHT") ? 4 : 0),
             HazardImmune = st.HasKeyword("surefoot") || st.Transformed("BONE"),
+            // EMBER PLATE ("warm") / BONE spare the avatar the ember tick (see TryEmberBurn); flag it so
+            // the AI's shove forecast honours the same exemption and can't bank a phantom ember-fed kill.
+            SoftHazardImmune = st.HasKeyword("warm") || st.Transformed("BONE"),
         };
         foreach (var (k, v) in f.Resistances) g.Resistances[k] = v;
         // The wall calcifies: +5% resistance to everything per pack survived (cap 30%) —

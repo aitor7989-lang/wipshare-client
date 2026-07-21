@@ -98,20 +98,21 @@ public sealed class CombatEngine
         }
 
         // Tally damage exactly as ApplyShift does: COLLISION first (applied inline there), then EMBERS
-        // (soft, non-lethal — floor at 1, no-op at ≤2 HP, ignoring hazard-immunity, like TryEmberBurn —
-        // raised via FighterPushed and handled synchronously BEFORE the spike pass), then SPIKES
-        // (lethal, skipped for the hazard-immune, like <see cref="ApplyHazards"/>). Both hazard passes
-        // sweep every entered cell in order. This order is what keeps a kill forecast honest when an
-        // ember shares a shove path with a wall slam or a spike. (The one live rule it can't see is the
-        // game-side warm/BONE avatar ember exemption — at worst a harmless ≤2 over-count on a non-kill
-        // shove of that specific avatar; embers are non-lethal, so it can never invent a kill.)
+        // (soft, non-lethal — floor at 1, no-op at ≤2 HP, ignoring HazardImmune like TryEmberBurn — raised
+        // via FighterPushed and handled synchronously BEFORE the spike pass), then SPIKES (lethal, skipped
+        // for the hazard-immune, like <see cref="ApplyHazards"/>). Both hazard passes sweep every entered
+        // cell in order. That order matters: an over-counted ember could otherwise lower the HP the spike
+        // pass then finishes from and invent a kill the rules forbid — so a victim the game exempts from
+        // soft hazards (the warm/BONE avatar, flagged via <see cref="Fighter.SoftHazardImmune"/>) is spared
+        // the ember pass here, exactly as TryEmberBurn spares it live.
         int hp = Math.Max(0, startHp - collision);
-        foreach (var cell in entered)
-        {
-            if (hp <= 2) break;                                                           // embers can do no more
-            int soft = TileDanger?.Invoke(cell) ?? 0;
-            if (soft > 0) hp = Math.Max(1, hp - soft);
-        }
+        if (!victim.SoftHazardImmune)
+            foreach (var cell in entered)
+            {
+                if (hp <= 2) break;                                                       // embers can do no more
+                int soft = TileDanger?.Invoke(cell) ?? 0;
+                if (soft > 0) hp = Math.Max(1, hp - soft);
+            }
         if (!victim.HazardImmune)
             foreach (var cell in entered)
             {

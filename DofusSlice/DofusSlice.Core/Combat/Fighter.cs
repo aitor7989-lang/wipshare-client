@@ -89,6 +89,12 @@ public sealed class Fighter
     /// <summary>Spikes (and kindred ground hazards) no longer wound this fighter (THE REVENANT).</summary>
     public bool HazardImmune { get; set; }
 
+    /// <summary>SOFT hazards (ember graves and kindred non-lethal <see cref="CombatEngine.TileDanger"/>
+    /// tiles) don't singe this fighter — the game sets it on a victim its own hazard rules exempt (the
+    /// warm/BONE avatar) so <see cref="CombatEngine.ForecastShift"/> can predict a shove honestly. It is
+    /// separate from <see cref="HazardImmune"/> because embers ignore that (the engine's spikes don't).</summary>
+    public bool SoftHazardImmune { get; set; }
+
     /// <summary>Cannot be shoved or dragged into the void: a push toward a coastline stops at
     /// the rim and slams instead (the Sexton — you must earn the kill, not toss him off the map).</summary>
     public bool VoidAnchored { get; set; }

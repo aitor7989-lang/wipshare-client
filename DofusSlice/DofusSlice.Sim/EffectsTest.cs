@@ -227,6 +227,23 @@ public static class EffectsTest
                 fc.Kills && fc.Landing == new CellCoord(5, 4),
                 $"ember+spike on 4 HP -> kills {fc.Kills}, land {fc.Landing} (expected true, (5,4) — ember then spike)");
         }
+
+        // 8) SOFT-HAZARD IMMUNITY — a victim the game exempts from embers (the warm / EMBER PLATE avatar,
+        //    which is NOT spike-immune) is spared the ember pass, so an over-counted ember can't feed the
+        //    spike a kill the live rules deny. Same ember+spike path as (7) but SoftHazardImmune: ember
+        //    skipped, spike 4->1, SURVIVES — matching TryEmberBurn's avatar exemption.
+        {
+            var f = new Battlefield(11, 9);
+            f.SetTile(new(5, 4), TileKind.Spikes);
+            var c = Shover(new(2, 4));
+            var v = Victim(new(3, 4), 4); v.SoftHazardImmune = true;
+            var eng = Eng(f, c, v);
+            eng.TileDanger = cell => cell == new CellCoord(4, 4) ? 2 : 0;
+            var fc = eng.ForecastShift(c, v, cells: 2, pull: false);
+            Check("ForecastShift soft-hazard immunity",
+                !fc.Kills && fc.Damage == 3,
+                $"ember-exempt victim, ember+spike -> dmg {fc.Damage}, kills {fc.Kills} (expected 3, false — ember skipped, spike only)");
+        }
     }
 
     private static void Check(string name, bool ok, string detail)

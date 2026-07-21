@@ -41,6 +41,48 @@ public sealed class CombatEngine
     public int DangerAt(CellCoord cell) =>
         (Field.TileAt(cell) == TileKind.Spikes ? SpikeDamage : 0) + (TileDanger?.Invoke(cell) ?? 0);
 
+    /// <summary>Where a shove/drag would land a victim and what it costs them — computed WITHOUT
+    /// mutating anything, so the AI can weigh tipping a hero into the void or dragging them across
+    /// spikes and embers. Mirrors <see cref="ApplyShift"/>; <see cref="DangerAt"/> covers both the
+    /// engine's spikes and the game's registered ember tiles, so the tally is honest.</summary>
+    public readonly record struct ShiftForecast(bool Valid, CellCoord Landing, bool IntoVoid, int Damage)
+    {
+        public static readonly ShiftForecast None = new(false, default, false, 0);
+    }
+
+    public ShiftForecast ForecastShift(Fighter caster, Fighter victim, int cells, bool pull)
+    {
+        if (!pull) cells += caster.PushBonus;
+        if (victim.Pos == caster.Pos || cells <= 0 || victim.IsStabilized) return ShiftForecast.None;
+
+        int sx = Math.Sign(victim.Pos.X - caster.Pos.X);
+        int sy = Math.Sign(victim.Pos.Y - caster.Pos.Y);
+        int dx = pull ? -sx : sx;
+        int dy = pull ? -sy : sy;
+        if (dx != 0 && dy != 0)
+        {
+            if (Math.Abs(victim.Pos.X - caster.Pos.X) >= Math.Abs(victim.Pos.Y - caster.Pos.Y)) dy = 0;
+            else dx = 0;
+        }
+
+        var pos = victim.Pos;
+        int moved = 0, dmg = 0;
+        for (int i = 0; i < cells; i++)
+        {
+            var next = pos.Offset(dx, dy);
+            if (LethalVoid && Field.TileAt(next) == TileKind.Void && !victim.VoidAnchored)
+                return new ShiftForecast(true, next, true, Math.Max(victim.Hp, 1));   // a plunge = a kill
+            if (!Field.IsWalkable(next) || IsOccupied(next))
+            {
+                if (!pull) dmg += (cells - moved) * 5 + caster.SlamBonus;              // collision (shoves only)
+                return new ShiftForecast(true, pos, false, dmg);
+            }
+            pos = next; moved++;
+            if (!victim.HazardImmune) dmg += DangerAt(pos);                            // spikes + embers, per cell entered
+        }
+        return new ShiftForecast(true, pos, false, dmg);
+    }
+
     /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
     public IRng Rng => _rng;
     public IReadOnlyList<Fighter> Fighters => _order;

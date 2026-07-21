@@ -27,14 +27,17 @@ public static class Policy
         for (int guard = 0; guard < 24; guard++)
         {
             if (!self.IsAlive || engine.Outcome != FightOutcome.Ongoing) return;
-            bool acted = self.Policy switch
+            // Risk/reward first (owner: "is it worth pushing them into a bad tile?"): a shove that
+            // tips an enemy into the void or across spikes/embers outscores an ordinary swing.
+            bool acted = TryShove(engine, self) || self.Policy switch
             {
                 AiPolicy.Skirmisher or AiPolicy.Artillery => Kite(engine, self),
                 AiPolicy.Flanker => Charge(engine, self, preferSoftest: true),
                 _ => Charge(engine, self, preferSoftest: false),
             };
-            if (!acted) { StepOffHazard(engine, self); return; }
+            if (!acted) break;
         }
+        SettleTurn(engine, self);   // step off fire; a wounded flanker gives ground rather than die
     }
 
     /// <summary>The floor is lava awareness (owner report: a mob stood in an ember grave doing
@@ -51,6 +54,32 @@ public static class Policy
             .ThenBy(c => reachable[c])
             .Cast<CellCoord?>().FirstOrDefault();
         if (safe is { } cell) engine.TryMove(self, cell);
+    }
+
+    /// <summary>End of turn housekeeping (owner: "retreat or protect if getting hit buys nothing").
+    /// Everyone steps off fire they're standing in. A WOUNDED flanker that's stuck in melee and out
+    /// of good plays gives ground to the safest cell rather than trade into a death — hit-and-run,
+    /// not hit-and-die. Bruisers and tanks hold the line; ranged already kite in their own policy.</summary>
+    private static void SettleTurn(CombatEngine engine, Fighter self)
+    {
+        if (!self.IsAlive || self.CurrentMp <= 0) return;
+
+        bool wounded = self.Hp * 5 < self.MaxHp * 2;               // below 40%
+        bool cornered = DistToNearestEnemy(engine, self, self.Pos) <= 1;
+        bool flee = self.Policy == AiPolicy.Flanker && wounded && cornered;
+
+        if (Danger(engine, self, self.Pos) <= 0 && !flee) return;  // safe ground, nothing to gain by moving
+
+        var reachable = engine.MovementRange(self);
+        if (reachable.Count == 0) return;
+        var retreat = reachable.Keys
+            .OrderBy(c => Danger(engine, self, c))                                 // off the fire first
+            .ThenByDescending(c => DistToNearestEnemy(engine, self, c))            // then out of reach
+            .ThenBy(c => reachable[c])
+            .First();
+        bool safer = Danger(engine, self, retreat) < Danger(engine, self, self.Pos)
+                     || DistToNearestEnemy(engine, self, retreat) > DistToNearestEnemy(engine, self, self.Pos);
+        if (safer) engine.TryMove(self, retreat);
     }
 
     /// <summary>What stopping on this cell costs in blood — 0 for the hazard-immune.</summary>
@@ -164,13 +193,25 @@ public static class Policy
         // itself happily spends its last MP on a DIAGONAL neighbor — adjacent to the eye,
         // yet outside every orthogonal melee range, so the turn's blow is wasted (QA runs:
         // hounds, husks and the Sexton all parked diagonally for whole turns).
-        // A hot attack cell is worth a short detour, not a long one: danger rides the
-        // distance as a soft cost, so a spike-free flank wins when it's near.
-        var goal = engine.Field.Orthogonal(target.Pos)
+        var attackCells = engine.Field.Orthogonal(target.Pos)
             .Where(c => engine.Field.IsWalkable(c) && (c == self.Pos || !engine.IsOccupied(c)))
-            .OrderBy(c => c.DistanceTo(self.Pos) + Danger(engine, self, c))
-            .Cast<CellCoord?>()
-            .FirstOrDefault() ?? target.Pos;
+            .ToList();
+        if (attackCells.Count == 0) return StepToward(engine, self, target.Pos);
+
+        // A pusher lines the victim up with the drop: prefer the attack cell whose shove tips them
+        // into the void or across spikes (owner: set up the bad tile). Otherwise a hot attack cell
+        // is worth a short detour, not a long one — danger rides the distance as a soft cost.
+        var shove = Shovers(self).FirstOrDefault(t => !t.pull);
+        CellCoord goal;
+        if (shove.spell != null &&
+            attackCells.Select(c => (c, s: PushSetupScore(engine, c, target, shove.cells)))
+                .Where(x => x.s > 0)
+                .OrderByDescending(x => x.s)
+                .ThenBy(x => x.c.DistanceTo(self.Pos) + Danger(engine, self, x.c))
+                .Select(x => (CellCoord?)x.c).FirstOrDefault() is { } setup)
+            goal = setup;
+        else
+            goal = attackCells.OrderBy(c => c.DistanceTo(self.Pos) + Danger(engine, self, c)).First();
         return StepToward(engine, self, goal);
     }
 
@@ -229,6 +270,64 @@ public static class Policy
 
     private static IEnumerable<SpellDef> DamageSpells(Fighter self) =>
         self.Spells.Where(s => s.Effects.Any(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal));
+
+    /// <summary>The caster's affordable movement spells, unpacked as (spell, pull?, cells).</summary>
+    private static IEnumerable<(SpellDef spell, bool pull, int cells)> Shovers(Fighter self) =>
+        self.Spells.Where(s => s.ApCost <= self.CurrentAp)
+            .SelectMany(s => s.Effects.Where(e => e.Kind is EffectKind.Push or EffectKind.Pull)
+                .Select(e => (s, e.Kind == EffectKind.Pull, e.Min)));
+
+    /// <summary>The marquee menace (owner: risk/reward — a shove that "pushes you into a bad tile").
+    /// From where we stand, if a shove or drag tips an enemy into the VOID (a free kill), finishes
+    /// them via collision+hazard, or bleeds them more than a plain hit would, take it — void first.
+    /// Only pre-empts the ordinary attack when the shove genuinely adds value.</summary>
+    private static bool TryShove(CombatEngine engine, Fighter self)
+    {
+        SpellDef? bestS = null; Fighter? bestE = null; int bestScore = 0;
+        foreach (var enemy in Enemies(engine, self))
+            foreach (var (spell, pull, cells) in Shovers(self))
+            {
+                if (!engine.CanCast(self, spell, enemy.Pos, out _)) continue;
+                var fc = engine.ForecastShift(self, enemy, cells, pull);
+                if (!fc.Valid) continue;
+                int direct = engine.EstimateDamage(self, spell, enemy.Pos) is { } est ? (est.min + est.max) / 2 : 0;
+                int score;
+                if (fc.IntoVoid) score = 100000;                                 // a kill off the map's edge
+                else
+                {
+                    bool kills = direct + fc.Damage >= enemy.Hp;
+                    // Weight the HAZARD/collision bonus heavily — that's the part a plain swing can't get.
+                    score = (kills ? 20000 : 0) + fc.Damage * 40 + direct;
+                }
+                if (score > bestScore) { bestScore = score; bestS = spell; bestE = enemy; }
+            }
+        // A worthwhile shove: a kill, or at least one real hazard/collision tick of bonus.
+        if (bestE != null && bestScore >= 200)
+            return engine.TryCast(self, bestS!, bestE.Pos);
+        return false;
+    }
+
+    /// <summary>How much a shove FROM <paramref name="from"/> would cost <paramref name="target"/>:
+    /// a huge number if it tips them off a void rim, else the spikes/embers crossed plus any wall
+    /// slam. Used to pick an approach cell that lines the victim up with the drop (owner: set up
+    /// the bad tile, don't just wander into melee). Only clean orthogonal setups score.</summary>
+    private static int PushSetupScore(CombatEngine engine, CellCoord from, Fighter target, int cells)
+    {
+        int dx = Math.Sign(target.Pos.X - from.X), dy = Math.Sign(target.Pos.Y - from.Y);
+        if (dx != 0 && dy != 0) return 0;
+        var pos = target.Pos; int hazard = 0, moved = 0;
+        for (int i = 0; i < cells; i++)
+        {
+            var next = pos.Offset(dx, dy);
+            if (engine.LethalVoid && engine.Field.TileAt(next) == TileKind.Void && !target.VoidAnchored)
+                return 100000;
+            if (!engine.Field.IsWalkable(next) || engine.IsOccupied(next))
+                return hazard + (cells - moved) * 5;   // slam into wall/body
+            pos = next; moved++;
+            hazard += target.HazardImmune ? 0 : engine.DangerAt(pos);
+        }
+        return hazard;
+    }
 
     /// <summary>
     /// Shoot the highest-value reachable target (Bible: "highest-value target in range"). Prefer a

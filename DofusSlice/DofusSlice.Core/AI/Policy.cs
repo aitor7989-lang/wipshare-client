@@ -40,26 +40,14 @@ public static class Policy
         SettleTurn(engine, self);   // step off fire; a wounded flanker gives ground rather than die
     }
 
-    /// <summary>The floor is lava awareness (owner report: a mob stood in an ember grave doing
-    /// nothing). A turn that ends with MP to spare and fire underfoot steps to safe ground —
-    /// preferring a cell that can still shoot, then the policy's preferred distance.</summary>
-    private static void StepOffHazard(CombatEngine engine, Fighter self)
-    {
-        if (self.CurrentMp <= 0 || self.HazardImmune || engine.DangerAt(self.Pos) <= 0) return;
-        var reachable = engine.MovementRange(self);
-        bool ranged = self.Policy is AiPolicy.Skirmisher or AiPolicy.Artillery or AiPolicy.Support;
-        var safe = reachable.Keys.Where(c => engine.DangerAt(c) <= 0)
-            .OrderByDescending(c => CanHitAnyEnemyFrom(engine, self, c))
-            .ThenBy(c => ranged ? -DistToNearestEnemy(engine, self, c) : DistToNearestEnemy(engine, self, c))
-            .ThenBy(c => reachable[c])
-            .Cast<CellCoord?>().FirstOrDefault();
-        if (safe is { } cell) engine.TryMove(self, cell);
-    }
-
     /// <summary>End of turn housekeeping (owner: "retreat or protect if getting hit buys nothing").
-    /// Everyone steps off fire they're standing in. A WOUNDED flanker that's stuck in melee and out
-    /// of good plays gives ground to the safest cell rather than trade into a death — hit-and-run,
-    /// not hit-and-die. Bruisers and tanks hold the line; ranged already kite in their own policy.</summary>
+    /// Anyone still standing in fire steps off it — but KEEPS fighting: it prefers a safe cell it can
+    /// still hit an enemy from, then the policy's preferred distance (a bruiser holds the line and
+    /// stays close; a kiter drifts back), then the shortest walk. That firing-cell preference is the
+    /// old StepOffHazard, folded in here so a bruiser on an ember-adjacent melee cell no longer bolts
+    /// to the farthest safe cell and thrashes (charge in / hit / flee / charge back). A WOUNDED,
+    /// cornered flanker is the one exception: it gives ground to the safest reachable cell rather than
+    /// trade into a death — hit-and-run, not hit-and-die.</summary>
     private static void SettleTurn(CombatEngine engine, Fighter self)
     {
         if (!self.IsAlive || self.CurrentMp <= 0) return;
@@ -67,19 +55,42 @@ public static class Policy
         bool wounded = self.Hp * 5 < self.MaxHp * 2;               // below 40%
         bool cornered = DistToNearestEnemy(engine, self, self.Pos) <= 1;
         bool flee = self.Policy == AiPolicy.Flanker && wounded && cornered;
-
-        if (Danger(engine, self, self.Pos) <= 0 && !flee) return;  // safe ground, nothing to gain by moving
+        bool onFire = Danger(engine, self, self.Pos) > 0;
+        if (!onFire && !flee) return;                              // safe ground and no reason to run
 
         var reachable = engine.MovementRange(self);
         if (reachable.Count == 0) return;
-        var retreat = reachable.Keys
-            .OrderBy(c => Danger(engine, self, c))                                 // off the fire first
-            .ThenByDescending(c => DistToNearestEnemy(engine, self, c))            // then out of reach
+
+        if (flee)
+        {
+            // Survival trumps position: the safest cell that puts the most ground between us and them.
+            var run = reachable.Keys
+                .OrderBy(c => Danger(engine, self, c))
+                .ThenByDescending(c => DistToNearestEnemy(engine, self, c))
+                .ThenBy(c => reachable[c])
+                .First();
+            bool better = Danger(engine, self, run) < Danger(engine, self, self.Pos)
+                          || DistToNearestEnemy(engine, self, run) > DistToNearestEnemy(engine, self, self.Pos);
+            if (better) engine.TryMove(self, run);
+            return;
+        }
+
+        // Standing in fire with plays spent: keep the ability to FIGHT first (a bruiser tanks a hot
+        // melee cell rather than bolt to a safe cell it can't hit from — the old thrash), then the
+        // coolest such cell, then the policy's distance (hold close if melee, drift back if ranged).
+        bool ranged = self.Policy is AiPolicy.Skirmisher or AiPolicy.Artillery or AiPolicy.Support;
+        var best = reachable.Keys
+            .OrderByDescending(c => CanHitAnyEnemyFrom(engine, self, c))
+            .ThenBy(c => Danger(engine, self, c))
+            .ThenBy(c => ranged ? -DistToNearestEnemy(engine, self, c) : DistToNearestEnemy(engine, self, c))
             .ThenBy(c => reachable[c])
             .First();
-        bool safer = Danger(engine, self, retreat) < Danger(engine, self, self.Pos)
-                     || DistToNearestEnemy(engine, self, retreat) > DistToNearestEnemy(engine, self, self.Pos);
-        if (safer) engine.TryMove(self, retreat);
+        // Move only to shed some fire, and never trade away a firing/melee cell we still hold: this
+        // steps a unit off an ember it needn't stand on (even when no cell is FULLY safe) without ever
+        // bolting a bruiser out of the fight — both were regressions in the plain fully-safe filter.
+        bool keepsFight = CanHitAnyEnemyFrom(engine, self, best) || !CanHitAnyEnemyFrom(engine, self, self.Pos);
+        if (keepsFight && Danger(engine, self, best) < Danger(engine, self, self.Pos))
+            engine.TryMove(self, best);
     }
 
     /// <summary>What stopping on this cell costs in blood — 0 for the hazard-immune.</summary>
@@ -199,19 +210,22 @@ public static class Policy
         if (attackCells.Count == 0) return StepToward(engine, self, target.Pos);
 
         // A pusher lines the victim up with the drop: prefer the attack cell whose shove tips them
-        // into the void or across spikes (owner: set up the bad tile). Otherwise a hot attack cell
-        // is worth a short detour, not a long one — danger rides the distance as a soft cost.
+        // into the void or across spikes/embers (owner: set up the bad tile). But it's a SETUP, not a
+        // goal — only take it if it is at most a one-cell detour off the nearest clean attack cell, so
+        // the pusher never wanders far or onto fire chasing a shove it can line up next turn anyway.
         var shove = Shovers(self).FirstOrDefault(t => !t.pull);
+        var plain = attackCells.OrderBy(c => c.DistanceTo(self.Pos) + Danger(engine, self, c)).First();
+        int plainCost = plain.DistanceTo(self.Pos) + Danger(engine, self, plain);
         CellCoord goal;
         if (shove.spell != null &&
             attackCells.Select(c => (c, s: PushSetupScore(engine, c, target, shove.cells)))
-                .Where(x => x.s > 0)
+                .Where(x => x.s > 0 && x.c.DistanceTo(self.Pos) + Danger(engine, self, x.c) <= plainCost + 1)
                 .OrderByDescending(x => x.s)
                 .ThenBy(x => x.c.DistanceTo(self.Pos) + Danger(engine, self, x.c))
                 .Select(x => (CellCoord?)x.c).FirstOrDefault() is { } setup)
             goal = setup;
         else
-            goal = attackCells.OrderBy(c => c.DistanceTo(self.Pos) + Danger(engine, self, c)).First();
+            goal = plain;
         return StepToward(engine, self, goal);
     }
 
@@ -278,34 +292,80 @@ public static class Policy
                 .Select(e => (s, e.Kind == EffectKind.Pull, e.Min)));
 
     /// <summary>The marquee menace (owner: risk/reward — a shove that "pushes you into a bad tile").
-    /// From where we stand, if a shove or drag tips an enemy into the VOID (a free kill), finishes
-    /// them via collision+hazard, or bleeds them more than a plain hit would, take it — void first.
-    /// Only pre-empts the ordinary attack when the shove genuinely adds value.</summary>
+    /// A shove or drag that tips an enemy into the VOID, finishes them by collision/hazard, or simply
+    /// out-damages our best ordinary attack is worth pre-empting the swing for — void first. But the
+    /// shove spell is ALSO a normal attack (it hits and pushes at once), so casting it FOR the shove
+    /// only earns its place when it beats letting damage-targeting choose the target: we never spend
+    /// the AP on a mere chip-shove, and never knock a currently-killable enemy out of reach for one.
+    /// A kiter never drags prey toward itself.</summary>
     private static bool TryShove(CombatEngine engine, Fighter self)
     {
-        SpellDef? bestS = null; Fighter? bestE = null; int bestScore = 0;
+        bool ranged = self.Policy is AiPolicy.Skirmisher or AiPolicy.Artillery;
+        int plainBest = BestPlainDamage(engine, self);                         // the bar a chip-shove must clear
+        bool anyPlainKill = Enemies(engine, self).Any(e => PlainCanKill(engine, self, e));
+
+        SpellDef? bestS = null; Fighter? bestE = null; int bestValue = 0; bool bestKills = false;
         foreach (var enemy in Enemies(engine, self))
+        {
+            bool killablePlain = PlainCanKill(engine, self, enemy);
             foreach (var (spell, pull, cells) in Shovers(self))
             {
+                if (pull && ranged) continue;                                 // a kiter never drags prey toward itself
                 if (!engine.CanCast(self, spell, enemy.Pos, out _)) continue;
-                var fc = engine.ForecastShift(self, enemy, cells, pull);
-                if (!fc.Valid) continue;
                 int direct = engine.EstimateDamage(self, spell, enemy.Pos) is { } est ? (est.min + est.max) / 2 : 0;
-                int score;
-                if (fc.IntoVoid) score = 100000;                                 // a kill off the map's edge
-                else
+                var fc = engine.ForecastShift(self, enemy, cells, pull, direct);
+                if (!fc.Valid) continue;
+
+                if (fc.IntoVoid)                                              // a certain kill off the map's edge
                 {
-                    bool kills = direct + fc.Damage >= enemy.Hp;
-                    // Weight the HAZARD/collision bonus heavily — that's the part a plain swing can't get.
-                    score = (kills ? 20000 : 0) + fc.Damage * 40 + direct;
+                    if (100000 > bestValue) { bestValue = 100000; bestS = spell; bestE = enemy; bestKills = true; }
+                    continue;
                 }
-                if (score > bestScore) { bestScore = score; bestS = spell; bestE = enemy; }
+                // The plain attack finishes a plain-killable enemy where it stands — never shove one:
+                // a shove kill is only an AVERAGE prediction, so an unlucky roll would whiff and knock a
+                // guaranteed kill out of reach instead.
+                if (killablePlain) continue;
+                if (fc.Kills)                                                 // a kill the plain path would MISS
+                {
+                    int killVal = 10000 + direct + fc.Damage;
+                    if (killVal > bestValue) { bestValue = killVal; bestS = spell; bestE = enemy; bestKills = true; }
+                    continue;
+                }
+                // A chip-shove earns the AP only when no plain kill is on the table (that kill's AP comes
+                // first) and it out-damages our best plain swing; a kiter never chip-shoves at all.
+                if (anyPlainKill || ranged) continue;
+                int value = direct + fc.Damage;
+                if (value > bestValue) { bestValue = value; bestS = spell; bestE = enemy; bestKills = false; }
             }
-        // A worthwhile shove: a kill, or at least one real hazard/collision tick of bonus.
-        if (bestE != null && bestScore >= 200)
+        }
+        // Fire when the shove kills, or (chip) its damage strictly beats our best plain attack this turn.
+        if (bestE != null && (bestKills || bestValue > plainBest))
             return engine.TryCast(self, bestS!, bestE.Pos);
         return false;
     }
+
+    /// <summary>The most HP a plain swing/shot could strip from any one enemy this turn — the bar a
+    /// shove must clear to be worth spending the AP on instead. Capped at the target's HP so overkill
+    /// never inflates it.</summary>
+    private static int BestPlainDamage(CombatEngine engine, Fighter self)
+    {
+        int best = 0;
+        foreach (var enemy in Enemies(engine, self))
+            foreach (var spell in DamageSpells(self))
+            {
+                if (!engine.CanCast(self, spell, enemy.Pos, out _)) continue;
+                if (engine.EstimateDamage(self, spell, enemy.Pos) is { } est)
+                    best = Math.Max(best, Math.Min(enemy.Hp, (est.min + est.max) / 2));
+            }
+        return best;
+    }
+
+    /// <summary>Could a plain damage spell finish <paramref name="enemy"/> outright this turn?
+    /// (Mirrors <see cref="TryShootBest"/>'s kill test: max roll ≥ its HP.) A chip-shove must never
+    /// displace such an enemy.</summary>
+    private static bool PlainCanKill(CombatEngine engine, Fighter self, Fighter enemy) =>
+        DamageSpells(self).Any(s => engine.CanCast(self, s, enemy.Pos, out _)
+            && engine.EstimateDamage(self, s, enemy.Pos) is { } est && est.max >= enemy.Hp);
 
     /// <summary>How much a shove FROM <paramref name="from"/> would cost <paramref name="target"/>:
     /// a huge number if it tips them off a void rim, else the spikes/embers crossed plus any wall

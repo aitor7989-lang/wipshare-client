@@ -41,16 +41,27 @@ public sealed class CombatEngine
     public int DangerAt(CellCoord cell) =>
         (Field.TileAt(cell) == TileKind.Spikes ? SpikeDamage : 0) + (TileDanger?.Invoke(cell) ?? 0);
 
-    /// <summary>Where a shove/drag would land a victim and what it costs them — computed WITHOUT
-    /// mutating anything, so the AI can weigh tipping a hero into the void or dragging them across
-    /// spikes and embers. Mirrors <see cref="ApplyShift"/>; <see cref="DangerAt"/> covers both the
-    /// engine's spikes and the game's registered ember tiles, so the tally is honest.</summary>
-    public readonly record struct ShiftForecast(bool Valid, CellCoord Landing, bool IntoVoid, int Damage)
+    /// <summary>Where a shove/drag would land a victim and what it truly costs them — computed
+    /// WITHOUT mutating anything, so the AI can weigh tipping a hero into the void or dragging them
+    /// across spikes and embers. This walks the victim's HP the way the live rules do, so the tally
+    /// is honest and the AI can never bank a kill the rules forbid:
+    /// <list type="bullet">
+    ///   <item>the <b>void</b> is an instant kill (respecting <see cref="Fighter.VoidAnchored"/>),</item>
+    ///   <item>a <b>collision</b> with wall or body deals its lethal slam (shoves only),</item>
+    ///   <item><b>spikes</b> bite lethally (skipped for the hazard-immune, like <see cref="ApplyHazards"/>),</item>
+    ///   <item>a registered <b>soft hazard</b> (ember graves via <see cref="TileDanger"/>) only singes —
+    ///         never to death, flooring at 1 HP and doing nothing at ≤2, like the game's ember tick.</item>
+    /// </list>
+    /// <paramref name="preDamage"/> is the HP the SAME cast strips before it shoves (the AI's shove
+    /// spells usually hit and push at once); the walk starts from the post-hit HP so a floored soft
+    /// hazard is weighed against what is actually left. <see cref="ShiftForecast.Damage"/> is the HP
+    /// the shift alone removes; <see cref="ShiftForecast.Kills"/> folds in <paramref name="preDamage"/>.</summary>
+    public readonly record struct ShiftForecast(bool Valid, CellCoord Landing, bool IntoVoid, int Damage, bool Kills)
     {
-        public static readonly ShiftForecast None = new(false, default, false, 0);
+        public static readonly ShiftForecast None = new(false, default, false, 0, false);
     }
 
-    public ShiftForecast ForecastShift(Fighter caster, Fighter victim, int cells, bool pull)
+    public ShiftForecast ForecastShift(Fighter caster, Fighter victim, int cells, bool pull, int preDamage = 0)
     {
         if (!pull) cells += caster.PushBonus;
         if (victim.Pos == caster.Pos || cells <= 0 || victim.IsStabilized) return ShiftForecast.None;
@@ -65,22 +76,50 @@ public sealed class CombatEngine
             else dx = 0;
         }
 
+        int startHp = Math.Max(0, victim.Hp - Math.Max(0, preDamage));   // the direct hit lands first
+
+        // Walk GEOMETRY only: where the victim ends up, which cells it enters, and whether it slams
+        // something. Hazards are tallied AFTERWARD in the exact order ApplyShift applies them, so the
+        // forecast can never disagree with the live shove about who dies.
         var pos = victim.Pos;
-        int moved = 0, dmg = 0;
+        var entered = new List<CellCoord>();
+        int moved = 0, collision = 0;
         for (int i = 0; i < cells; i++)
         {
             var next = pos.Offset(dx, dy);
             if (LethalVoid && Field.TileAt(next) == TileKind.Void && !victim.VoidAnchored)
-                return new ShiftForecast(true, next, true, Math.Max(victim.Hp, 1));   // a plunge = a kill
+                return new ShiftForecast(true, next, true, Math.Max(startHp, 1), true);   // a plunge = a kill
             if (!Field.IsWalkable(next) || IsOccupied(next))
             {
-                if (!pull) dmg += (cells - moved) * 5 + caster.SlamBonus;              // collision (shoves only)
-                return new ShiftForecast(true, pos, false, dmg);
+                if (!pull) collision = (cells - moved) * 5 + caster.SlamBonus;             // collision (shoves only)
+                break;
             }
-            pos = next; moved++;
-            if (!victim.HazardImmune) dmg += DangerAt(pos);                            // spikes + embers, per cell entered
+            pos = next; moved++; entered.Add(pos);
         }
-        return new ShiftForecast(true, pos, false, dmg);
+
+        // Tally damage exactly as ApplyShift does: COLLISION first (applied inline there), then EMBERS
+        // (soft, non-lethal — floor at 1, no-op at ≤2 HP, ignoring hazard-immunity, like TryEmberBurn —
+        // raised via FighterPushed and handled synchronously BEFORE the spike pass), then SPIKES
+        // (lethal, skipped for the hazard-immune, like <see cref="ApplyHazards"/>). Both hazard passes
+        // sweep every entered cell in order. This order is what keeps a kill forecast honest when an
+        // ember shares a shove path with a wall slam or a spike. (The one live rule it can't see is the
+        // game-side warm/BONE avatar ember exemption — at worst a harmless ≤2 over-count on a non-kill
+        // shove of that specific avatar; embers are non-lethal, so it can never invent a kill.)
+        int hp = Math.Max(0, startHp - collision);
+        foreach (var cell in entered)
+        {
+            if (hp <= 2) break;                                                           // embers can do no more
+            int soft = TileDanger?.Invoke(cell) ?? 0;
+            if (soft > 0) hp = Math.Max(1, hp - soft);
+        }
+        if (!victim.HazardImmune)
+            foreach (var cell in entered)
+            {
+                if (hp <= 0) break;
+                if (Field.TileAt(cell) == TileKind.Spikes) hp = Math.Max(0, hp - SpikeDamage);
+            }
+
+        return new ShiftForecast(true, pos, false, startHp - hp, hp <= 0);
     }
 
     /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>

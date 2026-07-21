@@ -1,16 +1,16 @@
-# HANDOVER — `wipshare-client` games (DofusSlice + Gauntlet)
+# HANDOVER — `wipshare-client` games (DofusSlice · Gauntlet archived)
 
-_Last updated: 2026-07-21 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · HEAD `4373803`_
+_Last updated: 2026-07-21 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · latest work: "Apply §7a AI/shove fixes + archive the Gauntlet"_
 
 ---
 
 ## 0. TL;DR — where we are
 
-- **Go-forward decision: continue with _DofusSlice_** — the older "campaign" RPG (internally branded **TITHE**), which the owner finds more fun than the newer **Gauntlet** roguelite. Both stay in the repo; the Gauntlet is not deleted, just not the focus.
-- **Everything is committed and pushed. Working tree is clean.** A clean checkout / fresh environment loses nothing. HEAD = `4373803` on branch `claude/dofus-engine-vertical-slice-7ijlfm`, in sync with origin.
-- **Two games, one shared engine** (`DofusSlice.Core`). Both build clean on Linux; both have live, public Windows releases.
-- **Immediate next-up:** an adversarial bug-hunt found real AI issues in the shared `Policy` brain and the new `ForecastShift` engine helper. **These affect BOTH games** — the DofusSlice campaign runs on the same `Policy`. They are documented in §7a and are **not yet applied**.
-- **Heads-up correction:** this session's combat changes (risk/reward AI + mob-kit tweaks + `slam` push 1→2) were tuned against the **Gauntlet** balance sim, but they live in the shared engine/content, so they **also changed the DofusSlice campaign** — untested there. See §7c before shipping more balance work.
+- **Go-forward game: _DofusSlice_** — the older "campaign" RPG (internally branded **TITHE**), which the owner finds more fun than the **Gauntlet** roguelite. **The Gauntlet is now ARCHIVED** (this session): its code stays in the repo and still builds, but it no longer auto-releases and is no longer developed. See `Gauntlet/ARCHIVED.md`.
+- **The §7a shared-engine bug-hunt fixes are now APPLIED and verified** (this session). `ForecastShift` walks HP honestly (no more phantom ember "kills"), `TryShove` no longer steals a lethal swing or drags prey the wrong way, and `SettleTurn` keeps bruisers on the line instead of thrashing. Covered by a new `ForecastShift` regression test (`sim effects` → 25 pass) and re-run sims. Details in §7a.
+- **Two games, one shared engine** (`DofusSlice.Core`). Both still build clean on Linux. DofusSlice auto-releases on push; the Gauntlet's CI is now manual-only.
+- **§7c resolved:** the Gauntlet-tuned combat changes that leaked into DofusSlice were **kept** — with the Gauntlet archived, DofusSlice's balance is now the only one that matters, and the DofusSlice sims came back **bit-identical** to before the fixes (no regression). See §7c.
+- **Everything below "8." reflects the state after this session's commit.** A clean checkout / fresh environment loses nothing; the branch is in sync with origin.
 
 ---
 
@@ -19,9 +19,9 @@ _Last updated: 2026-07-21 · branch `claude/dofus-engine-vertical-slice-7ijlfm` 
 | Game | Path | What it is | Download (public, no login) | Run |
 |---|---|---|---|---|
 | **DofusSlice** (TITHE) — _go-forward_ | `DofusSlice/DofusSlice.Game/` | Dark Dofus-1.29-flavored **campaign** dungeon crawl. Combat is **watched, not piloted** — the whole crew + enemy pack fight by AI policy; player skill = class/essence build, placement, engagement, speed control. | [`dofusslice-latest`](https://github.com/aitor7989-lang/wipshare-client/releases/download/dofusslice-latest/DofusSlice-windows.zip) | `DofusSlice.Game.exe` |
-| **Gauntlet** | `Gauntlet/` | Tighter **roguelite**: one dealt road of ~11 rooms, a bell/toll clock, run-and-done. Built later on the same engine. | [`gauntlet-latest`](https://github.com/aitor7989-lang/wipshare-client/releases/download/gauntlet-latest/Gauntlet-windows.zip) | `Gauntlet.exe` |
+| **Gauntlet** — _archived_ | `Gauntlet/` | Tighter **roguelite**: one dealt road of ~11 rooms, a bell/toll clock, run-and-done. Built later on the same engine. **Archived this session** (`Gauntlet/ARCHIVED.md`): kept + buildable, no longer developed or auto-released. | [`gauntlet-latest`](https://github.com/aitor7989-lang/wipshare-client/releases/download/gauntlet-latest/Gauntlet-windows.zip) _(frozen snapshot)_ | `Gauntlet.exe` |
 
-Both are self-contained Windows zips — unzip, run the `.exe`, no .NET install needed.
+Both are self-contained Windows zips — unzip, run the `.exe`, no .NET install needed. The Gauntlet's download is a frozen snapshot (its CI no longer republishes it).
 
 ### DofusSlice campaign, in one screen each
 - **Crew:** avatar (chosen class + one drafted essence) + up to two hired mercenaries. Merc death is permanent; a downed avatar comes out Wounded; a full wipe ends the campaign.
@@ -54,7 +54,7 @@ dotnet run --project DofusSlice.Game dofus        # legacy PILOTED slice (not th
 ```
 `DofusSlice.Sim` (third project in the solution) is a **headless balance/QA simulator**, not a shipped game.
 
-**Gauntlet:**
+**Gauntlet (archived — `Gauntlet/ARCHIVED.md`; still builds, no longer auto-released):**
 ```bash
 cd Gauntlet
 dotnet build Gauntlet.csproj -c Release           # references ..\DofusSlice\DofusSlice.Core
@@ -132,24 +132,25 @@ _(Stale-comment note: `Gauntlet.csproj:21` names `bake_onebit.py` as the Gauntle
 
 ## 6. CI & releases
 
-Both workflows: `windows-latest`, `setup-dotnet 8.0.x`, `dotnet publish -c Release -r win-x64 --self-contained`, zip → upload artifact → `gh release create` (force-recreates the tag, `--prerelease`). Trigger: `workflow_dispatch` or a push to `claude/dofus-engine-vertical-slice-7ijlfm` on the matching paths.
+Both workflows: `windows-latest`, `setup-dotnet 8.0.x`, `dotnet publish -c Release -r win-x64 --self-contained`, zip → upload artifact → `gh release create` (force-recreates the tag, `--prerelease`).
 
-| Workflow | Builds | Path trigger | Tag | Asset | Exe |
+| Workflow | Builds | Trigger | Tag | Asset | Exe |
 |---|---|---|---|---|---|
-| `.github/workflows/dofusslice-build.yml` | `DofusSlice.Game.csproj` | `DofusSlice/**` | `dofusslice-latest` | `DofusSlice-windows.zip` | `DofusSlice.Game.exe` |
-| `.github/workflows/gauntlet-build.yml` | `Gauntlet.csproj` | `Gauntlet/**`, `DofusSlice/DofusSlice.Core/**` | `gauntlet-latest` | `Gauntlet-windows.zip` | `Gauntlet.exe` |
+| `.github/workflows/dofusslice-build.yml` | `DofusSlice.Game.csproj` | push to the branch on `DofusSlice/**`, or manual | `dofusslice-latest` | `DofusSlice-windows.zip` | `DofusSlice.Game.exe` |
+| `.github/workflows/gauntlet-build.yml` | `Gauntlet.csproj` | **`workflow_dispatch` only — ARCHIVED** (push trigger removed) | `gauntlet-latest` | `Gauntlet-windows.zip` | `Gauntlet.exe` |
 
-- A change under `DofusSlice/DofusSlice.Core/**` triggers **both** workflows (Core is inside `DofusSlice/`, and is an explicit Gauntlet trigger).
+- **The Gauntlet workflow is now manual-only.** Its push trigger (including the old `DofusSlice/DofusSlice.Core/**` path) was removed when the game was archived, so an engine change no longer rebuilds or republishes the Gauntlet. Run it by hand from the Actions tab if a fresh Gauntlet build is ever needed; the last-built `gauntlet-latest` release stays live as a frozen snapshot.
+- A change under `DofusSlice/DofusSlice.Core/**` now triggers **only** the DofusSlice workflow.
 - No CI for the root WPF client.
-- **CI status was last confirmed GREEN for HEAD `4373803`** (both `DofusSlice Windows build` and `Gauntlet Windows build` succeeded; both releases republished).
+- **CI status was last confirmed GREEN for HEAD `4373803`.** This session's push (engine fixes) re-runs only the DofusSlice build.
 
 ---
 
 ## 7. Open work / next-up
 
-### 7a. Pending bug-hunt fixes — shared `Policy` / `ForecastShift` (affects BOTH games) — NOT YET APPLIED
+### 7a. Shared-engine bug-hunt fixes — `Policy` / `ForecastShift` — ✅ APPLIED this session
 
-An adversarial 3-agent review of this session's newest combat code found real defects. Because they're in the shared engine (`DofusSlice.Core`), they hit the DofusSlice campaign too. **Highest priority for the next session.** Fix, then re-run BOTH sims/QA.
+An adversarial review had found real defects in this session's combat code. Because they live in the shared engine (`DofusSlice.Core`), they hit the DofusSlice campaign too — so all six are now **fixed** (commit _"Apply §7a AI/shove fixes + archive the Gauntlet"_), verified by a new `ForecastShift` regression test (`sim effects` → 25/25 pass) and by re-running the sims (DofusSlice **bit-identical**, no regression; Gauntlet bulwark 38.8%→46.0% as its shoves stopped being wasted). Each item below is written as _defect → fix as shipped_:
 
 1. **HIGH — `ForecastShift` over-values embers as kills** (`DofusSlice.Core/Combat/CombatEngine.cs`, the new `ForecastShift`). It sums ember danger as flat stacking `+2/cell`, but embers are **non-lethal** (floor the victim at 1 HP, do nothing at ≤2 HP — see `Gauntlet/RunCore.cs` `TryEmberBurn`). So the AI predicts ember-drag "kills" that never land and wastes its setup. **Fix:** walk the victim's HP through the shove and apply **spikes** (lethal, respect `HazardImmune`) vs **soft hazards/embers** (`TileDanger` — never lethal, `Max(1, hp-n)`, skip at `hp<=2`, and note `TryEmberBurn` ignores `HazardImmune`) with their real rules; return actual HP lost.
 2. **HIGH — `TryShove` preempts a better/lethal plain attack** (`Policy.cs:32`, scoring at `~300`). It fires on an absolute threshold (`bestScore >= 200`) *before* the policy switch and never compares against what a normal swing/`TryShootBest` would do — so a low-value wall-slam or hazard chip can steal the AP a lethal hit needed, or shove a killable enemy out of reach. **Fix:** only pre-empt when the shove **kills** (void, or `direct + fc.Damage >= hp`) or **strictly beats** the best plain attack this turn; never fire a chip-shove that displaces a currently-killable enemy.
@@ -170,20 +171,21 @@ An adversarial 3-agent review of this session's newest combat code found real de
 - `docs/ROADMAP-POLISH.md`, `docs/ROADMAP-LEADER.md` — fully ticked.
 - No literal `TODO`/`FIXME`/`HACK` in the C# source; "placeholder" comments only flag data numbers awaiting the §9 mining pass.
 
-### 7c. Cross-game caveat — this session's Gauntlet-tuned combat changes also touched DofusSlice
+### 7c. Cross-game caveat — ✅ RESOLVED: the Gauntlet-tuned changes are kept in DofusSlice
 
-These live in the shared engine/content and were balanced against the **Gauntlet** sim only. Their effect on the **DofusSlice campaign is untested** — review before building more balance work there, and decide per-change whether to keep, retune, or gate to the Gauntlet:
-- Risk/reward AI in `Policy.cs` (shove-into-void/hazard, `SettleTurn` retreat) — DofusSlice enemies + crew now use it.
-- `slam` push **1 → 2** (bulwark class skill) — buffs the bulwark in both games (in the Gauntlet it moved bulwark ~25% → ~39% win-rate; unknown in DofusSlice).
-- Mob kits: Cairn Brute `brute_hurl` (push 2), Grave Ghoul `ghoul_rend` now lifesteal 8-12, Marrow Spitter gains `marrow_rot` (ranged poison). Ghoul & spitter appear in DofusSlice packs; the brute does not.
-- If DofusSlice should NOT inherit these, the clean options are: (a) gate the AI shove logic behind an engine flag the Gauntlet sets, or (b) split the class/mob content that each game needs.
+This session's earlier combat changes (below) live in the shared engine/content and were originally tuned against the **Gauntlet** sim. With the Gauntlet now archived (§0), DofusSlice's balance is the only one that matters — and after the §7a fixes the DofusSlice sims came back **bit-identical** (Graveyard 100% win / 1.35 downed; Sexton 25% / 2.75 downed), so the changes are **kept as-is**. In DofusSlice they only ever manifest as sensible wall-slam shoves: DofusSlice sets neither `LethalVoid` nor ember `TileDanger` and has no spike tiles, so a shove there is collision-only — now correctly bounded by the §7a `TryShove` fix (never steals a lethal swing). A dedicated DofusSlice balance pass (§7b, M5) can retune later if desired.
+- Risk/reward AI in `Policy.cs` (shove-into-void/hazard, `SettleTurn` step-off) — DofusSlice crew + enemies use it; reduces to wall-slam shoves there, and the §7a fix stops it stealing lethal swings or thrashing.
+- `slam` push **2** (bulwark class skill) — kept; a bigger shove = more wall-slam / repositioning in DofusSlice.
+- Mob kits: Cairn Brute `brute_hurl` (push 2, a Gauntlet-only mob), Grave Ghoul `ghoul_rend` lifesteal 8-12, Marrow Spitter `marrow_rot` (ranged poison). Ghoul & spitter appear in DofusSlice packs; the sims show no regression.
+- If a future call reverses this, the clean options remain: (a) gate the AI shove logic behind an engine flag, or (b) split the class/mob content each game needs.
 
 ---
 
 ## 8. What we did this session (newest → older)
 
-Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent commits:
-- `4373803` **Risk/reward AI + mob variety** — `ForecastShift` predictor; AI shoves enemies into the void/hazards, sets up the drop on approach, wounded flankers retreat; Cairn Brute hurls, Ghoul feeds, Spitter rots; bulwark Slam → push 2 to play the same shove game. (See §7a for the follow-up bugs this introduced.)
+Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent first:
+- **(this session) Apply §7a AI/shove fixes + archive the Gauntlet** — the six shared-engine defects from the bug-hunt are fixed: `ForecastShift` now walks HP honestly (void/collision/spikes lethal, embers/soft-hazard non-lethal & floored) with a `Kills` flag + optional `preDamage`; `TryShove` only pre-empts when it kills or strictly beats the best plain attack, never chip-shoves a currently-killable enemy and never pulls for a kiter; `SettleTurn` absorbed the dead `StepOffHazard` so bruisers hold the line instead of thrashing; `Charge`'s push-setup detour is capped to one cell. Added a `ForecastShift` regression test (`sim effects` → 25/25). **Archived the Gauntlet**: its CI is now `workflow_dispatch`-only (push trigger removed), `Gauntlet/ARCHIVED.md` added, HANDOVER/CI docs updated. DofusSlice sims came back bit-identical; Gauntlet bulwark 38.8%→46.0%.
+- `4373803` **Risk/reward AI + mob variety** — `ForecastShift` predictor; AI shoves enemies into the void/hazards, sets up the drop on approach, wounded flankers retreat; Cairn Brute hurls, Ghoul feeds, Spitter rots; bulwark Slam → push 2 to play the same shove game. (§7a fixed the follow-up bugs this introduced.)
 - `1125367` **Doubled the road's stranger things** — 3→6 events, 3→6 mysteries (Gauntlet). Balance-verified.
 - `9021bde` **Animated the default silhouettes** — real walk gaits + attack swings for the committed `assets-default/` sprites (they used to only breathe).
 - `4cc209d` **Audit pass** — Sexton void-anchor (can be shoved for tempo but not one-cast off the map), save-load hardening (validate class/skill ids), ember-on-push, dedup helpers.

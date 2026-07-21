@@ -28,6 +28,7 @@ public static class EffectsTest
         DamagePreview();
         BlinkEscape();
         BloodPact();
+        ShiftForecast();
         MapHardening();
         TmxImport();
 
@@ -99,6 +100,133 @@ public static class EffectsTest
         DofusSlice.Core.AI.Policy.TakeTurn(eng2, b2);
         Check("Blood Pact", b2.Hp == 90,
             $"paid 10 HP for the swing it unlocks (HP {b2.Hp}), one cast only");
+    }
+
+    /// <summary>ForecastShift honesty (the §7a fix): the AI's shove predictor must walk the victim's
+    /// HP exactly as the live rules do — void/collision/spikes kill, but ember-style soft hazards only
+    /// singe (floor at 1 HP, no-op at ≤2), so it can never bank an ember "kill" that can never land.</summary>
+    private static void ShiftForecast()
+    {
+        Fighter Shover(CellCoord pos) => new()
+        {
+            Id = "c", Name = "Caster", Team = Team.Player, MaxHp = 100, Hp = 100,
+            BaseAp = 12, BaseMp = 6, Initiative = 100, Pos = pos,
+        };
+        Fighter Victim(CellCoord pos, int hp) => new()
+        {
+            Id = "v", Name = "Victim", Team = Team.Enemy, MaxHp = Math.Max(hp, 1), Hp = hp,
+            BaseAp = 6, BaseMp = 3, Initiative = 10, Pos = pos,
+        };
+        CombatEngine Eng(Battlefield f, Fighter c, Fighter v) =>
+            new(f, new List<Fighter> { c, v }, new SystemRng(1));
+
+        // 1) Ember drag is NEVER a kill. A 6-HP victim dragged across 3 ember graves (soft danger 2)
+        //    walks 6 -> 4 -> 2 -> (no-op at <=2): 4 real damage, lands at 2, alive. The pre-fix code
+        //    summed 3 x 2 = 6 and mispredicted a kill.
+        {
+            var f = new Battlefield(11, 9);
+            var c = Shover(new(2, 4)); var v = Victim(new(3, 4), 6);
+            var eng = Eng(f, c, v);
+            eng.TileDanger = cell => cell.Y == 4 && cell.X is >= 4 and <= 6 ? 2 : 0;
+            var fc = eng.ForecastShift(c, v, cells: 3, pull: false);
+            Check("ForecastShift ember non-lethal",
+                fc.Valid && !fc.IntoVoid && !fc.Kills && fc.Damage == 4 && fc.Landing == new CellCoord(6, 4),
+                $"3 embers on 6 HP -> dmg {fc.Damage}, kills {fc.Kills}, land {fc.Landing} (expected 4, false, (6,4))");
+        }
+
+        // 2) A wall slam still kills: a 4-HP victim shoved into a wall takes the lethal collision.
+        {
+            var f = new Battlefield(11, 9);
+            f.SetObstacle(new(5, 4));
+            var c = Shover(new(2, 4)); var v = Victim(new(3, 4), 4);
+            var fc = Eng(f, c, v).ForecastShift(c, v, cells: 3, pull: false);
+            Check("ForecastShift wall-slam kill",
+                fc.Valid && !fc.IntoVoid && fc.Kills && fc.Landing == new CellCoord(4, 4),
+                $"slam into wall -> kills {fc.Kills}, land {fc.Landing} (expected true, (4,4))");
+        }
+
+        // 3) A big direct hit still can't let embers fake a kill: 10 HP, 6 pre-damage, then 3 embers —
+        //    starts the walk at 4, singes 4 -> 2 -> (no-op), survives at 2.
+        {
+            var f = new Battlefield(11, 9);
+            var c = Shover(new(2, 4)); var v = Victim(new(3, 4), 10);
+            var eng = Eng(f, c, v);
+            eng.TileDanger = cell => cell.Y == 4 && cell.X is >= 4 and <= 6 ? 2 : 0;
+            var fc = eng.ForecastShift(c, v, cells: 3, pull: false, preDamage: 6);
+            Check("ForecastShift preDamage floored embers",
+                fc.Valid && !fc.Kills && fc.Damage == 2,
+                $"10 HP, 6 direct + 3 embers -> dmg {fc.Damage}, kills {fc.Kills} (expected 2, false)");
+        }
+
+        // 4) The void is an instant kill (LethalVoid) — unless the victim is void-anchored, who instead
+        //    just slams the void's edge and lives.
+        {
+            var f = new Battlefield(11, 9);
+            f.SetHole(new(4, 4));
+            var c = Shover(new(2, 4));
+            var v = Victim(new(3, 4), 50);
+            var eng = Eng(f, c, v); eng.LethalVoid = true;
+            var fc = eng.ForecastShift(c, v, cells: 2, pull: false);
+
+            var anchored = Victim(new(3, 4), 50); anchored.VoidAnchored = true;
+            var eng2 = Eng(f, c, anchored); eng2.LethalVoid = true;
+            var fa = eng2.ForecastShift(c, anchored, cells: 2, pull: false);
+            Check("ForecastShift void plunge",
+                fc.IntoVoid && fc.Kills && fc.Damage == 50 && !fa.IntoVoid && !fa.Kills,
+                $"void plunge kills {fc.Kills}; anchored survives (intoVoid {fa.IntoVoid}, kills {fa.Kills})");
+        }
+
+        // 5) Spikes bite lethally but are SKIPPED for the hazard-immune; ember-style soft hazards singe
+        //    everyone, immune or not (mirroring the game's ember tick, which ignores immunity).
+        {
+            var f = new Battlefield(11, 9);
+            f.SetTile(new(4, 4), TileKind.Spikes);
+            var c = Shover(new(2, 4));
+            var mortal = Victim(new(3, 4), 5);
+            var immune = Victim(new(3, 4), 5); immune.HazardImmune = true;
+            var spikeMortal = Eng(f, c, mortal).ForecastShift(c, mortal, cells: 1, pull: false);
+            var spikeImmune = Eng(f, c, immune).ForecastShift(c, immune, cells: 1, pull: false);
+
+            var f2 = new Battlefield(11, 9);
+            var immune2 = Victim(new(3, 4), 5); immune2.HazardImmune = true;
+            var eng3 = Eng(f2, c, immune2);
+            eng3.TileDanger = cell => cell == new CellCoord(4, 4) ? 2 : 0;
+            var emberImmune = eng3.ForecastShift(c, immune2, cells: 1, pull: false);
+
+            Check("ForecastShift spikes vs immunity",
+                spikeMortal.Damage == 3 && spikeImmune.Damage == 0 && emberImmune.Damage == 2,
+                $"spike hits mortal {spikeMortal.Damage}, spares immune {spikeImmune.Damage}; ember still singes immune {emberImmune.Damage} (expected 3/0/2)");
+        }
+
+        // 6) ORDER — collision lands BEFORE embers (ApplyShift applies the slam inline, then raises
+        //    FighterPushed which ticks embers synchronously). A 6-HP enemy shoved onto an ember then
+        //    into a wall takes collision 6->1 first; the ember then no-ops at 1 HP. NOT a kill.
+        {
+            var f = new Battlefield(11, 9);
+            f.SetObstacle(new(5, 4));
+            var c = Shover(new(2, 4)); var v = Victim(new(3, 4), 6);
+            var eng = Eng(f, c, v);
+            eng.TileDanger = cell => cell == new CellCoord(4, 4) ? 2 : 0;
+            var fc = eng.ForecastShift(c, v, cells: 2, pull: false);
+            Check("ForecastShift collision-before-ember",
+                !fc.Kills && fc.Damage == 5 && fc.Landing == new CellCoord(4, 4),
+                $"ember+wall on 6 HP -> dmg {fc.Damage}, kills {fc.Kills} (expected 5, false — collision first, ember no-ops)");
+        }
+
+        // 7) ORDER — embers land BEFORE spikes (FighterPushed embers run, THEN ApplyHazards spikes).
+        //    A 4-HP victim pushed across an ember then a spike: ember 4->2, spike 2->0 = a real kill.
+        //    (Spike-first would leave it at 1 and miss the kill.)
+        {
+            var f = new Battlefield(11, 9);
+            f.SetTile(new(5, 4), TileKind.Spikes);
+            var c = Shover(new(2, 4)); var v = Victim(new(3, 4), 4);
+            var eng = Eng(f, c, v);
+            eng.TileDanger = cell => cell == new CellCoord(4, 4) ? 2 : 0;
+            var fc = eng.ForecastShift(c, v, cells: 2, pull: false);
+            Check("ForecastShift ember-before-spike",
+                fc.Kills && fc.Landing == new CellCoord(5, 4),
+                $"ember+spike on 4 HP -> kills {fc.Kills}, land {fc.Landing} (expected true, (5,4) — ember then spike)");
+        }
     }
 
     private static void Check(string name, bool ok, string detail)

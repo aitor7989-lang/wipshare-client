@@ -1,20 +1,20 @@
-name: Gauntlet Windows build
+name: Gauntlet Windows build (ARCHIVED — manual only)
 
-# Builds a self-contained Windows package of THE GAUNTLET OF THE BELL and publishes it
-# two ways, exactly like the DofusSlice workflow:
+# ARCHIVED. The Gauntlet roguelite is no longer the focus of this repo — DofusSlice is the
+# go-forward game (see Gauntlet/ARCHIVED.md and HANDOVER.md). This workflow is kept so the
+# Gauntlet can still be built on demand, but it NO LONGER runs automatically on push and no
+# longer republishes the `gauntlet-latest` release on every engine change. The last release
+# it built stays live. To build a fresh Gauntlet package, trigger this workflow by hand from
+# the Actions tab (Run workflow).
+#
+# Builds a self-contained Windows package of THE GAUNTLET OF THE BELL:
 #  - as a workflow artifact (needs a GitHub login to download), and
 #  - as a GitHub *Release* asset (public, permanent link, no login, works on mobile).
 # Unzip and double-click Gauntlet.exe — no .NET install required. The 1-bit art packs
 # are local-only (never committed), so the CI build runs on the built-in fallbacks.
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ "claude/dofus-engine-vertical-slice-7ijlfm" ]
-    paths:
-      - "Gauntlet/**"
-      - "DofusSlice/DofusSlice.Core/**"
-      - ".github/workflows/gauntlet-build.yml"
+  workflow_dispatch:   # manual only — archived; the push trigger was removed (see the note above)
 
 permissions:
   contents: write

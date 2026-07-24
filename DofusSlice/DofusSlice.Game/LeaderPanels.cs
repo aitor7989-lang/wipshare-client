@@ -120,16 +120,23 @@ public partial class SliceGame
                 key == "vit" ? Mono.Hp : null);
             if (a.StatPoints > 0)
             {
+                int cost = a.StatStep(key);
+                bool afford = a.CanSpendStat(key);
                 var b = CharPlusRect(i);
-                bool hov = b.Contains(mp);
-                Mono.Button(_sb, _prim, b, hover: hov);
-                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 6, 1, Mono.ButtonInk(hov));
+                bool hov = afford && b.Contains(mp);
+                Mono.Button(_sb, _prim, b, hover: hov, disabled: !afford);
+                _font.DrawCentered(_sb, "+", b.Center.X, b.Y + 6, 1, Mono.ButtonInk(hov, !afford));
+                // The tiered cost shows only once it climbs past 1 — the moment specialising bites.
+                if (cost > 1)
+                    _font.Draw(_sb, $"{cost}", b.X - 11, b.Y + 6, 1, afford ? Mono.Dim : Mono.Faint);
             }
         }
 
         // Points banked, then the effective damage line the fights actually use.
         // (AUTO-SPEND is gone — Pass 3: the leader's points are spent by hand, always.)
-        _font.Draw(_sb, a.StatPoints > 0 ? $"POINTS TO SPEND: {a.StatPoints}" : "NO POINTS BANKED",
+        _font.Draw(_sb, a.StatPoints > 0
+                ? $"POINTS: {a.StatPoints}  ·  COST RISES AS YOU FOCUS ONE STAT"
+                : "NO POINTS BANKED",
             L, w.Y + 432, 1, a.StatPoints > 0 ? Mono.Ink : Mono.Dim);
         var elem = TitheContent.ClassElement(a.ClassId);
         _font.Draw(_sb, $"{elem.ToString().ToUpperInvariant()} POWER {TitheContent.DamageStatFor(s, elem)}"
@@ -185,7 +192,7 @@ public partial class SliceGame
         if (PanelCloseRect(CharWin).Contains(m)) { _charOpen = false; _sfx.Play("click"); return; }
         if (a.StatPoints > 0)
             for (int i = 0; i < StatRows.Length; i++)
-                if (CharPlusRect(i).Contains(m)) { a.SpendStat(StatRows[i].key); _sfx.Play("click"); return; }
+                if (CharPlusRect(i).Contains(m)) { if (a.SpendStat(StatRows[i].key)) _sfx.Play("click"); return; }
     }
 
     // ----- THE INVENTORY (I) — the demo's right window: doll + strip + grid + gold ------

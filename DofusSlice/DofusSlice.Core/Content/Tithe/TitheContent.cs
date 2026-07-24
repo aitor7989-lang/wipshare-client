@@ -493,11 +493,19 @@ public static class TitheContent
         };
         int total = weights.Sum(x => x.w);
         if (total == 0) { weights = new[] { ("vit", 1), ("str", 1), ("int", 1), ("cha", 1), ("agi", 1), ("wis", 1) }; total = 6; }
+        // Tiered costs mean a weighted key can become unaffordable while points remain; keep
+        // spending by weight only while something lands, then sweep any remainder into Vitality
+        // (always 1:1) so a merc never banks dead points it will never use.
         int guard = 10_000;
-        while (u.StatPoints > 0 && guard-- > 0)
+        bool spent = true;
+        while (spent && u.StatPoints > 0 && guard-- > 0)
+        {
+            spent = false;
             foreach (var (key, w) in weights)
                 for (int i = 0; i < w && u.StatPoints > 0; i++)
-                    u.SpendStat(key);
+                    if (u.SpendStat(key)) spent = true;
+        }
+        while (u.StatPoints > 0 && u.SpendStat("vit")) { }
     }
 
     /// <summary>A class's damage element (Bible §6.6). Defaults to Neutral (Strength) if unthemed.</summary>

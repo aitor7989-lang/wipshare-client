@@ -51,12 +51,33 @@ public sealed class CampaignUnit
 
     public int SpentOn(string key) => SpentStats.GetValueOrDefault(key);
 
-    /// <summary>Spend one characteristic point (flat cost 1 for now; soft-cost tiers later).</summary>
+    /// <summary>How many invested points buy ONE more tier before the cost climbs. Scaled to the
+    /// slice's ~95-point run so the classic 1.29 soft-cap actually bites within 20 levels.</summary>
+    public const int StatTierSize = 20;
+
+    /// <summary>The Dofus 1.29 soft-cap: specialising a characteristic costs more per point the
+    /// deeper you pour in. Cost to raise <paramref name="key"/> by ONE more, in characteristic
+    /// points — 1 for the first tier, then 2, 3, 4, 5 as you climb. Vitality never scales (the
+    /// classic 1:1 HP dump); Wisdom is premium (XP gain + AP/MP-loss dodge) and costs one extra.</summary>
+    public int StatStep(string key)
+    {
+        if (key == "vit") return 1;                 // Vitality is the eternal 1:1 dump
+        int cost = 1 + SpentOn(key) / StatTierSize; // 0-19 → 1, 20-39 → 2, 40-59 → 3, …
+        if (key == "wis") cost += 1;                // Wisdom always costs one above its tier
+        return cost;
+    }
+
+    /// <summary>True if the next point in <paramref name="key"/> is affordable right now.</summary>
+    public bool CanSpendStat(string key) => StatPoints >= StatStep(key);
+
+    /// <summary>Spend the tiered cost to raise one characteristic by one. Fails (no change) when
+    /// the banked points can't cover the current tier's cost.</summary>
     public bool SpendStat(string key)
     {
-        if (StatPoints <= 0) return false;
-        StatPoints--;
-        SpentStats[key] = SpentStats.GetValueOrDefault(key) + 1;
+        int cost = StatStep(key);
+        if (StatPoints < cost) return false;
+        StatPoints -= cost;
+        SpentStats[key] = SpentOn(key) + 1;
         return true;
     }
 

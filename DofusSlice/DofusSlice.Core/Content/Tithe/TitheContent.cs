@@ -200,6 +200,7 @@ public static class TitheContent
         "teleport" => SpellEffect.Teleport(),
         "steal_ap" => SpellEffect.StealAp(e.Min),
         "steal_mp" => SpellEffect.StealMp(e.Min),
+        "steal_range" => SpellEffect.StealRange(e.Cells, e.Turns),
         "grant_ap" => SpellEffect.GrantAp(e.Min),
         "status" => SpellEffect.ApplyStatus(ParseStatus(e.Status), e.Mag, e.Turns),
         "self_damage" => SpellEffect.SelfHpCost(e.Min),
@@ -222,6 +223,11 @@ public static class TitheContent
         "mpdrain" or "sapped" => StatusKind.MpDrain,
         "shield" or "ironhide" => StatusKind.Shield,
         "damagebuff" => StatusKind.DamageBuff,
+        "damagedebuff" or "weaken" => StatusKind.DamageDebuff,
+        "defensebuff" or "armor" => StatusKind.DefenseBuff,
+        "vulnerable" or "vuln" => StatusKind.Vulnerable,
+        "rangebuff" => StatusKind.RangeBuff,
+        "rangedebuff" => StatusKind.RangeDebuff,
         _ => StatusKind.None,
     };
 

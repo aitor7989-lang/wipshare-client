@@ -18,6 +18,9 @@ public static class EffectsTest
         Pull();
         Swap();
         StealAp();
+        StealRange();
+        DefenseBuff();
+        DamageBuffDebuff();
         Rooted();
         Stabilized();
         Reflect();
@@ -307,6 +310,54 @@ public static class EffectsTest
             $"target AP {tgtBefore}->{t.CurrentAp}, caster gained 3");
     }
 
+    private static void StealRange()
+    {
+        var spell = Spell(30, "StealRange", 3, 1, 8, SpellEffect.StealRange(2, 2));
+        var c = Caster(new(2, 4), spell);
+        var t = Foe("t", new(6, 4));
+        var eng = Engine(c, t);
+        eng.TryCast(c, spell, new(6, 4));
+        // The victim's spell range shrinks by 2, the caster's grows by 2 (same amount, same clock).
+        var probe = Spell(31, "Probe", 2, 1, 8);
+        Check("StealRange", c.RangeBonus == 2 && t.RangeBonus == -2
+                && eng.EffectiveMaxRange(c, probe) == 10 && eng.EffectiveMaxRange(t, probe) == 6,
+            $"caster range {c.RangeBonus:+#;-#;0}, victim {t.RangeBonus:+#;-#;0}; reach c={eng.EffectiveMaxRange(c, probe)} t={eng.EffectiveMaxRange(t, probe)}");
+    }
+
+    private static void DefenseBuff()
+    {
+        // Flat 20 neutral hit; a 50% armor buff halves it to 10, a 50% vulnerability lifts it to 30.
+        var spell = Spell(32, "Hit20", 3, 1, 8, SpellEffect.Damage(Element.Neutral, 20, 20));
+        var c = Caster(new(2, 4), spell);
+        var armored = Foe("a", new(6, 4)); armored.Statuses.Add(new StatusEffect(StatusKind.DefenseBuff, 50, 2));
+        var eng = Engine(c, armored);
+        eng.TryCast(c, spell, new(6, 4));
+        Check("DefenseBuff", armored.Hp == 90, $"armored foe took {100 - armored.Hp} of a 20 hit (expected 10)");
+
+        var c2 = Caster(new(2, 4), spell);
+        var weak = Foe("w", new(6, 4)); weak.Statuses.Add(new StatusEffect(StatusKind.Vulnerable, 50, 2));
+        var eng2 = Engine(c2, weak);
+        eng2.TryCast(c2, spell, new(6, 4));
+        Check("Vulnerable", weak.Hp == 70, $"vulnerable foe took {100 - weak.Hp} of a 20 hit (expected 30)");
+    }
+
+    private static void DamageBuffDebuff()
+    {
+        // The caster's own +50% power and a −50% weaken on it net out on the same flat 20 hit.
+        var spell = Spell(33, "Hit20b", 3, 1, 8, SpellEffect.Damage(Element.Neutral, 20, 20));
+        var c = Caster(new(2, 4), spell); c.Statuses.Add(new StatusEffect(StatusKind.DamageBuff, 50, 2));
+        var t = Foe("t", new(6, 4));
+        var eng = Engine(c, t);
+        eng.TryCast(c, spell, new(6, 4));
+        Check("DamageBuff", t.Hp == 70, $"+50% power turned a 20 hit into {100 - t.Hp} (expected 30)");
+
+        var c2 = Caster(new(2, 4), spell); c2.Statuses.Add(new StatusEffect(StatusKind.DamageDebuff, 50, 2));
+        var t2 = Foe("t2", new(6, 4));
+        var eng2 = Engine(c2, t2);
+        eng2.TryCast(c2, spell, new(6, 4));
+        Check("DamageDebuff", t2.Hp == 90, $"−50% weaken turned a 20 hit into {100 - t2.Hp} (expected 10)");
+    }
+
     private static void Rooted()
     {
         var spell = Spell(4, "Root", 3, 1, 8, SpellEffect.ApplyStatus(StatusKind.Rooted, 1, 2));
@@ -480,7 +531,7 @@ public static class EffectsTest
     {
         Id = id, Name = name, ApCost = ap, MinRange = min, MaxRange = max,
         NeedsTarget = effects.Any(e => e.Kind is EffectKind.Damage or EffectKind.Pull
-            or EffectKind.Swap or EffectKind.StealAp or EffectKind.StealMp) &&
+            or EffectKind.Swap or EffectKind.StealAp or EffectKind.StealMp or EffectKind.StealRange) &&
             !effects.Any(e => e.Status is StatusKind.Regen or StatusKind.Reflect),
         Effects = effects,
     };

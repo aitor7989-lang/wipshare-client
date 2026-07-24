@@ -5,7 +5,12 @@ public enum StatusKind
 {
     None,
     DamageBuff,   // +Magnitude% to outgoing damage
+    DamageDebuff, // -Magnitude% to outgoing damage (weaken)
     Shield,       // -Magnitude flat to incoming damage
+    DefenseBuff,  // +Magnitude% resistance to ALL incoming damage (armor)
+    Vulnerable,   // -Magnitude% resistance = takes that much MORE damage (defense broken)
+    RangeBuff,    // +Magnitude to the bearer's spell range
+    RangeDebuff,  // -Magnitude to the bearer's spell range
     Poison,       // Magnitude damage at the start of each of the bearer's turns
     Regen,        // +Magnitude HP at the start of each of the bearer's turns
     MpDrain,      // -Magnitude MP at the start of each of the bearer's turns

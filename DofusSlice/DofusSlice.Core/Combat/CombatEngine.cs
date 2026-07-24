@@ -346,6 +346,12 @@ public sealed class CombatEngine
 
     // ---- Casting --------------------------------------------------------------------
 
+    /// <summary>A spell's reach for this caster right now: its authored max plus the caster's
+    /// net range modifier (RangeBuff − stolen/lost range), never dropping below the min range so
+    /// a debuffed spell still fires at point-blank instead of becoming uncastable.</summary>
+    public int EffectiveMaxRange(Fighter caster, SpellDef spell) =>
+        Math.Max(spell.MinRange, spell.MaxRange + caster.RangeBonus);
+
     public bool CanCast(Fighter caster, SpellDef spell, CellCoord target, out string reason)
     {
         reason = "";
@@ -356,7 +362,7 @@ public sealed class CombatEngine
         if (!Field.InBounds(target)) { reason = "out of bounds"; return false; }
 
         int dist = caster.Pos.DistanceTo(target);
-        if (dist < spell.MinRange || dist > spell.MaxRange) { reason = "out of range"; return false; }
+        if (dist < spell.MinRange || dist > EffectiveMaxRange(caster, spell)) { reason = "out of range"; return false; }
         if (spell.LineOnly && !caster.Pos.IsAlignedWith(target)) { reason = "must be cast in a line"; return false; }
         if (spell.RequiresLineOfSight &&
             !LineOfSight.HasLineOfSight(Field, caster.Pos, target, c => c != target && IsOccupied(c)))
@@ -395,7 +401,7 @@ public sealed class CombatEngine
         foreach (var cell in Field.AllCells())
         {
             int dist = caster.Pos.DistanceTo(cell);
-            if (dist < spell.MinRange || dist > spell.MaxRange) continue;
+            if (dist < spell.MinRange || dist > EffectiveMaxRange(caster, spell)) continue;
             if (spell.LineOnly && !caster.Pos.IsAlignedWith(cell)) continue;
             if (spell.RequiresLineOfSight &&
                 !LineOfSight.HasLineOfSight(Field, caster.Pos, cell, c => c != cell && IsOccupied(c)))
@@ -535,6 +541,9 @@ public sealed class CombatEngine
                 case EffectKind.StealMp:
                     ApplySteal(caster, victim, effect.Min, ap: false);
                     break;
+                case EffectKind.StealRange:
+                    ApplyStealRange(caster, victim, effect.Min, effect.Max);
+                    break;
                 case EffectKind.GrantAp:
                     if (victim.Team == caster.Team) ApplyGrantAp(caster, victim, effect.Min);
                     break;
@@ -582,6 +591,16 @@ public sealed class CombatEngine
         Emit($"  {caster.Name} steals {taken} {(ap ? "AP" : "MP")} from {victim.Name}.");
     }
 
+    /// <summary>Dofus range theft: the victim's spell range shrinks and the caster's grows by the
+    /// same amount for the same duration — a Xelor/wraith staple that pins ranged units in close.</summary>
+    private void ApplyStealRange(Fighter caster, Fighter victim, int amount, int turns)
+    {
+        if (amount <= 0 || turns <= 0) return;
+        ApplyStatusEffect(victim, StatusKind.RangeDebuff, amount, turns);
+        ApplyStatusEffect(caster, StatusKind.RangeBuff, amount, turns);
+        Emit($"  {caster.Name} steals {amount} range from {victim.Name}.");
+    }
+
     private void ApplyGrantAp(Fighter caster, Fighter ally, int amount)
     {
         amount = Math.Max(0, amount);
@@ -620,7 +639,10 @@ public sealed class CombatEngine
                       + caster.DamagePercent + caster.DamageBuffPercent + PassivePercent(caster);
         int scaled = rolled * percent / 100 + caster.FlatDamage + PassiveFlat(caster, victim);
         if (crit) scaled += (int)MathF.Round(scaled * 0.5f);
-        int afterPct = scaled * (100 - victim.ResistanceFor(element)) / 100;
+        // Elemental armor + defense buffs / vulnerabilities. Capped at 90% so nothing is ever
+        // fully immune; a Vulnerable target's negative resist amplifies the blow past 100%.
+        int resist = Math.Min(90, victim.ResistanceFor(element) + victim.DefensePercent);
+        int afterPct = scaled * (100 - resist) / 100;
         int dmg = afterPct - victim.FlatResistanceFor(element) - victim.ShieldAmount;
         return Math.Max(0, dmg);
     }

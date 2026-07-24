@@ -13,6 +13,7 @@ public enum EffectKind
     Lifesteal,   // damage that heals the caster for half
     StealAp,     // remove AP from the target and give it to the caster
     StealMp,     // remove MP from the target and give it to the caster
+    StealRange,  // shorten the target's spell range and lengthen the caster's (Dofus vol de portée)
     GrantAp,     // give AP to an allied target this turn (Bone Piper, Blood Pact)
     ApplyStatus, // add a timed status to the affected fighter(s)
     Summon,      // summon a creature (SummonKind) onto the targeted free cell
@@ -39,6 +40,7 @@ public sealed record SpellEffect(
     public static SpellEffect Lifesteal(Element element, int min, int max) => new(EffectKind.Lifesteal, element, min, max);
     public static SpellEffect StealAp(int amount) => new(EffectKind.StealAp, Element.Neutral, amount, amount);
     public static SpellEffect StealMp(int amount) => new(EffectKind.StealMp, Element.Neutral, amount, amount);
+    public static SpellEffect StealRange(int amount, int turns) => new(EffectKind.StealRange, Element.Neutral, amount, turns);
     public static SpellEffect GrantAp(int amount) => new(EffectKind.GrantAp, Element.Neutral, amount, amount);
     public static SpellEffect SelfHpCost(int amount) => new(EffectKind.SelfHpCost, Element.Neutral, amount, amount);
     public static SpellEffect ApplyStatus(StatusKind status, int magnitude, int turns) =>

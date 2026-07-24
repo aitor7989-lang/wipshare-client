@@ -104,8 +104,16 @@ public sealed class Fighter
     /// <summary>Active timed states (buffs, shields, poison, drains).</summary>
     public List<StatusEffect> Statuses { get; } = new();
 
-    public int DamageBuffPercent => Statuses.Where(s => s.Kind == StatusKind.DamageBuff).Sum(s => s.Magnitude);
+    // Net outgoing-damage swing: buffs minus weaken debuffs.
+    public int DamageBuffPercent => Statuses.Where(s => s.Kind == StatusKind.DamageBuff).Sum(s => s.Magnitude)
+                                  - Statuses.Where(s => s.Kind == StatusKind.DamageDebuff).Sum(s => s.Magnitude);
     public int ShieldAmount => Statuses.Where(s => s.Kind == StatusKind.Shield).Sum(s => s.Magnitude);
+    // Net incoming-damage armor: DefenseBuff adds %resist, Vulnerable subtracts it (takes more).
+    public int DefensePercent => Statuses.Where(s => s.Kind == StatusKind.DefenseBuff).Sum(s => s.Magnitude)
+                               - Statuses.Where(s => s.Kind == StatusKind.Vulnerable).Sum(s => s.Magnitude);
+    // Net spell-range modifier: RangeBuff extends, RangeDebuff (e.g. stolen range) shortens.
+    public int RangeBonus => Statuses.Where(s => s.Kind == StatusKind.RangeBuff).Sum(s => s.Magnitude)
+                           - Statuses.Where(s => s.Kind == StatusKind.RangeDebuff).Sum(s => s.Magnitude);
     public int ReflectPercent => Statuses.Where(s => s.Kind == StatusKind.Reflect).Sum(s => s.Magnitude);
     public bool IsRooted => Statuses.Any(s => s.Kind == StatusKind.Rooted);
     public bool IsStabilized => Statuses.Any(s => s.Kind == StatusKind.Stabilized);

@@ -123,6 +123,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     // Per-turn countdown (Dofus-style): a turn auto-ends when the clock hits zero.
     private const float TurnSeconds = 30f;
+    private static readonly float[] TurnWarnMarks = { 10f, 5f };
     private float _turnClock = TurnSeconds;
     private string _turnOwner = "";
     private bool _autoTurn;              // SPACE during YOUR turn: hand this one turn to the AI
@@ -1102,7 +1103,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_anim.BlocksInput) return;
 
         // Turn timer: auto-end when it runs out.
+        float clockWas = _turnClock;
         _turnClock -= dt;
+        // The turn clock expired in silence. Warn once at 10s and again at 5s so a forced
+        // end-of-turn is never a surprise. (_turnWarned resets with the turn owner.)
+        foreach (float mark in TurnWarnMarks)
+            if (clockWas > mark && _turnClock <= mark) { _sfx.Play("bell", 0.35f, jitter: false); break; }
         if (_turnClock <= 0f) { EndPlayerTurn(); return; }
 
         // Spell hotkeys.
@@ -1151,6 +1157,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void EndPlayerTurn()
     {
         if (_anim.BlocksInput) return;
+        _sfx.Play("chime", 0.35f, jitter: false);
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
@@ -1175,7 +1182,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         if (_anim.BlocksInput) return;            // input + clock hold while an action replays
 
+        float clockWas = _turnClock;
         _turnClock -= dt;
+        // The turn clock expired in silence. Warn once at 10s and again at 5s so a forced
+        // end-of-turn is never a surprise. (_turnWarned resets with the turn owner.)
+        foreach (float mark in TurnWarnMarks)
+            if (clockWas > mark && _turnClock <= mark) { _sfx.Play("bell", 0.35f, jitter: false); break; }
         if (_turnClock <= 0f) { _log.Add("the clock ends your turn."); EndAvatarTurn(); return; }
 
         var spells = me.Spells;
@@ -1212,7 +1224,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _engine.CanCast(me, spell, _hover, out string why);
                 if (!string.IsNullOrEmpty(why)) _log.Add($"{spell.Name}: {why}.");
                 _selectedSpell = -1;
-                _sfx.Play("click", 0.4f);
+                _sfx.Play("crush", 0.3f);   // a refusal must not sound like a confirmation
             }
         }
         else if (_moveRange.ContainsKey(_hover))
@@ -1233,9 +1245,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // every cell — the board lying to you about the most common refusal in the game.
         var spell = spells[index];
         int cd = me.TurnsUntilReady(spell, _engine.Round);
-        if (cd > 0) { _log.Add($"{spell.Name} is on cooldown — {cd} more turn{(cd > 1 ? "s" : "")}."); _sfx.Play("click", 0.25f); return; }
-        if (!me.HasCastsLeft(spell)) { _log.Add($"{spell.Name} is spent for this turn."); _sfx.Play("click", 0.25f); return; }
-        if (spell.ApCost > me.CurrentAp) { _log.Add($"not enough AP for {spell.Name} ({spell.ApCost} needed, {me.CurrentAp} left)."); _sfx.Play("click", 0.25f); return; }
+        if (cd > 0) { _log.Add($"{spell.Name} is on cooldown — {cd} more turn{(cd > 1 ? "s" : "")}."); _sfx.Play("crush", 0.3f); return; }
+        if (!me.HasCastsLeft(spell)) { _log.Add($"{spell.Name} is spent for this turn."); _sfx.Play("crush", 0.3f); return; }
+        if (spell.ApCost > me.CurrentAp) { _log.Add($"not enough AP for {spell.Name} ({spell.ApCost} needed, {me.CurrentAp} left)."); _sfx.Play("crush", 0.3f); return; }
 
         _selectedSpell = index;
         _sfx.Play("click", 0.4f);
@@ -1244,6 +1256,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void EndAvatarTurn()
     {
         if (_anim.BlocksInput) return;
+        _sfx.Play("chime", 0.35f, jitter: false);   // the one action you take every turn was mute
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
@@ -1978,6 +1991,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             // its head so you can glance-read the fight — full-HP units keep the clean board.
             float tokenH = sheet != null ? sheet.FrameHeight * ChamberSet.PxScale * scl : 44f * scl;
             DrawOverheadHp(f, center.X, feet.Y - tokenH - 6f, s);
+            // Statuses ride above the head HERE too. This return is taken by every sprite-backed
+            // unit — i.e. all of them — so the pips below were unreachable and the board showed
+            // no poison, no shield, no root at all.
+            DrawStatusPips(f, center.X, feet.Y - tokenH - 14f);
             return; // exact HP: hover the unit (1.29 style)
         }
 

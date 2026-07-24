@@ -72,6 +72,41 @@ public sealed class BattleAnimator
 
     private bool Piloted(string id) => IsPiloted?.Invoke(id) ?? false;
 
+    /// <summary>Does this status help its bearer? Decides whether the cue reads as relief or harm.</summary>
+    private static bool Beneficial(StatusKind k) => k is StatusKind.Shield or StatusKind.Regen
+        or StatusKind.DamageBuff or StatusKind.DefenseBuff or StatusKind.RangeBuff or StatusKind.Stabilized;
+
+    /// <summary>One short word per status for the float — the pip letter is too terse to teach.</summary>
+    private static string StatusWord(StatusKind k) => k switch
+    {
+        StatusKind.Poison => "POISON",
+        StatusKind.Regen => "REGEN",
+        StatusKind.Shield => "SHIELD",
+        StatusKind.DefenseBuff => "ARMOR",
+        StatusKind.Vulnerable => "EXPOSED",
+        StatusKind.DamageBuff => "EMPOWERED",
+        StatusKind.DamageDebuff => "WEAKENED",
+        StatusKind.RangeBuff => "REACH+",
+        StatusKind.RangeDebuff => "LEASHED",
+        StatusKind.MpDrain => "SLOWED",
+        StatusKind.ApDrain => "DRAINED",
+        StatusKind.Rooted => "ROOTED",
+        StatusKind.Stabilized => "ANCHORED",
+        StatusKind.Reflect => "REFLECT",
+        _ => k.ToString().ToUpperInvariant(),
+    };
+
+    private static Color StatusInk(StatusKind k) => k switch
+    {
+        StatusKind.Poison => new Color(120, 200, 90),
+        StatusKind.Shield or StatusKind.DefenseBuff => DofusSlice.Game.Rendering.Mono.Ap,
+        StatusKind.Regen => DofusSlice.Game.Rendering.Mono.Heal,
+        StatusKind.DamageBuff => new Color(232, 116, 60),
+        StatusKind.Vulnerable or StatusKind.RangeDebuff => DofusSlice.Game.Rendering.Mono.Danger,
+        StatusKind.MpDrain or StatusKind.ApDrain => new Color(170, 120, 210),
+        _ => DofusSlice.Game.Rendering.Mono.Ink,
+    };
+
     public void Reset(IEnumerable<Fighter> fighters)
     {
         _queue.Clear();
@@ -157,6 +192,23 @@ public sealed class BattleAnimator
                     DofusSlice.Game.Rendering.Mono.On
                         ? DofusSlice.Game.Rendering.Mono.Ink : new Color(150, 220, 180)));
                 Sfx?.Invoke("summon", 0.7f);
+                break;
+            // A status landing or falling off was completely silent — roughly five times a fight
+            // the rules changed under the player with no cue at all. Flash it in the status's own
+            // colour and name it, so a poison or a shield reads the moment it happens.
+            case StatusApplied sa:
+                _overlays.Add(new ImpactFlash(_displayPos.TryGetValue(sa.Target.Id, out var sp)
+                    ? sp + new Vector2(0, -16) : _proj.CellCenter(sa.Target.Pos), StatusInk(sa.Kind)));
+                _overlays.Add(new FloatingText(
+                    (_displayPos.TryGetValue(sa.Target.Id, out var sp2) ? sp2 : _proj.CellCenter(sa.Target.Pos))
+                        + new Vector2(0, -40), StatusWord(sa.Kind), StatusInk(sa.Kind), 1));
+                Sfx?.Invoke(Beneficial(sa.Kind) ? "chime" : "crush", 0.4f);
+                break;
+            case StatusExpired se:
+                _overlays.Add(new FloatingText(
+                    (_displayPos.TryGetValue(se.Target.Id, out var ep) ? ep : _proj.CellCenter(se.Target.Pos))
+                        + new Vector2(0, -40), StatusWord(se.Kind) + " ENDS",
+                    DofusSlice.Game.Rendering.Mono.Faint, 1));
                 break;
             case TurnStarted ts:
                 // The avatar's banner says what matters: it is YOUR turn (UX pass).
@@ -396,6 +448,7 @@ internal sealed class MoveAnim : IAnim
     private readonly BattleAnimator? _a;
     private readonly string _sound;
     private float _t;
+    private int _stepsPlayed;   // one footfall PER CELL, not one for the whole walk
 
     public MoveAnim(string id, Vector2[] pts, float perSeg, BattleAnimator? a = null, string sound = "step")
     {
@@ -412,8 +465,12 @@ internal sealed class MoveAnim : IAnim
 
     public void Update(float dt)
     {
-        if (_t == 0f) _a?.Sfx?.Invoke(_sound, 0.6f);
+        if (_t == 0f) { _a?.Sfx?.Invoke(_sound, 0.6f); _stepsPlayed = 1; }
         _t += dt;
+        // A five-cell walk used to make ONE sound. Step as each cell is actually crossed, so a
+        // long march reads as a march. (SoundBank rate-limits a repeated name, so this can't buzz.)
+        int crossed = Math.Min(_pts.Length - 1, (int)(_t / Math.Max(0.0001f, _perSeg)) + 1);
+        while (_stepsPlayed < crossed) { _stepsPlayed++; _a?.Sfx?.Invoke(_sound, 0.45f); }
     }
 
     public string? ActorId => _id;

@@ -187,7 +187,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _cityMap = MapLoader.Parse(TitheTables.CityMapJson);
             _graveMap = TitheContent.Arena();
             _diveRng = new SystemRng(_seed);
-            _campaign = Campaign.NewGame("cannon");
+            _campaign = Campaign.NewGame(TitheContent.ClassIds.First());
+            _pickClass = true;   // ...but you choose who you are before the first dive
             EnterCity();
         }
         else
@@ -362,9 +363,16 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         if (_campaign.Over)
         {
-            if (Pressed(Keys.R)) { _diveRng = new SystemRng(++_seed); _campaign = Campaign.NewGame("cannon"); EnterCity(); }
+            if (Pressed(Keys.R))
+            {
+                _diveRng = new SystemRng(++_seed);
+                _campaign = Campaign.NewGame(TitheContent.ClassIds.First());
+                _pickClass = true;   // a new campaign is a new choice of leader
+                EnterCity();
+            }
             return;
         }
+        if (UpdateClassPicker()) return;    // the opening choice owns the screen until it's made
         if (UpdateLeaderPanels()) return;   // C = character sheet, I = the bag
         if (Pressed(Keys.Escape)) { _openNpc = -1; return; }
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
@@ -2906,6 +2914,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
         if (_campaign.Over) DrawGameOver();
+        if (_pickClass) DrawClassPicker();   // over everything: nothing else matters until you choose
         _sb.End();
     }
 

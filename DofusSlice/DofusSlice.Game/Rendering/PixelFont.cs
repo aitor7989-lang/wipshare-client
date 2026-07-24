@@ -93,6 +93,19 @@ public sealed class PixelFont
         ['.'] = new[] { "     ", "     ", "     ", "     ", "     ", "  ## ", "  ## " },
         [','] = new[] { "     ", "     ", "     ", "     ", "  ## ", "  ## ", " #   " },
         ['-'] = new[] { "     ", "     ", "     ", "#####", "     ", "     ", "     " },
+        // Typography the UI actually uses. Without these, every one rendered as a blank 6px
+        // gap: the "·" separators in almost every stat line, the "—" in titles, the ">"/"<"
+        // on the yard gates, the "[+]" stat spenders, the "*" level-up banner and "=" in the
+        // keybind lines. (The apostrophe is already defined below — "SEXTON'S" was never broken.)
+        ['—'] = new[] { "     ", "     ", "     ", "#####", "     ", "     ", "     " },
+        ['·'] = new[] { "     ", "     ", "     ", "  #  ", "     ", "     ", "     " },
+        ['='] = new[] { "     ", "     ", "#####", "     ", "#####", "     ", "     " },
+        ['>'] = new[] { "     ", " #   ", "  #  ", "   # ", "  #  ", " #   ", "     " },
+        ['<'] = new[] { "     ", "   # ", "  #  ", " #   ", "  #  ", "   # ", "     " },
+        ['['] = new[] { " ### ", " #   ", " #   ", " #   ", " #   ", " #   ", " ### " },
+        [']'] = new[] { " ### ", "   # ", "   # ", "   # ", "   # ", "   # ", " ### " },
+        ['*'] = new[] { "     ", "  #  ", "# # #", " ### ", "# # #", "  #  ", "     " },
+        [';'] = new[] { "     ", "  #  ", "  #  ", "     ", "  ## ", "  ## ", " #   " },
         ['+'] = new[] { "     ", "  #  ", "  #  ", "#####", "  #  ", "  #  ", "     " },
         ['/'] = new[] { "    #", "    #", "   # ", "  #  ", " #   ", "#    ", "#    " },
         ['!'] = new[] { "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "     ", "  #  " },

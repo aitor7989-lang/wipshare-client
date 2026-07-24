@@ -14,6 +14,7 @@ namespace DofusSlice.Game;
 public partial class SliceGame
 {
     private bool _charOpen, _invOpen, _spellOpen;
+    private bool _pickClass;            // the opening beat: choose who you are before the first dive
     private string? _panelMsg;          // one-line feedback ("ate bread", "essence learned")
     private float _panelMsgUntil;       // shown while _time is before this
 
@@ -487,6 +488,116 @@ public partial class SliceGame
             if ((_scene == Scene.City || _scene == Scene.Graveyard) && ClickMenuButtons(m)) return true;
             if (_charOpen) ClickCharacterWindow(m);
             else ClickSpellPanel(m);
+        }
+        return true;
+    }
+
+    // ----- THE OPENING CHOICE: which leader do you play? --------------------------------
+    // The avatar is the ONLY hand-piloted unit, so this is the single biggest decision in a
+    // campaign — and it used to be hardcoded to the Cannon, meaning the Archer and the Bulwark
+    // could never be played at all. Element, AP, range band, passive and the whole spell ladder
+    // change with it.
+
+    private static readonly string[] PickIds = TitheContent.ClassIds.ToArray();
+
+    private static Rectangle PickCardRect(int i) =>
+        new(ScreenW / 2 - 495 + i * 335, 140, 310, 470);
+
+    /// <summary>A level-1 preview of a class: the numbers you are choosing between.</summary>
+    private static (int hp, int ap, int mp, string elem, string[] spells) PickPreview(string classId)
+    {
+        var probe = new CampaignUnit { Id = "probe", ClassId = classId, Name = "probe", IsAvatar = true };
+        var s = TitheContent.StatsOf(probe);
+        var (ap, mp) = TitheContent.ClassApMp(classId);
+        return (s.MaxHp, ap + s.ApBonus, mp + s.MpBonus,
+            TitheContent.ClassElement(classId).ToString().ToUpperInvariant(),
+            TitheContent.ClassSkillsAt(classId, 99).Select(k => TitheContent.SkillAtRank(k, 1).Name).ToArray());
+    }
+
+    private void DrawClassPicker()
+    {
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(6, 6, 6, 246));
+        _font.DrawCentered(_sb, "WHO DO YOU BECOME?", ScreenW / 2, 62, 4, Mono.Ink);
+        _font.DrawCentered(_sb, "YOU LEAD BY HAND — COMPANIONS FIGHT THEMSELVES. THIS IS THE ONE YOU PLAY.",
+            ScreenW / 2, 108, 1, Mono.Dim);
+
+        var mp_ = new Point(_mouse.X, _mouse.Y);
+        for (int i = 0; i < PickIds.Length; i++)
+        {
+            string id = PickIds[i];
+            var r = PickCardRect(i);
+            bool hov = r.Contains(mp_);
+            Mono.Frame(_sb, _prim, r, emphasis: hov, fillAlpha: 0.98f);
+
+            var (hp, ap, mp, elem, spells) = PickPreview(id);
+            var ink = Mono.Element(TitheContent.ClassElement(id));
+
+            // The fighter themself, so you pick a body and not a word.
+            var sheet = _sprites.GetSheet(PixActor(id).sprite, "idle", "se");
+            if (sheet != null)
+                SpriteDraw.Feet(_sb, sheet, new Vector2(r.Center.X, r.Y + 132), Mono.Ink, 104f, 0);
+
+            _font.DrawCentered(_sb, id.ToUpperInvariant(), r.Center.X, r.Y + 146, 3, hov ? Mono.Ink : ink);
+            _font.DrawCentered(_sb, $"{elem}   ·   {hp} HP   ·   {ap} AP   ·   {mp} MP",
+                r.Center.X, r.Y + 178, 1, Mono.Dim);
+
+            // The blurb, wrapped by hand into the card's width.
+            int y = r.Y + 202;
+            foreach (var line in WrapWords(TitheContent.Blurb(id), 38, maxLines: 5))
+            { _font.DrawCentered(_sb, line.ToUpperInvariant(), r.Center.X, y, 1, Mono.Dim); y += 13; }
+
+            y += 8;
+            _font.DrawCentered(_sb, "THE LADDER", r.Center.X, y, 1, Mono.Faint); y += 15;
+            for (int k = 0; k < spells.Length && k < 4; k++)
+            { _font.DrawCentered(_sb, $"L{k + 1}  {spells[k].ToUpperInvariant()}", r.Center.X, y, 1, Mono.Ink); y += 14; }
+
+            var btn = new Rectangle(r.X + 40, r.Bottom - 42, r.Width - 80, 26);
+            Mono.Button(_sb, _prim, btn, hover: hov);
+            _font.DrawCentered(_sb, $"CHOOSE  ({i + 1})", btn.Center.X, btn.Y + 9, 1, Mono.ButtonInk(hov));
+        }
+        _font.DrawCentered(_sb, "CLICK A CARD OR PRESS 1 / 2 / 3", ScreenW / 2, ScreenH - 44, 1, Mono.Dim);
+    }
+
+    /// <summary>Break a sentence into at most <paramref name="maxLines"/> lines of at most
+    /// <paramref name="max"/> characters (the card has a fixed budget; the rest is dropped).</summary>
+    private static List<string> WrapWords(string text, int max, int maxLines)
+    {
+        var lines = new List<string>();
+        var cur = "";
+        foreach (var w in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (cur.Length > 0 && cur.Length + 1 + w.Length > max)
+            {
+                lines.Add(cur); cur = w;
+                if (lines.Count == maxLines) return lines;
+            }
+            else cur = cur.Length == 0 ? w : cur + " " + w;
+        }
+        if (cur.Length > 0) lines.Add(cur);
+        return lines;
+    }
+
+    /// <summary>Returns true while the opening choice owns the screen.</summary>
+    private bool UpdateClassPicker()
+    {
+        if (!_pickClass) return false;
+        int picked = -1;
+        if (Pressed(Keys.D1)) picked = 0;
+        if (Pressed(Keys.D2)) picked = 1;
+        if (Pressed(Keys.D3)) picked = 2;
+        if (LeftClicked())
+        {
+            var m = new Point(_mouse.X, _mouse.Y);
+            for (int i = 0; i < PickIds.Length; i++)
+                if (PickCardRect(i).Contains(m)) picked = i;
+        }
+        if (picked >= 0 && picked < PickIds.Length)
+        {
+            // Rebuild the campaign around the chosen leader — nothing has happened yet, so a
+            // clean NewGame is exactly right (ClassId is init-only on the unit).
+            _campaign = Campaign.NewGame(PickIds[picked]);
+            _pickClass = false;
+            _sfx.Play("levelup", 0.7f, jitter: false);
         }
         return true;
     }

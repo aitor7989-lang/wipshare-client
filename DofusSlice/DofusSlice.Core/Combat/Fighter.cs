@@ -144,6 +144,11 @@ public sealed class Fighter
     public bool IsOnCooldown(SpellDef spell, int round) =>
         _readyOnRound.TryGetValue(spell.Id, out int ready) && round < ready;
 
+    /// <summary>Rounds until this spell is castable again (0 = ready). The HUD needs the number,
+    /// not just the boolean, or a greyed-out well tells the player nothing about when to try again.</summary>
+    public int TurnsUntilReady(SpellDef spell, int round) =>
+        _readyOnRound.TryGetValue(spell.Id, out int ready) ? Math.Max(0, ready - round) : 0;
+
     public int CastsUsed(SpellDef spell) =>
         _castsThisTurn.TryGetValue(spell.Id, out int n) ? n : 0;
 

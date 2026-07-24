@@ -143,6 +143,18 @@ public partial class SliceGame
         _font.Draw(_sb, $"{elem.ToString().ToUpperInvariant()} POWER {TitheContent.DamageStatFor(s, elem)}"
             + $"   ·   INITIATIVE {s.Initiative}", L, w.Y + 458, 1, Mono.Dim);
 
+        // What the numbers actually DO. The sheet listed six characteristics and explained none of
+        // them, so there was no way to tell which one was your damage — or that Wisdom and Agility
+        // do anything at all. The hovered row explains itself; otherwise name your damage stat.
+        string lesson = StatRows.FirstOrDefault(r => CharRowRect(Array.IndexOf(StatRows, r)).Contains(mp)) is
+            { key: { } hk } ? StatLesson(hk, elem)
+            : $"YOUR DAMAGE COMES FROM {DamageStatName(elem)} — HOVER A ROW TO SEE WHAT IT DOES";
+        _font.Draw(_sb, Trunc(lesson, 54), L, w.Y + 494, 1, Mono.Faint);
+
+        // The class passive is a real combat rule and the word never appeared anywhere in the game.
+        if (TitheContent.ClassPassive(a.ClassId) is { Length: > 0 } passive)
+            _font.Draw(_sb, Trunc(passive.ToUpperInvariant(), 54), L, w.Y + 508, 1, Mono.Dim);
+
         int set = TitheContent.SetPiecesEquipped(a, TitheContent.GraveyardSet);
         int bone = TitheContent.SetPiecesEquipped(a, TitheContent.CryptSet);
         _font.Draw(_sb, $"ADVENTURER SET: {set}/7" + (bone > 0 ? $"   ·   BONEWROUGHT: {bone}/5" : " PIECES"),
@@ -185,6 +197,36 @@ public partial class SliceGame
 
     private static Rectangle CharPlusRect(int i) => new(CharWin.X + 28 + (CharWin.Width - 56) - 24,
         CharWin.Y + 240 + i * 30 + 3, 22, 20);
+
+    /// <summary>The clickable/hoverable row for characteristic <paramref name="i"/>.</summary>
+    private static Rectangle CharRowRect(int i) =>
+        new(CharWin.X + 28, CharWin.Y + 240 + i * 30, CharWin.Width - 56 - 32, 26);
+
+    /// <summary>The stat that scales damage for an element — named, so the sheet can say it.</summary>
+    private static string DamageStatName(DofusSlice.Core.Combat.Element e) => e switch
+    {
+        DofusSlice.Core.Combat.Element.Fire => "INTELLIGENCE",
+        DofusSlice.Core.Combat.Element.Water => "CHANCE",
+        DofusSlice.Core.Combat.Element.Air => "AGILITY",
+        _ => "STRENGTH",
+    };
+
+    /// <summary>What one point of a characteristic actually buys, in the player's terms.</summary>
+    private static string StatLesson(string key, DofusSlice.Core.Combat.Element elem) => key switch
+    {
+        "vit" => "VITALITY: +1 MAX HP PER POINT. NEVER COSTS MORE THAN 1.",
+        "wis" => "WISDOM: MORE XP, AND DODGES AP/MP THEFT. COSTS ONE EXTRA.",
+        "agi" => elem == DofusSlice.Core.Combat.Element.Air
+            ? "AGILITY: YOUR AIR DAMAGE — AND THE MP IT COSTS FOES TO LEAVE YOU."
+            : "AGILITY: AIR DAMAGE, AND THE MP IT COSTS FOES TO LEAVE YOUR MELEE.",
+        "str" => elem == DofusSlice.Core.Combat.Element.Earth
+            ? "STRENGTH: YOUR EARTH DAMAGE." : "STRENGTH: SCALES EARTH DAMAGE.",
+        "int" => elem == DofusSlice.Core.Combat.Element.Fire
+            ? "INTELLIGENCE: YOUR FIRE DAMAGE — AND HOW HARD YOU HEAL."
+            : "INTELLIGENCE: SCALES FIRE DAMAGE AND HEALING.",
+        _ => elem == DofusSlice.Core.Combat.Element.Water
+            ? "CHANCE: YOUR WATER DAMAGE." : "CHANCE: SCALES WATER DAMAGE.",
+    };
 
     private void ClickCharacterWindow(Point m)
     {
@@ -475,11 +517,19 @@ public partial class SliceGame
     /// a window swallowed this frame's input (the scene below should ignore it).</summary>
     private bool UpdateLeaderPanels()
     {
-        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = _spellOpen = false; _openNpc = -1; return true; }
-        if (Pressed(Keys.I) || Pressed(Keys.E)) { _invOpen = !_invOpen; _charOpen = _spellOpen = false; _openNpc = -1; return true; }
-        if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = false; _openNpc = -1; return true; }
-        if (!_charOpen && !_invOpen && !_spellOpen) return false;
-        if (Pressed(Keys.Escape)) { _charOpen = _invOpen = _spellOpen = false; return true; }
+        if (Pressed(Keys.H)) { _helpOpen = !_helpOpen; _charOpen = _invOpen = _spellOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.C)) { _charOpen = !_charOpen; _invOpen = _spellOpen = _helpOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.I) || Pressed(Keys.E)) { _invOpen = !_invOpen; _charOpen = _spellOpen = _helpOpen = false; _openNpc = -1; return true; }
+        if (Pressed(Keys.S)) { _spellOpen = !_spellOpen; _charOpen = _invOpen = _helpOpen = false; _openNpc = -1; return true; }
+        if (!_charOpen && !_invOpen && !_spellOpen && !_helpOpen) return false;
+        if (Pressed(Keys.Escape)) { _charOpen = _invOpen = _spellOpen = _helpOpen = false; return true; }
+        if (_helpOpen)
+        {
+            // The card is read-only: any click on its X (or H/Esc) dismisses it.
+            if (LeftClicked() && PanelCloseRect(new Rectangle(ScreenW / 2 - 320, 120, 640, 400))
+                .Contains(new Point(_mouse.X, _mouse.Y))) _helpOpen = false;
+            return true;
+        }
         if (_invOpen) { UpdateInventoryDrag(); return true; }   // the bag speaks press/drag/release
         if (LeftClicked())
         {
@@ -575,6 +625,44 @@ public partial class SliceGame
         }
         if (cur.Length > 0) lines.Add(cur);
         return lines;
+    }
+
+    // ----- H: the help card. There was no tutorial, no title screen and no key list anywhere
+    // outside a single in-fight line, so every control in the game was folklore.
+
+    private bool _helpOpen;
+
+    private static readonly (string keys, string what)[] HelpRows =
+    {
+        ("C", "characteristics — spend banked points (cost rises as you focus one stat)"),
+        ("S", "spells — rank up with spell points"),
+        ("I / E", "inventory — drag gear onto the doll, eat bread, learn essences"),
+        ("1-6", "cast a spell on your turn (speed keys 1/2/3 while WATCHING)"),
+        ("CLICK", "move to a lit cell, or aim the armed spell at a target"),
+        ("ESC", "cancel the armed spell, or close a window"),
+        ("SPACE", "end your turn — or start the fight during placement"),
+        ("M", "mute; F9 the HUD editor; F10 the UI demo"),
+    };
+
+    private void DrawHelpCard()
+    {
+        var w = new Rectangle(ScreenW / 2 - 320, 120, 640, 400);
+        Mono.Frame(_sb, _prim, w, emphasis: true, fillAlpha: 0.985f);
+        PanelTitle(w, "HOW TO PLAY");
+        _font.Draw(_sb, "YOU PILOT THE LEADER BY HAND. COMPANIONS FIGHT THEMSELVES.",
+            w.X + 28, w.Y + 44, 1, Mono.Dim);
+        _font.Draw(_sb, "THE BELL RUNS THE WHOLE DIVE — IT NEVER PAUSES FOR A FIGHT.",
+            w.X + 28, w.Y + 60, 1, Mono.Dim);
+        int y = w.Y + 92;
+        foreach (var (keys, what) in HelpRows)
+        {
+            _font.Draw(_sb, keys, w.X + 28, y, 1, Mono.Ink);
+            _font.Draw(_sb, Trunc(what.ToUpperInvariant(), 78), w.X + 120, y, 1, Mono.Dim);
+            y += 20;
+        }
+        _font.Draw(_sb, "AP PAYS FOR SPELLS. MP PAYS FOR STEPS. LEAVING AN ENEMY'S", w.X + 28, y + 12, 1, Mono.Faint);
+        _font.Draw(_sb, "MELEE COSTS EXTRA MP — THEIR AGILITY AGAINST YOURS.", w.X + 28, y + 26, 1, Mono.Faint);
+        _font.DrawCentered(_sb, "(H OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
     }
 
     /// <summary>Returns true while the opening choice owns the screen.</summary>

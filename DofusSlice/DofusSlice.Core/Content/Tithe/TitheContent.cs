@@ -91,6 +91,18 @@ public static class TitheContent
         JsonSerializer.Deserialize<SetDto[]>(TitheTables.SetsJson, J)!.ToDictionary(s => s.Id);
 
     public static IEnumerable<string> ClassIds => Classes.Keys;
+
+    /// <summary>The class passive stated as the rule it actually is. These change damage at
+    /// resolve time (see CombatEngine.PassivePercent/PassiveFlat) but the word "passive" appeared
+    /// nowhere in the UI, so the Cannon's "spend cheap first" incentive was invisible.</summary>
+    public static string ClassPassive(string classId) =>
+        (Classes.TryGetValue(classId, out var c) ? c.Passive : null) switch
+        {
+            "rage_below" => "Rage Below: +30% damage while at or under half HP.",
+            "long_shot" => "Long Shot: +4 damage when your target is 6 or more cells away.",
+            "overchannel" => "Overchannel: every AP left unspent adds 2 damage — cast cheap first.",
+            _ => "",
+        };
     public static string Blurb(string classId) => Classes.TryGetValue(classId, out var c) ? c.Blurb ?? "" : "";
     public static AiPolicy ClassPolicyOf(string classId) => ParsePolicy(Classes[classId].Policy);
 

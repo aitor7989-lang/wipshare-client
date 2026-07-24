@@ -1207,7 +1207,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             }
             else
             {
-                // Clicking a cell the spell can't reach cancels the aim, exactly like Escape (owner UX).
+                // Clicking a cell the spell can't reach cancels the aim, exactly like Escape (owner
+                // UX) — but SAY WHY. The engine computes a precise reason and we used to bin it.
+                _engine.CanCast(me, spell, _hover, out string why);
+                if (!string.IsNullOrEmpty(why)) _log.Add($"{spell.Name}: {why}.");
                 _selectedSpell = -1;
                 _sfx.Play("click", 0.4f);
             }
@@ -1220,9 +1223,21 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void ToggleAvatarSpell(int index)
     {
-        var spells = _engine.Current.Spells;
+        var me = _engine.Current;
+        var spells = me.Spells;
         if (index >= spells.Count) return;
-        _selectedSpell = _selectedSpell == index ? -1 : index;
+        if (_selectedSpell == index) { _selectedSpell = -1; _sfx.Play("click", 0.4f); return; }
+
+        // Refuse to ARM a spell that cannot be cast at all this turn, and say why. Arming it used
+        // to paint its full reach (SpellReachCells ignores cooldown by design) and then refuse
+        // every cell — the board lying to you about the most common refusal in the game.
+        var spell = spells[index];
+        int cd = me.TurnsUntilReady(spell, _engine.Round);
+        if (cd > 0) { _log.Add($"{spell.Name} is on cooldown — {cd} more turn{(cd > 1 ? "s" : "")}."); _sfx.Play("click", 0.25f); return; }
+        if (!me.HasCastsLeft(spell)) { _log.Add($"{spell.Name} is spent for this turn."); _sfx.Play("click", 0.25f); return; }
+        if (spell.ApCost > me.CurrentAp) { _log.Add($"not enough AP for {spell.Name} ({spell.ApCost} needed, {me.CurrentAp} left)."); _sfx.Play("click", 0.25f); return; }
+
+        _selectedSpell = index;
         _sfx.Play("click", 0.4f);
     }
 
@@ -1321,6 +1336,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
+        if (_helpOpen) DrawHelpCard();
         _sb.End();
     }
 
@@ -1634,7 +1650,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         }
         else
         {
-            _font.Draw(_sb, "CLICK A RED CELL TO POSITION YOUR IOP", 16, 40, 1, Palette.TextDim);
+            // Name what is actually on screen: under the 1-bit skin your ground is drawn in INK
+            // (white) and the enemy's in the danger red — the old "RED/BLUE" wording named neither.
+            _font.Draw(_sb, Mono.On ? "CLICK A GLOWING CELL TO POSITION YOUR HERO"
+                                    : "CLICK A RED CELL TO POSITION YOUR HERO", 16, 40, 1, Palette.TextDim);
             _font.Draw(_sb, "THEN PRESS FIGHT (OR SPACE) TO BEGIN", 16, 54, 1, Palette.TextDim);
         }
         DrawTurnTimeline(); // preview the fighters you'll face
@@ -2466,7 +2485,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             {
                 var spell = spells[i];
                 if (hov) { tip = spell; tipX = slotR.X; }
-                bool canPay = !piloting || spell.ApCost <= cur.CurrentAp;
+                int cdLeft = piloting ? cur.TurnsUntilReady(spell, _engine.Round) : 0;
+                bool capped = piloting && !cur.HasCastsLeft(spell);
+                bool canPay = !piloting || (spell.ApCost <= cur.CurrentAp && cdLeft == 0 && !capped);
                 // The pack's spell glyph fills the well IN ITS ELEMENT'S COLOR; the AP price
                 // sits outlined in the corner. No glyph baked -> the old letter.
                 if (DrawSpellIcon(spell, slotR, canPay ? SpellInk(spell) : Mono.Faint))
@@ -2480,6 +2501,19 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                     _font.DrawCentered(_sb, spell.Name[..1].ToUpperInvariant(), slotR.Center.X, slotR.Y + 9, 2, col);
                     _font.DrawCentered(_sb, $"{spell.ApCost}", slotR.Center.X, slotR.Bottom - 13, 1,
                         canPay ? Ew.InkSoft : Mono.On ? Mono.Danger : Ew.Danger);
+                }
+                // WHY it is unusable, not just that it is: a cooldown shows the turns left over a
+                // dimmed well; a spent per-turn cast cap shows a bar across it.
+                if (cdLeft > 0)
+                {
+                    _prim.FillRect(_sb, slotR, new Color(0, 0, 0, 150));
+                    OutlinedCentered($"{cdLeft}", slotR.Center.X, slotR.Center.Y - 6, 3, Mono.Danger);
+                }
+                else if (capped)
+                {
+                    _prim.FillRect(_sb, slotR, new Color(0, 0, 0, 120));
+                    _prim.FillRect(_sb, new Rectangle(slotR.X + 4, slotR.Center.Y - 1, slotR.Width - 8, 2),
+                        Mono.Danger);
                 }
             }
             else if (i == 6 && _campaign?.Draughts > 0)
@@ -2918,6 +2952,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         _sb.Begin(samplerState: SamplerState.PointClamp);
         UiTitle("THE CITY", 16, 12, Palette.Text);
+        // Your purse, where you SHOP. It only ever lived inside the inventory window, so every
+        // service you couldn't afford read as a greyed button with no stated reason.
+        _font.Draw(_sb, $"{_campaign.Stones} ESSENCE STONES", 16, 30, 2,
+            _campaign.Stones > 0 ? Mono.Ink : Mono.Danger);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
             _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 44, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignBand();
@@ -2925,6 +2963,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
+        if (_helpOpen) DrawHelpCard();
         if (_campaign.Over) DrawGameOver();
         if (_pickClass) DrawClassPicker();   // over everything: nothing else matters until you choose
         _sb.End();
@@ -3048,6 +3087,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_charOpen) DrawCharacterWindow();
         if (_invOpen) DrawInventoryWindow();
         if (_spellOpen) DrawSpellPanel();
+        if (_helpOpen) DrawHelpCard();
         _sb.End();
     }
 

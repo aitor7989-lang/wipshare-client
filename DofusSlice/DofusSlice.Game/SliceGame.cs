@@ -1035,6 +1035,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _engine.TryCast(hero, spell, _hover);
                 if (!_engine.CanCast(hero, spell, _hover, out _)) _selectedSpell = -1;
             }
+            else _selectedSpell = -1;   // clicked out of range → cancel the aim (like Escape)
         }
         else if (_moveRange.ContainsKey(_hover))
         {
@@ -1100,13 +1101,17 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_selectedSpell >= 0 && _selectedSpell < spells.Count)
         {
             var spell = spells[_selectedSpell];
-            if (_engine.CanCast(me, spell, _hover, out string? why))
+            if (_engine.CanCast(me, spell, _hover, out _))
             {
                 _engine.TryCast(me, spell, _hover);
                 if (!_engine.CanCast(me, spell, _hover, out _)) _selectedSpell = -1;
             }
-            else if (why != null)
-                _log.Add($"  can't cast {spell.Name.ToLowerInvariant()}: {why.ToLowerInvariant()}");
+            else
+            {
+                // Clicking a cell the spell can't reach cancels the aim, exactly like Escape (owner UX).
+                _selectedSpell = -1;
+                _sfx.Play("click", 0.4f);
+            }
         }
         else if (_moveRange.ContainsKey(_hover))
         {
@@ -2230,7 +2235,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _ew.Panel(_sb, new Rectangle(-6, HudTop + 2, ScreenW + 12, ScreenH - HudTop + 16));
 
         var cur = _engine.Current;
-        float hpFrac = cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(cur.Hp, 0, cur.MaxHp) / cur.MaxHp;
+        // Replay HP (drains as the blow lands), not the engine's already-final value.
+        float shownHp = _anim.DisplayHp(cur);
+        float hpFrac = cur.MaxHp <= 0 ? 0f : (float)Math.Clamp(shownHp, 0, cur.MaxHp) / cur.MaxHp;
         bool piloting = _tithe && AvatarTurn && !_autoTurn;
         var kmp = new Point(_mouse.X, _mouse.Y);
 
@@ -2255,7 +2262,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             _ew.Badge(_sb, EwChrome.Gem.Star, apC, 40, Ew.Ap, Ew.ApDeep);
         if (!DrawUiSprite("onebit_shield", mpC, 38, Mono.Mp))
             _ew.Badge(_sb, EwChrome.Gem.Diamond, mpC, 40, Ew.Mp, Ew.MpDeep);
-        OutlinedCentered(cur.Hp.ToString(), (int)heartC.X, (int)heartC.Y - 8, 2,
+        OutlinedCentered(((int)MathF.Round(shownHp)).ToString(), (int)heartC.X, (int)heartC.Y - 8, 2,
             hpFrac > 0.25f ? Mono.Ink : Mono.Danger);
         OutlinedCentered(cur.CurrentAp.ToString(), (int)apC.X, (int)apC.Y - 6, 2, Mono.Ink);
         OutlinedCentered(cur.CurrentMp.ToString(), (int)mpC.X, (int)mpC.Y - 6, 2, Mono.Ink);
@@ -2313,11 +2320,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _font.Draw(_sb, "TEAM", 1080, ty, 1, Ew.InkSoft); ty += 14;
         foreach (var f in _engine.Fighters.Where(x => x.Team == Team.Player && !x.IsSummon))
         {
-            float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, f.Hp) / f.MaxHp, 0f, 1f);
+            int shown = (int)MathF.Round(_anim.DisplayHp(f));   // replay HP, drains with the blow
+            float frac = Math.Clamp(f.MaxHp <= 0 ? 0 : (float)Math.Max(0, shown) / f.MaxHp, 0f, 1f);
             _font.Draw(_sb, Trunc(f.Name.ToUpperInvariant(), 13), 1080, ty, 1, f.IsAlive ? Ew.Ink : Ew.InkMuted);
             var tb = new Rectangle(1080, ty + 11, 120, 6);
             Mono.Bar(_sb, _prim, tb, f.IsAlive ? frac : 0f, Mono.Hp); // HP bars are RED, the law
-            _font.Draw(_sb, f.IsAlive ? $"{f.Hp}/{f.MaxHp}" : "DOWN", 1206, ty + 7, 1,
+            _font.Draw(_sb, f.IsAlive ? $"{shown}/{f.MaxHp}" : "DOWN", 1206, ty + 7, 1,
                 f.IsAlive ? Ew.InkSoft : Ew.Danger);
             ty += 26;
         }

@@ -21,6 +21,10 @@ public sealed class BattleAnimator
     private readonly List<Overlay> _overlays = new();
     private readonly List<Corpse> _corpses = new();
     private readonly Dictionary<string, float> _displayHp = new();
+    // The REPLAY health: the bar eases toward this, and it only moves when a blow's HitAnim
+    // actually lands (NudgeDisplayHp) — never toward the engine's already-final HP. So a ranged
+    // hit drains the bar when the shot arrives, not the instant the engine resolved it.
+    private readonly Dictionary<string, float> _hpTarget = new();
     private readonly Dictionary<string, Vector2> _displayPos = new();
     private readonly List<(CellCoord cell, Color color)> _telegraphCells = new();
     private readonly HashSet<string> _pendingDeaths = new();
@@ -58,6 +62,7 @@ public sealed class BattleAnimator
         _overlays.Clear();
         _corpses.Clear();
         _displayHp.Clear();
+        _hpTarget.Clear();
         _flash.Clear();
         _poses.Clear();
         _facing.Clear();
@@ -69,6 +74,7 @@ public sealed class BattleAnimator
         foreach (var f in fighters)
         {
             _displayHp[f.Id] = f.Hp;
+            _hpTarget[f.Id] = f.Hp;
             _displayPos[f.Id] = _proj.CellCenter(f.Pos);
         }
     }
@@ -120,6 +126,7 @@ public sealed class BattleAnimator
                 break;
             case FighterSummoned s:
                 _displayHp[s.Fighter.Id] = s.Fighter.Hp;   // seed the newcomer so its HP bar shows
+                _hpTarget[s.Fighter.Id] = s.Fighter.Hp;
                 _displayPos[s.Fighter.Id] = _proj.CellCenter(s.Fighter.Pos);
                 _facing[s.Fighter.Id] = Facing4.Se;
                 _overlays.Add(new ImpactFlash(_proj.CellCenter(s.Fighter.Pos) + new Vector2(0, -16),
@@ -171,11 +178,14 @@ public sealed class BattleAnimator
         foreach (var id in _flash.Keys.ToList())
             _flash[id] = Math.Max(0f, _flash[id] - dt);
 
-        // Ease each displayed HP toward the true value so bars drain smoothly.
+        // Ease each displayed HP toward its REPLAY target (set only when a blow lands), not toward
+        // the engine's already-final HP — so a bar never drops before the hit is seen.
         foreach (var f in fighters)
         {
-            float cur = _displayHp.TryGetValue(f.Id, out var v) ? v : f.Hp;
-            _displayHp[f.Id] = cur + (f.Hp - cur) * Math.Min(1f, dt * 9f);
+            float target = Math.Clamp(_hpTarget.TryGetValue(f.Id, out var tv) ? tv : f.Hp, 0f, f.MaxHp);
+            _hpTarget[f.Id] = target;
+            float cur = _displayHp.TryGetValue(f.Id, out var v) ? v : target;
+            _displayHp[f.Id] = cur + (target - cur) * Math.Min(1f, dt * 12f);
         }
 
         UpdatePoses(dt, fighters);
@@ -250,6 +260,11 @@ public sealed class BattleAnimator
 
     internal void AddOverlay(Overlay o) => _overlays.Add(o);
     internal void SetFlash(string id, float seconds) => _flash[id] = seconds;
+
+    /// <summary>Move a fighter's REPLAY health when its blow lands (+amount = damage, -amount =
+    /// heal). The bar eases to this, so it drains with the visible hit, not the engine's resolve.</summary>
+    internal void NudgeDisplayHp(string id, int amount)
+        => _hpTarget[id] = (_hpTarget.TryGetValue(id, out var t) ? t : 0f) - amount;
 
     private float _pendingShake;
     internal void RequestShake(float amp) => _pendingShake = Math.Max(_pendingShake, amp);
@@ -483,6 +498,7 @@ internal sealed class HitAnim : IAnim
         {
             _spawned = true;
             _a.SetFlash(_id, 0.3f);
+            _a.NudgeDisplayHp(_id, _amount);   // the bar drains NOW, as the blow lands — not before
             if (_amount > 0)
             {
                 _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));

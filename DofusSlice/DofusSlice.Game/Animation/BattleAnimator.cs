@@ -62,6 +62,8 @@ public sealed class BattleAnimator
         _poses.Clear();
         _facing.Clear();
         _pendingShake = 0f;
+        _freeze = 0f;
+        _lastCasterId = "";
         _displayPos.Clear();
         _pendingDeaths.Clear();
         foreach (var f in fighters)
@@ -90,6 +92,7 @@ public sealed class BattleAnimator
                 Sfx?.Invoke("zip", 0.7f);
                 break;
             case SpellCast c:
+                _lastCasterId = c.Caster.Id;   // so the struck fighter recoils away from this blow
                 _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target, 0.85f));
                 if (c.Spell.ApCost > 0)   // the cast's price floats over the caster (UX pass)
                     _queue.Enqueue(new CostFloat(this, c.Caster.Id, $"-{c.Spell.ApCost} AP",
@@ -100,7 +103,8 @@ public sealed class BattleAnimator
                 _queue.Enqueue(new ProjectileAnim(this, c.Caster.Id, c.Target, SpellColor(c.Spell)));
                 break;
             case DamageDealt d:
-                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical, d.Element));
+                _queue.Enqueue(new HitAnim(d.Target.Id, _proj.CellCenter(d.At), d.Amount, this, d.Critical, d.Element,
+                    RecoilDir(_proj.CellCenter(d.At))));
                 break;
             case HealApplied h:
                 _queue.Enqueue(new HitAnim(h.Target.Id, _proj.CellCenter(h.At), -h.Amount, this));
@@ -135,6 +139,7 @@ public sealed class BattleAnimator
 
     public void Update(float dt, IReadOnlyList<Fighter> fighters)
     {
+        if (_freeze > 0f) { _freeze -= dt; return; }   // hit-stop: hold the impact frame
         _telegraphCells.Clear();
         if (_queue.Count > 0)
         {
@@ -250,6 +255,26 @@ public sealed class BattleAnimator
     internal void RequestShake(float amp) => _pendingShake = Math.Max(_pendingShake, amp);
     /// <summary>Returns and clears the shake requested since the last call (synced to hits).</summary>
     public float ConsumeShake() { var s = _pendingShake; _pendingShake = 0f; return s; }
+
+    // Hit-stop: a blow lands, and for a few frames the whole replay HOLDS on the impact — the
+    // single missing juice primitive (map). Requested at the strike/kill beat; Update returns
+    // early while it burns, freezing the queue, overlays, flash and poses on that frame. Runs on
+    // the speed-scaled clock, so 2x/4x fast-forward shrinks it like every other beat.
+    private float _freeze;
+    internal void RequestFreeze(float seconds) => _freeze = Math.Max(_freeze, seconds);
+
+    // The blow's origin, remembered from the last cast, so the struck fighter recoils AWAY from
+    // it (hazards/reflects with no known source flinch straight up instead).
+    private string _lastCasterId = "";
+    private Vector2 RecoilDir(Vector2 victimAt)
+    {
+        if (_displayPos.TryGetValue(_lastCasterId, out var src) && src != victimAt)
+        {
+            var d = victimAt - src;
+            if (d != Vector2.Zero) { d.Normalize(); return d; }
+        }
+        return new Vector2(0f, -1f);
+    }
 
     private Vector2[] ToPoints(IReadOnlyList<CellCoord> path)
     {
@@ -433,19 +458,21 @@ internal sealed class CastAnim : IAnim
 internal sealed class HitAnim : IAnim
 {
     private const float Dur = 0.3f;
+    private const float RecoilDur = 0.16f;
     private readonly string _id;
     private readonly Vector2 _at;
     private readonly int _amount;
     private readonly BattleAnimator _a;
     private readonly bool _crit;
     private readonly Element _element;
+    private readonly Vector2 _recoil;
     private float _t;
     private bool _spawned;
 
     public HitAnim(string id, Vector2 at, int amount, BattleAnimator a, bool crit = false,
-        Element element = Element.Neutral)
+        Element element = Element.Neutral, Vector2 recoilDir = default)
     {
-        _id = id; _at = at; _amount = amount; _a = a; _crit = crit; _element = element;
+        _id = id; _at = at; _amount = amount; _a = a; _crit = crit; _element = element; _recoil = recoilDir;
     }
 
     public bool Done => _t >= Dur;
@@ -456,7 +483,11 @@ internal sealed class HitAnim : IAnim
         {
             _spawned = true;
             _a.SetFlash(_id, 0.3f);
-            if (_amount > 0) _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));
+            if (_amount > 0)
+            {
+                _a.RequestShake(Math.Min(12f, 3f + _amount * 0.12f) * (_crit ? 1.5f : 1f));
+                _a.RequestFreeze(_crit ? 0.09f : 0.05f);   // the blow lands with weight
+            }
             bool heal = _amount < 0;
             _a.Sfx?.Invoke(heal ? "heal" : _crit ? "crit" : "hit_" + _element.ToString().ToLowerInvariant(),
                 heal ? 0.7f : 0.85f);
@@ -475,7 +506,18 @@ internal sealed class HitAnim : IAnim
         _t += dt;
     }
 
-    public bool TryCenter(string id, out Vector2 center) { center = default; return false; }
+    // The struck fighter jerks away from the blow, then settles — a per-hit flinch the global
+    // camera shake can't give. Damage only (heals don't knock), and only for the first ~0.16s.
+    public bool TryCenter(string id, out Vector2 center)
+    {
+        if (id == _id && _amount > 0 && _t < RecoilDur)
+        {
+            float k = 1f - _t / RecoilDur;          // instant knock, quick settle
+            center = _at + _recoil * (5f * k * (_crit ? 1.5f : 1f));
+            return true;
+        }
+        center = default; return false;
+    }
 }
 
 /// <summary>Brief blink: impact flashes at both the departure and arrival cells.</summary>
@@ -575,6 +617,10 @@ internal sealed class DeathAnim : IAnim
         {
             _a.ReleaseDeath(_id);
             _a.SpawnCorpse(new Corpse(_at, _color, _sprite, _a.LastFacing(_id), _heightPx, _tint));
+            // A kill lands with weight: a beat of stillness + a camera thump scaled by how big the
+            // fallen was (map: deaths previously carried no shake and no camera emphasis at all).
+            _a.RequestShake(4f + _heightPx * 0.06f);
+            _a.RequestFreeze(0.11f);
             _a.Sfx?.Invoke("death", 0.8f);
         }
         _t += dt;

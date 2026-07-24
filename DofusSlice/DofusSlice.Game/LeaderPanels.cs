@@ -15,6 +15,50 @@ public partial class SliceGame
 {
     private bool _charOpen, _invOpen, _spellOpen;
     private bool _pickClass;            // the opening beat: choose who you are before the first dive
+    private int _crewSel;               // which crew member the sheet / bag is acting on (0 = the leader)
+
+    /// <summary>The unit the Leader's windows currently act on. Companions were unreachable —
+    /// you could never gear them or spend what they had banked, so they read as rented NPCs.</summary>
+    private CampaignUnit? Selected
+    {
+        get
+        {
+            var crew = _campaign.Crew;
+            if (crew.Count == 0) return null;
+            return crew[Math.Clamp(_crewSel, 0, crew.Count - 1)];
+        }
+    }
+
+    /// <summary>Tabs along the top of a Leader window, one per crew member.</summary>
+    private static Rectangle CrewTabRect(Rectangle w, int i) => new(w.X - 100, w.Y + 44 + i * 26, 92, 22);
+
+    private void DrawCrewTabs(Rectangle w)
+    {
+        var crew = _campaign.Crew;
+        if (crew.Count <= 1) return;
+        var mp = new Point(_mouse.X, _mouse.Y);
+        for (int i = 0; i < crew.Count; i++)
+        {
+            var r = CrewTabRect(w, i);
+            bool sel = i == Math.Clamp(_crewSel, 0, crew.Count - 1);
+            bool hov = r.Contains(mp);
+            Mono.Button(_sb, _prim, r, hover: hov && !sel, disabled: false);
+            if (sel) _prim.StrokeRect(_sb, r, 2, Mono.Ink);
+            _font.DrawCentered(_sb, Trunc(crew[i].Name.ToUpperInvariant(), 10), r.Center.X, r.Y + 8, 1,
+                sel ? Mono.Ink : Mono.ButtonInk(hov && !sel));
+        }
+        _font.Draw(_sb, "CREW", CrewTabRect(w, 0).X + 2, w.Y + 30, 1, Mono.Faint);
+    }
+
+    /// <summary>Returns true if a tab click was consumed.</summary>
+    private bool ClickCrewTabs(Rectangle w, Point m)
+    {
+        var crew = _campaign.Crew;
+        if (crew.Count <= 1) return false;
+        for (int i = 0; i < crew.Count; i++)
+            if (CrewTabRect(w, i).Contains(m)) { _crewSel = i; _sfx.Play("click"); return true; }
+        return false;
+    }
     private string? _panelMsg;          // one-line feedback ("ate bread", "essence learned")
     private float _panelMsgUntil;       // shown while _time is before this
 
@@ -76,12 +120,13 @@ public partial class SliceGame
 
     private void DrawCharacterWindow()
     {
-        var a = _campaign.Avatar;
+        var a = Selected;
         if (a == null) return;
         var w = CharWin;
         var mp = new Point(_mouse.X, _mouse.Y);
         Mono.Frame(_sb, _prim, w, emphasis: true, fillAlpha: 0.985f);
         PanelTitle(w, "CHARACTERISTICS");
+        DrawCrewTabs(w);
 
         int L = w.X + 28, W = w.Width - 56;
         var s = TitheContent.StatsOf(a);
@@ -92,7 +137,9 @@ public partial class SliceGame
         var sheet = _sprites.GetSheet(PixActor(a.ClassId).sprite, "idle", "se");
         if (sheet != null)
             SpriteDraw.Feet(_sb, sheet, new Vector2(port.Center.X, port.Bottom - 6), Mono.Ink, 64f, 0);
-        _font.Draw(_sb, $"{a.Name.ToUpperInvariant()} — LEADER", L + 86, w.Y + 50, 1, Mono.Ink);
+        _font.Draw(_sb, $"{a.Name.ToUpperInvariant()} — " + (a.IsAvatar ? "LEADER"
+            : a.Vetted ? a.Temperament.ToString().ToUpperInvariant() : "COMPANION"),
+            L + 86, w.Y + 50, 1, Mono.Ink);
         _font.Draw(_sb, $"{a.ClassId.ToUpperInvariant()}   LVL {a.Level}", L + 86, w.Y + 66, 2, Mono.Ink);
         int need = CampaignUnit.XpForNextLevel(a.Level);
         _font.Draw(_sb, $"{a.Xp} / {need} XP", L + 86, w.Y + 92, 1, Mono.Dim);
@@ -160,19 +207,6 @@ public partial class SliceGame
         _font.Draw(_sb, $"ADVENTURER SET: {set}/7" + (bone > 0 ? $"   ·   BONEWROUGHT: {bone}/5" : " PIECES"),
             L, w.Y + 476, 1, set + bone > 0 ? Mono.Ink : Mono.Faint);
 
-        var mercs = _campaign.Crew.Where(c => !c.IsAvatar).ToList();
-        if (mercs.Count > 0)
-        {
-            _font.Draw(_sb, "COMPANIONS  (they manage themselves)", L, w.Bottom - 92, 1, Mono.Faint);
-            for (int i = 0; i < mercs.Count && i < 2; i++)
-            {
-                var c = mercs[i];
-                _font.Draw(_sb, $"{c.Name.ToUpperInvariant()}  L{c.Level}  ·  {TitheContent.UnitMaxHp(c)} HP"
-                    + (c.Wounded ? "  ·  WOUNDED" : ""),
-                    L + 10, w.Bottom - 76 + i * 14, 1, c.Wounded ? Mono.Danger : Mono.Dim);
-            }
-        }
-
         _font.DrawCentered(_sb, "(C OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
         DrawPanelMsg(w);
     }
@@ -230,9 +264,10 @@ public partial class SliceGame
 
     private void ClickCharacterWindow(Point m)
     {
-        var a = _campaign.Avatar;
+        var a = Selected;
         if (a == null) return;
         if (PanelCloseRect(CharWin).Contains(m)) { _charOpen = false; _sfx.Play("click"); return; }
+        if (ClickCrewTabs(CharWin, m)) return;
         if (a.StatPoints > 0)
             for (int i = 0; i < StatRows.Length; i++)
                 if (CharPlusRect(i).Contains(m)) { if (a.SpendStat(StatRows[i].key)) _sfx.Play("click"); return; }
@@ -261,12 +296,13 @@ public partial class SliceGame
 
     private void DrawInventoryWindow()
     {
-        var a = _campaign.Avatar;
+        var a = Selected;
         if (a == null) return;
         var w = InvWin;
         var mp = new Point(_mouse.X, _mouse.Y);
         Mono.Frame(_sb, _prim, w, emphasis: true, fillAlpha: 0.985f);
         PanelTitle(w, "INVENTORY");
+        DrawCrewTabs(w);
 
         // The equipment doll — your character standing among their slots (demo geometry).
         var doll = DollRect;
@@ -450,7 +486,7 @@ public partial class SliceGame
     /// unequips). A release that never travelled is the old click, unchanged.</summary>
     private void UpdateInventoryDrag()
     {
-        var a = _campaign.Avatar;
+        var a = Selected;
         var m = new Point(_mouse.X, _mouse.Y);
         bool released = _mouse.LeftButton == ButtonState.Released && _prevMouse.LeftButton == ButtonState.Pressed;
 
@@ -490,9 +526,10 @@ public partial class SliceGame
 
     private void ClickInventoryWindow(Point m)
     {
-        var a = _campaign.Avatar;
+        var a = Selected;
         if (a == null) return;
         if (PanelCloseRect(InvWin).Contains(m)) { _invOpen = false; _sfx.Play("click"); return; }
+        if (ClickCrewTabs(InvWin, m)) return;
 
         var bySlot = a.Equipment.ToDictionary(TitheContent.ItemSlot, id => id);
         foreach (var d in DollSlots)

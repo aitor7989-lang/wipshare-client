@@ -78,6 +78,14 @@ public sealed class DiveSession
         Clock = TitheContent.Graveyard.ClockSeconds;
         Packs = TitheContent.Graveyard.Packs.Select(p => new PackState { Def = p }).ToList();
 
+        // Sweep any companion points the player chose not to spend by hand — agency first,
+        // safety net second, so an ignored companion still levels sensibly.
+        foreach (var u in campaign.Crew.Where(u => !u.IsAvatar))
+        {
+            if (u.StatPoints > 0) TitheContent.AutoSpendStats(u);
+            if (u.SpellPoints > 0) TitheContent.AutoSpendSpellPoints(u);
+        }
+
         // A survivor may be wandering the floor: cheap help, hidden knife.
         if (rng.Roll(1, 100) <= SurvivorChancePct)
         {
@@ -99,7 +107,7 @@ public sealed class DiveSession
         _campaign.Crew.Add(new CampaignUnit
         {
             Id = $"surv_{_campaign.Crew.Count}_{Survivor.ClassId}", ClassId = Survivor.ClassId,
-            Name = $"{Survivor.ClassId}-survivor", Level = Survivor.Level,
+            Name = Campaign.HireNameFor(_campaign.Crew.Count + _campaign.Dives + 7), Level = Survivor.Level,
             SpellPoints = Survivor.Level - 1, Temperament = Survivor.Temperament,
         });
         Survivor = null;
@@ -287,12 +295,11 @@ public sealed class DiveSession
             {
                 var cu = _campaign.Crew.FirstOrDefault(x => x.Id == u.Id);
                 if (cu == null) continue;
-                cu.GainXp(u.XpGained); // the AVATAR banks points for the player to spend...
-                if (!cu.IsAvatar)      // ...companions manage themselves, silently
-                {
-                    TitheContent.AutoSpendStats(cu);
-                    TitheContent.AutoSpendSpellPoints(cu);
-                }
+                // EVERYONE banks now. Companions used to auto-spend the instant they levelled,
+                // so a player could never spend for them even after the crew tabs made them
+                // reachable. Anything still unspent when the next dive starts is swept by the
+                // class template (see the constructor), so a companion is never left gimped.
+                cu.GainXp(u.XpGained);
                 if (u.Died)
                 {
                     // Downed MERCS die for good. A downed AVATAR is dragged out: wounded,

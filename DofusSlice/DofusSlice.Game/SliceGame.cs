@@ -462,7 +462,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 foreach (var cls in new[] { "bulwark", "archer", "cannon" })
                     a.Add(($"HIRE A {cls.ToUpperInvariant()}  (L{lvl}, {price} st)",
                            _campaign.Crew.Count < 3 && _campaign.Stones >= price,
-                           () => _campaign.Hire(cls, $"{cls}-merc", lvl)));
+                           () => _campaign.Hire(cls, Campaign.HireNameFor(_campaign.Crew.Count + _campaign.Dives),
+                                lvl, _diveRng.Roll(1, 100) <= 40 ? Temperament.Grasping : Temperament.Loyal)));
                 break;
         }
         return a;

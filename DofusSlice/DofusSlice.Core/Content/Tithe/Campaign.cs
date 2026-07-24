@@ -201,16 +201,28 @@ public sealed class Campaign
 
     public int HirePrice(int level) => TitheContent.Prices.HireBasePerLevel * level;
 
-    public bool Hire(string classId, string name, int level)
+    /// <summary>Names for hired company, so a companion is a PERSON and not "{class}-merc".
+    /// Drawn from the campaign's own RNG-free counter, so a run reads the same way twice.</summary>
+    private static readonly string[] HireNames =
+    {
+        "Corbin", "Mera", "Halgrim", "Silt", "Odile", "Brann", "Vess", "Tolm",
+        "Ysra", "Ganne", "Peregrin", "Ash", "Nettle", "Wren", "Quill", "Rooke",
+    };
+
+    public static string HireNameFor(int seatIndex) => HireNames[Math.Abs(seatIndex) % HireNames.Length];
+
+    public bool Hire(string classId, string name, int level, Temperament temperament = Temperament.None)
     {
         if (Crew.Count >= 3) return false;               // slice caps the party at three
         int price = HirePrice(level);
         if (Stones < price) return false;
         Stones -= price;
-        // A hire arrives with its level's banked spell points (auto-spent by its class template).
+        // A hire arrives with its level's banked points. Temperament is the system that gives a
+        // companion character — a Hiring Post hire never had one set, so only survivors could ever
+        // betray you and the Temple's "vet them" service had nothing to read.
         Crew.Add(new CampaignUnit
         { Id = $"merc_{Crew.Count}_{classId}", ClassId = classId, Name = name, Level = level,
-          SpellPoints = level - 1, StatPoints = (level - 1) * 5 });
+          SpellPoints = level - 1, StatPoints = (level - 1) * 5, Temperament = temperament });
         return true;
     }
 

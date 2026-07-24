@@ -64,7 +64,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private CellCoord _gateDeeper = CellCoord.Invalid, _gateBack = CellCoord.Invalid;
     private CellCoord _survivorCell = CellCoord.Invalid, _cryptCell = CellCoord.Invalid;
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
+    private bool _cryptRest;            // the breather between sealing doors — heal, spend, DESCEND on your word
     private int _cryptRoom;
+    private const double CryptRestHeal = 0.40;   // a rest mends ~40% of max HP; attrition still matters
+    private static readonly Rectangle CryptDescendBtn = new(ScreenW / 2 - 96, 470, 192, 40);
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
     private string _yardMsg = "";
     private float _yardMsgTimer;
@@ -431,7 +434,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             TitheContent.GenerateArena(seedBase + 1),
             TitheContent.GenerateArena(seedBase + 2),
         };
-        _cryptCleared = false; _cryptRun = false; _cryptRoom = 0;
+        _cryptCleared = false; _cryptRun = false; _cryptRest = false; _cryptRoom = 0;
         _yardMsg = "the yard goes deeper east — the gates glow"; _yardMsgTimer = 4f;
         _huntTimer = 0f; _jumpedFight = false;
         _lastDiveClock = float.MaxValue;
@@ -717,6 +720,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void UpdateCampaignCombat(float dt)
     {
+        // The crypt breather owns its own beat (heal + spend + descend on your word).
+        if (_cryptRest) { UpdateCryptRest(dt); return; }
+
         // While YOU are piloting, 1-6 belong to the spell bar — speed keys only rule AI turns.
         bool piloting = !_placing && AvatarTurn && !_autoTurn;
         if (!piloting)
@@ -734,12 +740,21 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var follow = _engine.Current.IsAlive ? _anim.CenterFor(_engine.Current) : _camera.Center;
         _camera.Update(dt, follow);
 
-        if (_placing) { UpdateTithePlacement(dt); return; }
+        if (_placing)
+        {
+            // Ready-phase prep: open the sheet and rank up before you commit to FIGHT. While a
+            // window is open the countdown is held (we return before the clock ticks below).
+            if (_tithe && UpdateLeaderPanels()) return;
+            UpdateTithePlacement(dt);
+            return;
+        }
 
         _dive?.Tick(dt); // the floor clock never pauses, even in a fight (Bible §3.1.3)
 
         if (_engine.Outcome != FightOutcome.Ongoing)
         {
+            // The loot window is a between-combats beat too: let C/S/I spend the levels you just won.
+            if (_tithe && _combatResolved && UpdateLeaderPanels()) return;
             if (!_combatResolved && !_anim.IsBusy)
             {
                 var preLevels = _campaign.Crew.ToDictionary(u => u.Id, u => u.Level);
@@ -793,7 +808,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _cryptCleared = true; _cryptRun = false; // the altar tears the crew out of the Crypt
                 _scene = Scene.Graveyard; SetupView(_graveMap);
             }
-            else { _cryptRoom++; BeginCryptRoom(); }     // the next sealing door grinds open
+            else { _cryptRoom++; EnterCryptRest(); }      // catch your breath before the next sealing door
             return;
         }
 
@@ -809,6 +824,33 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         _cryptRun = false;                               // a yard pack cleared
         _scene = Scene.Graveyard; SetupView(_graveMap);
+    }
+
+    /// <summary>The breather between sealing doors: the crew catches its breath (a partial mend),
+    /// the bell is held, and YOU spend banked points and DESCEND on your own word — no more
+    /// combat-after-combat with no room to level up (playtest ask).</summary>
+    private void EnterCryptRest()
+    {
+        _cryptRest = true;
+        _combatResolved = false;      // the loot window is done; the rest screen owns the beat now
+        _celebrate = null; _celebrating = false;
+        _selectedSpell = -1; _selCrew = null;
+        _charOpen = _invOpen = _spellOpen = false;
+        int mended = _campaign.RestCrewPartial(CryptRestHeal);
+        _log.Add(mended > 0 ? $"the crew catches its breath (+{mended} HP restored)"
+                            : "the crew catches its breath");
+        _sfx.Play("heal", 0.7f, jitter: false);
+    }
+
+    /// <summary>Rest input: open the sheet (C/S/I) and spend, then descend when ready. The bell
+    /// stays silent here — this is sanctioned prep time, not a stolen moment mid-fight.</summary>
+    private void UpdateCryptRest(float dt)
+    {
+        _anim.Update(dt, _engine.Fighters);   // let the last blow's flourish finish under the screen
+        if (UpdateLeaderPanels()) return;     // C = characteristics, S = spells, I = the bag
+        bool descend = Pressed(Keys.Space) || Pressed(Keys.Enter)
+            || (LeftClicked() && CryptDescendBtn.Contains(new Point(_mouse.X, _mouse.Y)));
+        if (descend) { _cryptRest = false; _sfx.Play("click"); BeginCryptRoom(); }
     }
 
     // ----- Update -------------------------------------------------------------------
@@ -1204,7 +1246,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         // HUD pass — screen space, unaffected by the camera.
         _sb.Begin(samplerState: SamplerState.PointClamp);
-        if (_placing)
+        if (_cryptRest)
+        {
+            DrawCryptRest();
+        }
+        else if (_placing)
         {
             DrawPlacementHud();
         }
@@ -1214,6 +1260,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             // Non-loop: hold the end screen until the final death/hit animation has played out.
             if (!_loop && _engine.Outcome != FightOutcome.Ongoing && !_anim.IsBusy) DrawEndOverlay();
         }
+        // The Leader's windows ride ABOVE the board so you can rank up during placement/rest.
+        if (_charOpen) DrawCharacterWindow();
+        if (_invOpen) DrawInventoryWindow();
+        if (_spellOpen) DrawSpellPanel();
         _sb.End();
     }
 
@@ -1518,7 +1568,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (_tithe)
         {
             _font.Draw(_sb, "CLICK A CREW MEMBER, THEN A RED CELL TO POSITION THEM", 16, 40, 1, Palette.TextDim);
-            _font.Draw(_sb, "PLACE THE SQUISHY BACKLINE SAFE FROM THE FLANKING GRAVEHOUNDS", 16, 54, 1, Palette.TextDim);
+            var av = _campaign?.Avatar;
+            bool banked = av != null && (av.StatPoints > 0 || av.SpellPoints > 0);
+            _font.Draw(_sb, banked
+                    ? "C / S: RANK UP BEFORE YOU FIGHT — YOU HAVE POINTS TO SPEND"
+                    : "PLACE THE SQUISHY BACKLINE SAFE FROM THE FLANKING GRAVEHOUNDS",
+                16, 54, 1, banked ? (Mono.On ? Mono.Ink : Palette.Text) : Palette.TextDim);
         }
         else
         {
@@ -1561,6 +1616,55 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 left <= 10 ? (Mono.On ? Mono.Danger : new Color(226, 96, 76)) : Ew.Gold);
         }
         DrawHoverUnitInfo();
+    }
+
+    /// <summary>The crypt breather (playtest ask): between sealing doors the crew catches its
+    /// breath, banked points are spent by hand, and YOU choose when to DESCEND. The bell is held.</summary>
+    private void DrawCryptRest()
+    {
+        _prim.FillRect(_sb, new Rectangle(0, 0, ScreenW, ScreenH), new Color(6, 6, 6, 238));
+        var a = _campaign.Avatar;
+        var next = _cryptRooms[_cryptRoom];
+
+        _font.DrawCentered(_sb, "YOU CATCH YOUR BREATH", ScreenW / 2, 70, 4, Mono.Ink);
+        _font.DrawCentered(_sb, "THE BELL IS HELD — PREPARE, THEN DESCEND ON YOUR WORD", ScreenW / 2, 116, 1, Mono.Dim);
+        _font.DrawCentered(_sb,
+            $"NEXT: {next.Name.ToUpperInvariant()}   ·   ROOM {_cryptRoom + 1} / {_cryptRooms.Count}"
+            + (next.Boss ? "   ·   THE SEXTON WAITS" : ""),
+            ScreenW / 2, 140, 1, next.Boss ? Mono.Danger : Mono.Dim);
+
+        // Crew vitals — see who's hurt before you press on.
+        int cy = 186;
+        int L = ScreenW / 2 - 230;
+        foreach (var u in _campaign.DiveParty)
+        {
+            int max = TitheContent.UnitMaxHp(u);
+            int hp = Math.Clamp(u.CurrentHp ?? max, 0, max);
+            _font.Draw(_sb, Trunc(u.Name.ToUpperInvariant(), 16) + (u.IsAvatar ? "  (YOU)" : ""), L, cy, 1, Mono.Ink);
+            Mono.Bar(_sb, _prim, new Rectangle(L + 220, cy - 2, 200, 12), max <= 0 ? 0f : (float)hp / max, Mono.Hp);
+            _font.Draw(_sb, $"{hp}/{max}", L + 430, cy, 1, hp < max ? Mono.Dim : Mono.Ink);
+            cy += 24;
+        }
+
+        // What's banked to spend, and how to spend it.
+        cy += 14;
+        if (a != null)
+        {
+            bool hasPts = a.StatPoints > 0 || a.SpellPoints > 0;
+            _font.DrawCentered(_sb, hasPts
+                    ? $"YOU HAVE {a.StatPoints} CHARACTERISTIC POINT(S) AND {a.SpellPoints} SPELL POINT(S) TO SPEND"
+                    : "NO POINTS BANKED — REST AND PRESS ON WHEN READY",
+                ScreenW / 2, cy, 1, hasPts ? Mono.Ink : Mono.Dim);
+            _font.DrawCentered(_sb, "C  CHARACTERISTICS      S  RANK UP SPELLS      I  INVENTORY",
+                ScreenW / 2, cy + 20, 1, Mono.Dim);
+        }
+
+        // DESCEND — the door only grinds open when you say so.
+        bool hov = CryptDescendBtn.Contains(new Point(_mouse.X, _mouse.Y));
+        Mono.Button(_sb, _prim, CryptDescendBtn, hover: hov);
+        _font.DrawCentered(_sb, next.Boss ? "FACE THE SEXTON" : "DESCEND",
+            CryptDescendBtn.Center.X, CryptDescendBtn.Y + 14, 2, Mono.ButtonInk(hov));
+        _font.DrawCentered(_sb, "(SPACE)", CryptDescendBtn.Center.X, CryptDescendBtn.Bottom + 8, 1, Mono.Dim);
     }
 
     /// <summary>Draw a small centered label floating just above a cell (world space).</summary>
@@ -3104,12 +3208,14 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 : frac > 0.5f ? Palette.HpFill : frac > 0.25f ? new Color(230, 200, 70) : new Color(224, 80, 64);
             _prim.FillRect(_sb, new Rectangle(0, 0, (int)(ScreenW * frac), 5), col);
         }
-        if (_cryptRun && !_placing)  // which sealing-door room you're in
+        if (_cryptRun && !_placing && !_cryptRest)  // which sealing-door room you're in
             _font.DrawCentered(_sb, $"THE CRYPT  —  {_cryptRooms[_cryptRoom].Name.ToUpperInvariant()}  ({_cryptRoom + 1}/{_cryptRooms.Count})",
                 ScreenW / 2, 552, 1, new Color(204, 172, 224));
         if (_jumpedFight && !_combatResolved) // caught in the open — the fight found YOU
             _font.DrawCentered(_sb, "JUMPED — THE PACK FINDS YOU IN THE OPEN", ScreenW / 2, 528, 1, new Color(224, 96, 88));
-        if (_combatResolved && _fightReport != null && !_anim.IsBusy)
+        // The loot window steps aside while you have the sheet open (Escape returns to it).
+        bool sheetOpen = _charOpen || _invOpen || _spellOpen;
+        if (_combatResolved && _fightReport != null && !_anim.IsBusy && !sheetOpen)
         {
             if (_celebrating) DrawLevelUpMoment();
             else DrawFightReport();
@@ -3258,7 +3364,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         string next = _dive!.Ended
             ? (_campaign.Over ? "PRESS SPACE — THE CAMPAIGN IS OVER" : "THE BELL TOLLS — PRESS SPACE TO BE EJECTED")
             : bossRoom ? "THE ALTAR TEARS THE CREW OUT — PRESS SPACE"
-            : _cryptRun ? "THE DOOR AHEAD GRINDS OPEN — PRESS SPACE TO PRESS DEEPER"
+            : _cryptRun ? "PRESS SPACE TO CATCH YOUR BREATH BEFORE THE NEXT DOOR"
             : "PRESS SPACE TO PRESS ON";
         _font.DrawCentered(_sb, next, panel.Center.X, panel.Bottom - 30, 1, ink);
     }

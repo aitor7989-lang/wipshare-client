@@ -124,6 +124,23 @@ public sealed class Campaign
     /// <summary>Rest in the city: HP back to full (wounds are not cured — that needs a Draught).</summary>
     public void RestCrew() { foreach (var u in Crew) u.CurrentHp = null; }
 
+    /// <summary>A crypt breather between sealing doors: recover a fraction of each member's max
+    /// HP (never past full, never below where they stand). Not a full heal — attrition still
+    /// bites across a dive — but enough that the next room isn't a death sentence. Returns the
+    /// total HP mended so the rest screen can show it.</summary>
+    public int RestCrewPartial(double frac)
+    {
+        int healed = 0;
+        foreach (var u in Crew)
+        {
+            int max = TitheContent.UnitMaxHp(u);
+            int before = u.CurrentHp ?? max;
+            int after = System.Math.Min(max, before + (int)System.Math.Ceiling(max * frac));
+            if (after > before) { u.CurrentHp = after; healed += after - before; }
+        }
+        return healed;
+    }
+
     /// <summary>Up to three units dive together — the avatar leads, mercenaries fill the rest.</summary>
     public List<CampaignUnit> DiveParty =>
         Crew.OrderByDescending(u => u.IsAvatar).Take(3).ToList();

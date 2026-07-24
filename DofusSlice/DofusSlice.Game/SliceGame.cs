@@ -1789,7 +1789,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _tiles.Knight(_sb, state == "cast" ? "use" : state, (int)(_time * 3), feet, stint,
                     pose.Dir is Facing4.Sw or Facing4.Nw, scl);
             }
-            return; // no HP bar, no pips — hover the unit for name and health (1.29 style)
+            // Numbers stay on hover (1.29), but a WOUNDED unit surfaces a thin health bar above
+            // its head so you can glance-read the fight — full-HP units keep the clean board.
+            float tokenH = sheet != null ? sheet.FrameHeight * ChamberSet.PxScale * scl : 44f * scl;
+            DrawOverheadHp(f, center.X, feet.Y - tokenH - 6f, s);
+            return; // exact HP: hover the unit (1.29 style)
         }
 
         _prim.DiscAt(_sb, center + new Vector2(0, 2), Sz(12), Palette.Shadow);
@@ -1986,6 +1990,25 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _prim.FillRect(_sb, new Rectangle(x, (int)y, fill, 5),
             Mono.On ? Mono.Hp : f.Team == Team.Player ? Palette.HpFill : new Color(214, 96, 88));
         _font.DrawCentered(_sb, ((int)MathF.Round(dhp)).ToString(), (int)centerX, (int)y - 10, 1, Palette.Text);
+    }
+
+    /// <summary>A thin overhead health bar shown ONLY for a wounded unit — full-HP units keep the
+    /// clean 1.29 board (exact numbers stay on the hover plate). Uses the eased display HP so it
+    /// drains smoothly and rides the token's recoil (same animated centre). Vitals law: HP is red.</summary>
+    private void DrawOverheadHp(Fighter f, float cx, float y, float s)
+    {
+        float hp = _anim.DisplayHp(f);
+        if (hp >= f.MaxHp - 0.5f) return;                       // untouched units stay clean
+        float frac = Math.Clamp(hp / Math.Max(1, f.MaxHp), 0f, 1f);
+        int w = Math.Max(16, (int)MathF.Round(24 * s));
+        int h = Math.Max(2, (int)MathF.Round(3 * s));
+        int x = (int)MathF.Round(cx - w / 2f);
+        int yy = (int)MathF.Round(y);
+        _prim.FillRect(_sb, new Rectangle(x - 1, yy - 1, w + 2, h + 2),
+            Mono.On ? new Color(10, 11, 14) : new Color(0, 0, 0, 150));
+        _prim.FillRect(_sb, new Rectangle(x, yy, w, h), Mono.On ? Mono.Dim : Palette.HpBack);
+        _prim.FillRect(_sb, new Rectangle(x, yy, (int)MathF.Round(w * frac), h),
+            Mono.On ? Mono.Hp : new Color(206, 60, 48));
     }
 
     // ----- HUD ----------------------------------------------------------------------

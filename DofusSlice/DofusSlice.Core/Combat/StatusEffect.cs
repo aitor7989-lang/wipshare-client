@@ -14,6 +14,7 @@ public enum StatusKind
     Poison,       // Magnitude damage at the start of each of the bearer's turns
     Regen,        // +Magnitude HP at the start of each of the bearer's turns
     MpDrain,      // -Magnitude MP at the start of each of the bearer's turns
+    ApDrain,      // -Magnitude AP at the start of each of the bearer's turns (the AP counterpart)
     Rooted,       // cannot move
     Stabilized,   // cannot be pushed or pulled
     Reflect,      // returns Magnitude% of spell damage taken to the attacker

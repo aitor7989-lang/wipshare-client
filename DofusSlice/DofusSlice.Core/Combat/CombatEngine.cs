@@ -250,6 +250,12 @@ public sealed class CombatEngine
             {
                 f.CurrentMp = Math.Max(0, f.CurrentMp - s.Magnitude);
             }
+            // BeginTurn refills AP/MP from base, so a theft only ever cost the victim the turn it
+            // landed. A drain is how a loss PERSISTS: it re-applies every turn until it expires.
+            else if (s.Kind == StatusKind.ApDrain)
+            {
+                f.CurrentAp = Math.Max(0, f.CurrentAp - s.Magnitude);
+            }
         }
     }
 
@@ -552,10 +558,10 @@ public sealed class CombatEngine
                     ApplyShift(caster, victim, effect.Min, pull: true);
                     break;
                 case EffectKind.StealAp:
-                    ApplySteal(caster, victim, effect.Min, ap: true);
+                    ApplySteal(caster, victim, effect.Min, ap: true, turns: Math.Max(1, effect.Max));
                     break;
                 case EffectKind.StealMp:
-                    ApplySteal(caster, victim, effect.Min, ap: false);
+                    ApplySteal(caster, victim, effect.Min, ap: false, turns: Math.Max(1, effect.Max));
                     break;
                 case EffectKind.StealRange:
                     ApplyStealRange(caster, victim, effect.Min, effect.Max);
@@ -594,7 +600,7 @@ public sealed class CombatEngine
         if (!victim.IsAlive) { Emit($"  {victim.Name} is defeated!"); Raise(new FighterDied(victim, at)); }
     }
 
-    private void ApplySteal(Fighter caster, Fighter victim, int amount, bool ap)
+    private void ApplySteal(Fighter caster, Fighter victim, int amount, bool ap, int turns = 1)
     {
         amount = Math.Max(0, amount);
         // Wisdom lets the victim dodge part of the theft.
@@ -605,6 +611,10 @@ public sealed class CombatEngine
         if (ap) { victim.CurrentAp -= taken; caster.CurrentAp += taken; }
         else { victim.CurrentMp -= taken; caster.CurrentMp += taken; }
         Emit($"  {caster.Name} steals {taken} {(ap ? "AP" : "MP")} from {victim.Name}.");
+        // 1.29: a theft is not just this turn's tempo — the loss RIDES for its duration. BeginTurn
+        // refills from base, so the only way a loss survives the turn boundary is a drain status.
+        if (turns > 1)
+            ApplyStatusEffect(victim, ap ? StatusKind.ApDrain : StatusKind.MpDrain, taken, turns - 1);
     }
 
     /// <summary>Dofus range theft: the victim's spell range shrinks and the caster's grows by the

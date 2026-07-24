@@ -19,6 +19,7 @@ public static class Policy
 {
     public static void TakeTurn(CombatEngine engine, Fighter self)
     {
+        TryMend(engine, self);        // bind the worst wound first — a corpse casts nothing
         if (self.Policy == AiPolicy.Support) { SupportTurn(engine, self); return; }
 
         TrySelfBuff(engine, self);    // Ironhide etc. before wading in
@@ -165,8 +166,52 @@ public static class Policy
 
     // ----- Support policy: never lead, feed the frontline AP, keep out of reach ------
 
+    /// <summary>
+    /// Spend healing on the ally (or self) who most needs it. Healing was fully implemented in the
+    /// engine but no unit had a heal and no policy looked for one, so this is what makes the verb
+    /// real. Only fires on a genuinely hurt target, so a heal is never wasted topping off 2 HP.
+    /// </summary>
+    private static void TryMend(CombatEngine engine, Fighter self)
+    {
+        var heals = self.Spells.Where(s => s.Effects.Any(e => e.Kind == EffectKind.Heal)).ToList();
+        if (heals.Count == 0) return;
+
+        for (int guard = 0; guard < 4; guard++)
+        {
+            SpellDef? bestSpell = null; Fighter? bestTarget = null; int bestMissing = 0;
+            foreach (var spell in heals)
+            {
+                int power = spell.Effects.Where(e => e.Kind == EffectKind.Heal).Sum(e => (e.Min + e.Max) / 2);
+                foreach (var ally in engine.Fighters.Where(f => f.IsAlive && f.Team == self.Team))
+                {
+                    int missing = ally.MaxHp - ally.Hp;
+                    // Worth a cast only if the wound can actually soak most of the heal.
+                    if (missing < power / 2 || missing <= bestMissing) continue;
+                    if (!engine.CanCast(self, spell, ally.Pos, out _)) continue;
+                    bestSpell = spell; bestTarget = ally; bestMissing = missing;
+                }
+            }
+            if (bestSpell == null || !engine.TryCast(self, bestSpell, bestTarget!.Pos)) return;
+        }
+    }
+
+    /// <summary>Call a summon onto a free cell near the caster. Without this the engine's summon
+    /// path had no AI caller at all, so a summon spell would simply never be cast.</summary>
+    private static void TrySummon(CombatEngine engine, Fighter self)
+    {
+        var call = self.Spells.FirstOrDefault(s => s.Effects.Any(e => e.Kind == EffectKind.Summon));
+        if (call == null || self.CurrentAp < call.ApCost) return;
+        // Nearest legal ground first, so the creature lands between its caller and the fight.
+        var cell = engine.Field.AllCells()
+            .Where(c => engine.CanCast(self, call, c, out _))
+            .OrderBy(c => c.DistanceTo(self.Pos))
+            .Select(c => (CellCoord?)c).FirstOrDefault();
+        if (cell is { } spot) engine.TryCast(self, call, spot);
+    }
+
     private static void SupportTurn(CombatEngine engine, Fighter self)
     {
+        TrySummon(engine, self);   // bodies first: a called creature acts right after its caller
         var gift = self.Spells.FirstOrDefault(s => s.Effects.Any(e => e.Kind == EffectKind.GrantAp));
         if (gift != null)
             for (int guard = 0; guard < 4 && self.CurrentAp >= gift.ApCost; guard++)

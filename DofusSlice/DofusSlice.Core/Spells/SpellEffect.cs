@@ -38,8 +38,10 @@ public sealed record SpellEffect(
     public static SpellEffect Swap() => new(EffectKind.Swap);
     public static SpellEffect Teleport() => new(EffectKind.Teleport);
     public static SpellEffect Lifesteal(Element element, int min, int max) => new(EffectKind.Lifesteal, element, min, max);
-    public static SpellEffect StealAp(int amount) => new(EffectKind.StealAp, Element.Neutral, amount, amount);
-    public static SpellEffect StealMp(int amount) => new(EffectKind.StealMp, Element.Neutral, amount, amount);
+    // Max carries the DURATION: 1 = this turn only (the loss is refilled at BeginTurn), >1 leaves a
+    // drain status so the theft rides for that many turns, the 1.29 way.
+    public static SpellEffect StealAp(int amount, int turns = 1) => new(EffectKind.StealAp, Element.Neutral, amount, turns);
+    public static SpellEffect StealMp(int amount, int turns = 1) => new(EffectKind.StealMp, Element.Neutral, amount, turns);
     public static SpellEffect StealRange(int amount, int turns) => new(EffectKind.StealRange, Element.Neutral, amount, turns);
     public static SpellEffect GrantAp(int amount) => new(EffectKind.GrantAp, Element.Neutral, amount, amount);
     public static SpellEffect SelfHpCost(int amount) => new(EffectKind.SelfHpCost, Element.Neutral, amount, amount);

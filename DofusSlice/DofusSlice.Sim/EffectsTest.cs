@@ -18,6 +18,9 @@ public static class EffectsTest
         Pull();
         Swap();
         StealAp();
+        AiHeals();
+        SummonJoinsCasterTeam();
+        StealRides();
         AiUsesRiderSpells();
         AiRefusesToBuffEnemies();
         ReplaceFighterBeforeStart();
@@ -320,6 +323,62 @@ public static class EffectsTest
     /// <summary>The AI must value a spell's PAYLOAD, not just its damage. Given a bigger plain
     /// hit and a smaller one carrying poison + vulnerable, the old policy ordered damage spells by
     /// AP cost and took the first castable one — so the rider spell was never chosen on purpose.</summary>
+    /// <summary>Healing is engine-complete but no content used it and no policy looked for one.
+    /// A unit holding a heal must actually mend the ally who needs it.</summary>
+    private static void AiHeals()
+    {
+        var mend = Spell(60, "Mend", 3, 1, 6, SpellEffect.Heal(10, 16));
+        var c = Caster(new(2, 4), mend);
+        var hurt = new Fighter
+        {
+            Id = "ally", Name = "Ally", Team = Team.Player, PlayerControlled = true,
+            MaxHp = 60, Hp = 20, BaseAp = 6, BaseMp = 3, Initiative = 5, Pos = new(3, 4),
+        };
+        var eng = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { c, hurt, Foe("f", new(9, 4)) }, new SystemRng(1));
+        eng.Start();
+        DofusSlice.Core.AI.Policy.TakeTurn(eng, c);
+        Check("AI heals a hurt ally", hurt.Hp > 20, $"ally mended 20 -> {hurt.Hp}");
+    }
+
+    /// <summary>A summon must join the CASTER's team. Both fight builders passed the engine's
+    /// team argument and then dropped it, so a player summon would have joined the enemy.</summary>
+    private static void SummonJoinsCasterTeam()
+    {
+        var call = new SpellDef
+        {
+            Id = 61, Name = "Call", ApCost = 3, MinRange = 1, MaxRange = 3,
+            RequiresLineOfSight = false, NeedsTarget = false, NeedsFreeCell = true,
+            Effects = new[] { SpellEffect.Summon("grave_mite") },
+        };
+        var c = Caster(new(2, 4), call);
+        var eng = new CombatEngine(new Battlefield(11, 9),
+            new List<Fighter> { c, Foe("f", new(9, 4)) }, new SystemRng(1),
+            (kind, team, cell, id) =>
+                DofusSlice.Core.Content.Tithe.TitheContent.MakeMob(kind, id, cell, 1, team, isSummon: true));
+        eng.Start();
+        eng.TryCast(c, call, new(3, 4));
+        var summon = eng.Fighters.FirstOrDefault(f => f.IsSummon);
+        Check("Summon joins the caster's team", summon != null && summon.Team == Team.Player,
+            summon == null ? "no summon appeared" : $"summon joined {summon.Team} (caster is {c.Team})");
+    }
+
+    /// <summary>A resource theft with a duration must RIDE: BeginTurn refills from base, so only a
+    /// drain status can make the loss survive the turn boundary.</summary>
+    private static void StealRides()
+    {
+        var drain = Spell(62, "Drain", 2, 1, 8, SpellEffect.StealAp(2, turns: 3));
+        var c = Caster(new(2, 4), drain);
+        var t = Foe("t", new(6, 4));
+        var eng = Engine(c, t);
+        t.BeginTurn();
+        eng.TryCast(c, drain, new(6, 4));
+        bool tookNow = t.CurrentAp == t.BaseAp - 2;
+        eng.EndTurn();   // the victim's own turn now begins: refill from base, THEN the drain bites
+        Check("AP theft rides across turns", tookNow && t.CurrentAp == t.BaseAp - 2,
+            $"stolen this turn ({tookNow}); after the refill the drain still holds AP at {t.CurrentAp}/{t.BaseAp}");
+    }
+
     private static void AiUsesRiderSpells()
     {
         var plain = Spell(50, "Plain", 4, 1, 8, SpellEffect.Damage(Element.Neutral, 11, 16));

@@ -26,7 +26,7 @@ public static class TitheContent
     // ----- DTOs (shape of the JSON rows) --------------------------------------------
 
     private sealed record EffectDto(string Kind, string? Element, int Min, int Max, int Cells,
-                                    string? Status, int Mag, int Turns);
+                                    string? Status, int Mag, int Turns, string? Summon = null);
     private sealed record RankDto(int? Ap, int? Min, int? Max, int? Cooldown, int? CastsPerTurn,
                                   int? Crit = null);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
@@ -212,13 +212,14 @@ public static class TitheContent
         "push" => SpellEffect.Push(e.Cells),
         "pull" => SpellEffect.Pull(e.Cells),
         "teleport" => SpellEffect.Teleport(),
-        "steal_ap" => SpellEffect.StealAp(e.Min),
-        "steal_mp" => SpellEffect.StealMp(e.Min),
+        "steal_ap" => SpellEffect.StealAp(e.Min, Math.Max(1, e.Turns)),
+        "steal_mp" => SpellEffect.StealMp(e.Min, Math.Max(1, e.Turns)),
         "steal_range" => SpellEffect.StealRange(e.Cells, e.Turns),
         "grant_ap" => SpellEffect.GrantAp(e.Min),
         "status" => SpellEffect.ApplyStatus(ParseStatus(e.Status), e.Mag, e.Turns),
         "self_damage" => SpellEffect.SelfHpCost(e.Min),
         "lifesteal" => SpellEffect.Lifesteal(ParseElement(e.Element), e.Min, e.Max),
+        "summon" => SpellEffect.Summon(e.Summon ?? throw new FormatException("tithe: summon effect needs a \"summon\" mob id")),
         _ => throw new FormatException($"tithe: unknown effect kind '{e.Kind}'"),
     };
 
@@ -235,6 +236,7 @@ public static class TitheContent
         "poison" => StatusKind.Poison,
         "regen" => StatusKind.Regen,
         "mpdrain" or "sapped" => StatusKind.MpDrain,
+        "apdrain" => StatusKind.ApDrain,
         "shield" or "ironhide" => StatusKind.Shield,
         "damagebuff" => StatusKind.DamageBuff,
         "damagedebuff" or "weaken" => StatusKind.DamageDebuff,
@@ -285,12 +287,13 @@ public static class TitheContent
     private static int GradeReward(int v, int g) => v * (100 + 25 * (Math.Max(1, g) - 1)) / 100;
 
     /// <summary>Build a skeleton mob of the given id and grade at a cell.</summary>
-    public static Fighter MakeMob(string mobId, string unitId, CellCoord pos, int grade = 1)
+    public static Fighter MakeMob(string mobId, string unitId, CellCoord pos, int grade = 1,
+                                  Team team = Team.Enemy, bool isSummon = false)
     {
         var m = Mobs[mobId];
         var f = new Fighter
         {
-            Id = unitId, Name = m.Name, Team = Team.Enemy, Archetype = m.Id,
+            Id = unitId, Name = m.Name, Team = team, Archetype = m.Id, IsSummon = isSummon,
             Policy = ParsePolicy(m.Policy),
             PreferredRangeMin = m.PrefRangeMin, PreferredRangeMax = m.PrefRangeMax,
             MaxHp = GradeHp(m.MaxHp, grade), Hp = GradeHp(m.MaxHp, grade), BaseAp = m.Ap, BaseMp = m.Mp,
@@ -756,7 +759,7 @@ public static class TitheContent
         }
 
         return new CombatEngine(field, fighters, rng,
-            (kind, team, cell, id) => MakeMob(kind, id, cell));
+            (kind, team, cell, id) => MakeMob(kind, id, cell, team: team, isSummon: true));
     }
 
     /// <summary>
@@ -812,7 +815,8 @@ public static class TitheContent
             fighters.Add(MakeMob(mob, $"mob_{n++}_{mob}", cell, grade));
         }
 
-        return new CombatEngine(field, fighters, rng, (kind, team, cell, id) => MakeMob(kind, id, cell, grade));
+        return new CombatEngine(field, fighters, rng,
+            (kind, team, cell, id) => MakeMob(kind, id, cell, grade, team, isSummon: true));
     }
 
     /// <summary>Nearest walkable, unoccupied cell to <paramref name="from"/> (ring search), or Invalid.</summary>

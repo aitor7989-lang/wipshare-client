@@ -122,7 +122,11 @@ public sealed class DiveSession
         Departure = $"{traitor.Name} slips away toward the Lychgate with {cut} stones of the haul";
     }
 
-    public float FightCost(TitheContent.PackDef p) => FightBaseSeconds + FightPerEnemy * p.Comp.Length;
+    /// <summary>Wall-clock a fight costs the bell. The base numbers are authored at 1:1 pacing, so
+    /// they are divided by the pace watched combat actually runs at — otherwise the headless clock
+    /// charges ~50% more than the player spends and prunes routes the real game allows.</summary>
+    public float FightCost(TitheContent.PackDef p) =>
+        (FightBaseSeconds + FightPerEnemy * p.Comp.Length) / TitheContent.CombatPace;
 
     /// <summary>Do we have clock enough to travel to this pack and fight it?</summary>
     public bool CanAfford(PackState p) => !p.Cleared && Clock - p.Def.Reach - FightCost(p.Def) > 0;

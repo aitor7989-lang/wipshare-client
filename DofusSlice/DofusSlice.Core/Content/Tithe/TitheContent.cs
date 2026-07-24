@@ -15,6 +15,14 @@ public static class TitheContent
 {
     private static readonly JsonSerializerOptions J = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// Watched combat plays at this multiple of 1:1 pacing (the game's playback default). It lives
+    /// in Core because the headless clock has to charge a fight the same shortened wall-clock the
+    /// player actually spends — when the game got faster and this didn't, the sim over-charged the
+    /// bell and pruned routes the real game allows, quietly biasing every balance number.
+    /// </summary>
+    public const float CombatPace = 1.5f;
+
     // ----- DTOs (shape of the JSON rows) --------------------------------------------
 
     private sealed record EffectDto(string Kind, string? Element, int Min, int Max, int Cells,

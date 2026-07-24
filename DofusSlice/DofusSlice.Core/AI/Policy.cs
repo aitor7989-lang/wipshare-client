@@ -485,7 +485,7 @@ public static class Policy
     private static bool CanHitAnyEnemyFrom(CombatEngine engine, Fighter self, CellCoord from)
     {
         var affordable = DamageSpells(self).Where(s => s.ApCost <= self.CurrentAp).ToList();
-        return Enemies(engine, self).Any(e => affordable.Any(s => CanHitFrom(engine, from, self.Pos, e.Pos, s)));
+        return Enemies(engine, self).Any(e => affordable.Any(s => CanHitFrom(engine, self, from, e.Pos, s)));
     }
 
     /// <summary>Move one hop toward <paramref name="goal"/>, routing around obstacles geodesically.</summary>
@@ -506,14 +506,17 @@ public static class Policy
     }
 
     /// <summary>Would <paramref name="spell"/> land on <paramref name="target"/> from <paramref name="from"/>?</summary>
-    private static bool CanHitFrom(CombatEngine engine, CellCoord from, CellCoord oldPos, CellCoord target, SpellDef spell)
+    private static bool CanHitFrom(CombatEngine engine, Fighter self, CellCoord from, CellCoord target, SpellDef spell)
     {
         int dist = from.DistanceTo(target);
-        if (dist < spell.MinRange || dist > spell.MaxRange) return false;
+        // The caster's LIVE reach, not the authored one: with range theft/buffs in play, comparing
+        // against spell.MaxRange sent a leashed unit walking to a cell it then could not fire from
+        // — so it repositioned and did nothing, every turn the debuff lasted.
+        if (dist < spell.MinRange || dist > engine.EffectiveMaxRange(self, spell)) return false;
         if (spell.LineOnly && !from.IsAlignedWith(target)) return false;
         if (spell.RequiresLineOfSight &&
             !LineOfSight.HasLineOfSight(engine.Field, from, target,
-                c => c != target && c != from && c != oldPos && engine.IsOccupied(c)))
+                c => c != target && c != from && c != self.Pos && engine.IsOccupied(c)))
             return false;
         return true;
     }

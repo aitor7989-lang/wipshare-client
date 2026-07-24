@@ -23,7 +23,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private readonly bool _tithe;
     private bool _boss;                              // TITHE: fight the Sexton's court instead of the pack
     private float _speed = 1f;                       // watched-mode playback: 1x / 2x / 4x
-    private const float CombatPace = 1.5f;           // base combat runs 50% faster than 1:1 (playtest ask); 1/2/4 multiply on top
+    // Base combat runs 50% faster than 1:1 (playtest ask); 1/2/4 multiply on top. Shared with the
+    // headless clock so the sim charges the bell the same wall-clock the player actually spends.
+    private const float CombatPace = TitheContent.CombatPace;
     private Fighter? _selCrew;                        // crew unit being positioned in placement
     private TitheResolution.Result? _aftermath;      // computed once the watched fight ends
 
@@ -378,14 +380,17 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.Enter) || Pressed(Keys.D)) { StartDive(); return; } // dive (also: click the Lychgate)
         if (!LeftClicked()) return;
         var m = new Point(_mouse.X, _mouse.Y);
-        if (ClickCampaignBand(m)) return;   // quick items + the corner menu own the band
-
+        // An open NPC panel is drawn ON TOP of the band, so it must take clicks first. It used to
+        // come second, and since ClickCampaignBand swallows EVERY click below HudTop as dead space,
+        // any service that sat that low was simply unreachable (the Temple's 6th).
         if (_openNpc >= 0)
         {
             var acts = NpcActions(_openNpc);
             for (int i = 0; i < acts.Count; i++)
                 if (PanelButton(i).Contains(m)) { if (acts[i].ok) { _sfx.Play("coin", 0.7f); acts[i].act(); } return; }
         }
+
+        if (ClickCampaignBand(m)) return;   // quick items + the corner menu own the band
 
         if (_hover == TitheCell) { _openNpc = 0; _sfx.Play("click"); }
         else if (_hover == TempleCell) { _openNpc = 1; _sfx.Play("click"); }
@@ -394,7 +399,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         else _openNpc = -1;
     }
 
-    private static Rectangle PanelButton(int i) => new(360, 344 + i * 52, 560, 44);
+    // Six services fit ABOVE HudTop (600): the last is 552..596. The Temple can offer six
+    // (treat + two teaches + shelf + surgery + vet), and the old start of 344 put that sixth
+    // button at 604..648 — past the panel's own bottom edge and into the band's dead space.
+    private static Rectangle PanelButton(int i) => new(360, 292 + i * 52, 560, 44);
 
     // ----- The stash & kit screen (Bible §6.13: manage the stash and equip units) -----
 
@@ -2950,7 +2958,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void DrawNpcPanel(int npc)
     {
-        var r = new Rectangle(330, 296, 620, 336); // tall enough for the Temple's five services
+        var r = new Rectangle(330, 244, 620, 380); // tall enough for the Temple's SIX services
         UiPanelBg(r);
         string[] titles = { "THE TITHE-KEEPER", "THE TEMPLE SISTER", "THE HIRING POST" };
         _font.DrawCentered(_sb, titles[npc], r.Center.X, r.Y + 14, 2, UiSkinned ? WinInk : Palette.Text);

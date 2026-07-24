@@ -23,6 +23,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private readonly bool _tithe;
     private bool _boss;                              // TITHE: fight the Sexton's court instead of the pack
     private float _speed = 1f;                       // watched-mode playback: 1x / 2x / 4x
+    private const float CombatPace = 1.5f;           // base combat runs 50% faster than 1:1 (playtest ask); 1/2/4 multiply on top
     private Fighter? _selCrew;                        // crew unit being positioned in placement
     private TitheResolution.Result? _aftermath;      // computed once the watched fight ends
 
@@ -731,7 +732,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (Pressed(Keys.D2)) _speed = 2f;
             if (Pressed(Keys.D3)) _speed = 4f;
         }
-        float sdt = dt * _speed;
+        float sdt = dt * _speed * CombatPace;
 
         _anim.Update(sdt, _engine.Fighters);
         _camera.Shake(_anim.ConsumeShake());
@@ -894,7 +895,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        float sdt = _tithe ? dt * _speed : dt; // scale the sim clock by playback speed
+        float sdt = _tithe ? dt * _speed * CombatPace : dt; // scale the sim clock by playback speed (base pace baked in)
         _time += dt;
         _anim.Update(sdt, _engine.Fighters); // animations keep playing even after the fight ends
 

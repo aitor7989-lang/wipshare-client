@@ -128,6 +128,22 @@ public sealed class CombatEngine
     public IReadOnlyList<Fighter> Fighters => _order;
     public Fighter Current => _order[_pointer];
 
+    /// <summary>
+    /// Swap a fighter for a rebuilt one, BEFORE <see cref="Start"/>. A Fighter's stats are
+    /// init-only (they are a snapshot of the campaign unit at build time), so the only way to
+    /// let progression spent during the placement phase reach the fight is to replace the object.
+    /// Position/HP carry-over is the caller's job. Refuses once the fight is under way, since the
+    /// turn order and the animation layer hold this reference from Start() onward.
+    /// </summary>
+    public bool ReplaceFighter(string id, Fighter replacement)
+    {
+        if (Round > 0) throw new InvalidOperationException("ReplaceFighter must be called before Start()");
+        int i = _order.FindIndex(f => f.Id == id);
+        if (i < 0 || replacement.Id != id) return false;
+        _order[i] = replacement;
+        return true;
+    }
+
     /// <summary>Human-readable combat log; the renderer and the sim both read from it.</summary>
     public List<string> Log { get; } = new();
     public event Action<string>? Logged;

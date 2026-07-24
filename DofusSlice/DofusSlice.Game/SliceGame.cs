@@ -284,8 +284,34 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private void BeginFight()
     {
         _sfx.Play("click");
+        RefreshAvatarFighter();   // points/ranks/gear spent during placement take effect NOW
         _placing = false;
+        _selCrew = null;          // placement is over; nobody is "picked up" any more
         _engine.Start();
+    }
+
+    /// <summary>
+    /// Rebuild the avatar's <see cref="Fighter"/> from the campaign unit at the end of placement,
+    /// so characteristic points, spell ranks and gear changed while the crew was being placed are
+    /// actually carried into THIS fight. A Fighter's stats are an init-only snapshot taken in
+    /// BeginCombat, so without this the character sheet and the fighter disagree for a whole
+    /// battle (sheet reads the new HP, the unit fights on the old one).
+    /// Only the avatar needs it: mercenaries auto-spend at resolution and the Leader's windows
+    /// only ever edit the avatar.
+    /// </summary>
+    private void RefreshAvatarFighter()
+    {
+        if (_campaign?.Avatar is not { } av || _engine is null || _engine.Round > 0) return;
+        var old = _engine.Fighters.FirstOrDefault(f => f.Id == av.Id);
+        if (old is null || !old.IsAlive) return;
+
+        var fresh = TitheContent.MakeCrewMember(av, old.Pos);
+        // Growing your maximum must not read as a wound: carry the pool up by the same delta.
+        fresh.Hp = Math.Clamp(old.Hp + (fresh.MaxHp - old.MaxHp), 1, fresh.MaxHp);
+        fresh.Facing = old.Facing;
+        foreach (var st in old.Statuses) fresh.Statuses.Add(st);   // placement is normally clean; don't drop anything
+        if (!_engine.ReplaceFighter(av.Id, fresh)) return;
+        _anim.Reset(_engine.Fighters);   // reseed display HP against the rebuilt roster
     }
 
     private void WireEngine()
@@ -702,7 +728,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         _engine = _dive!.BeginFight(pack, chargeTravel: false, jumped: jumped); // the walk was the travel cost
         _dive.InFight = true; // the bell keeps draining, but nobody walks out of a battle line
-        _map = _graveMap;
+        // The fight is on the pack's ARENA, not the yard we walked in from. _map drives the
+        // placement start-cells (drawn and clicked), so pointing it at the yard map painted
+        // start cells that don't exist on the board you're standing on.
+        _map = _dive.LastArena ?? _graveMap;
         _pendingPack = pack;
         _combatResolved = false;
         _fightReport = null;
@@ -950,7 +979,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         {
             var m = new Point(_mouse.X, _mouse.Y);
             if (_endTurnButton.Contains(m)) { BeginFight(); return; } // "FIGHT!" button
-            if (m.Y < HudTop && _map.PlayerStartCells.Contains(_hover) && _engine.FighterAt(_hover) is null)
+            if (m.Y < HudTop && _map.PlayerStartCells.Contains(_hover) && _engine.FighterAt(_hover) is null
+                && _engine.Field.IsWalkable(_hover))   // never drop a fighter onto void
                 hero.Pos = _hover;
         }
     }
@@ -981,7 +1011,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 _selCrew = onCell; // pick up a crew member
                 _sfx.Play("click");
             }
-            else if (_selCrew != null && _map.PlayerStartCells.Contains(_hover) && onCell is null)
+            else if (_selCrew != null && _map.PlayerStartCells.Contains(_hover) && onCell is null
+                     && _engine.Field.IsWalkable(_hover))   // never drop a crew member onto void
             {
                 _selCrew.Pos = _hover; // drop the selected member on a free start cell
                 _selCrew = null;
@@ -1552,7 +1583,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         // 1.29 shows both teams' ground: your side vs the enemy's (mono: ink vs danger).
         foreach (var cell in _map.PlayerStartCells)
-            if (_engine.FighterAt(cell) is null)
+            if (_engine.FighterAt(cell) is null && _engine.Field.IsWalkable(cell)) // never glow over void
                 _prim.DiamondAt(_sb, _proj.CellCenter(cell),
                     Mono.On ? Mono.Ink * 0.30f : new Color(196, 44, 22) * 0.55f);
         foreach (var f in _engine.Fighters.Where(x => x.IsAlive && x.Team != Team.Player))

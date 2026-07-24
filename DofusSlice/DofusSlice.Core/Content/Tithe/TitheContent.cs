@@ -19,10 +19,12 @@ public static class TitheContent
 
     private sealed record EffectDto(string Kind, string? Element, int Min, int Max, int Cells,
                                     string? Status, int Mag, int Turns);
-    private sealed record RankDto(int? Ap, int? Min, int? Max, int? Cooldown, int? CastsPerTurn);
+    private sealed record RankDto(int? Ap, int? Min, int? Max, int? Cooldown, int? CastsPerTurn,
+                                  int? Crit = null);
     private sealed record SkillDto(string Key, string Name, int Ap, int Min, int Max, bool Los,
                                    int Cooldown, int CastsPerTurn, bool TargetsGround,
-                                   RankDto[]? Ranks, EffectDto[] Effects);
+                                   RankDto[]? Ranks, EffectDto[] Effects,
+                                   int Crit = 0, int CritFail = 0);
     private sealed record GrowthDto(int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom);
     private sealed record ClassDto(string Id, string Name, string Policy, string? Passive, string? Element, int BaseHp, int Ap, int Mp,
                                    int Vitality, int Strength, int Intelligence, int Chance, int Agility, int Wisdom, int Initiative,
@@ -108,12 +110,12 @@ public static class TitheContent
     private static SpellDef BuildSkill(string key, int rank)
     {
         var s = SkillRows[key];
-        int ap = s.Ap, min = s.Min, max = s.Max, cd = s.Cooldown, cpt = s.CastsPerTurn;
+        int ap = s.Ap, min = s.Min, max = s.Max, cd = s.Cooldown, cpt = s.CastsPerTurn, crit = s.Crit;
         for (int r = 2; r <= rank && s.Ranks != null && r - 2 < s.Ranks.Length; r++)
         {
             var o = s.Ranks[r - 2];
             ap = o.Ap ?? ap; min = o.Min ?? min; max = o.Max ?? max;
-            cd = o.Cooldown ?? cd; cpt = o.CastsPerTurn ?? cpt;
+            cd = o.Cooldown ?? cd; cpt = o.CastsPerTurn ?? cpt; crit = o.Crit ?? crit;
         }
         return new SpellDef
         {
@@ -124,6 +126,10 @@ public static class TitheContent
             NeedsTarget = !s.TargetsGround, NeedsFreeCell = s.TargetsGround,
             Cooldown = cd,
             MaxCastsPerTurn = cpt > 0 ? cpt : int.MaxValue,
+            // 1.29 crits: "crit" is the 1-in-N chance to land a critical (and ranking a spell
+            // sharpens it); "critFail" is the 1-in-N chance to fizzle. Both default to 0 = never.
+            CriticalChanceOneIn = crit,
+            CriticalFailureOneIn = s.CritFail,
             Effects = s.Effects.Select(ToEffect).ToArray(),
         };
     }

@@ -207,9 +207,27 @@ public sealed class DiveSession
     {
         MendWithBread();
         if (chargeTravel) Clock -= pack.Def.Reach; // headless charges travel; the visual walks it in real time
-        // Each pack brawls on its own ground: the arena variant keys off the pack id.
-        int variant = Math.Abs(pack.Def.Id.GetHashCode()) % 4;
+        // Each pack brawls on its own ground: the arena variant keys off the pack id. NOTE the
+        // stable hash — string.GetHashCode() is randomized per PROCESS in .NET, so using it here
+        // meant a pack fought on different ground every launch and the sim could never reproduce
+        // the arena a balance number came from.
+        int variant = (int)(StableHash(pack.Def.Id) % 4);
+        LastArena = TitheContent.Arena(variant); // the ground this fight is actually on (the renderer needs it)
         return TitheContent.BuildDiveFight(_campaign.DiveParty, pack.Def.Comp, _rng, pack.Def.Grade, jumped, variant);
+    }
+
+    /// <summary>The map the most recent <see cref="BeginFight"/> built its battlefield on. The
+    /// visual game must draw placement cells from THIS, not from the yard map it walked in on.</summary>
+    public Content.MapData? LastArena { get; private set; }
+
+    /// <summary>FNV-1a: a hash that is identical across processes and platforms, unlike
+    /// <see cref="string.GetHashCode"/>. Unsigned throughout, so there is no Math.Abs
+    /// overflow on int.MinValue.</summary>
+    private static uint StableHash(string s)
+    {
+        uint h = 2166136261u;
+        foreach (char c in s) { h ^= c; h *= 16777619u; }
+        return h;
     }
 
     /// <summary>Fold a finished fight into the campaign: rewards + wounds on a win, or campaign-over.</summary>

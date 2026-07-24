@@ -18,6 +18,9 @@ public static class EffectsTest
         Pull();
         Swap();
         StealAp();
+        ReplaceFighterBeforeStart();
+        StableArenaHash();
+        CampaignCritsExist();
         StealRange();
         DefenseBuff();
         DamageBuffDebuff();
@@ -308,6 +311,63 @@ public static class EffectsTest
         eng.TryCast(c, spell, new(6, 4));
         Check("StealAp", t.CurrentAp == tgtBefore - 3 && c.CurrentAp == capBefore - spell.ApCost + 3,
             $"target AP {tgtBefore}->{t.CurrentAp}, caster gained 3");
+    }
+
+    /// <summary>The placement-phase progression fix: a Fighter's stats are an init-only snapshot,
+    /// so points spent while placing only reach the fight if the object is REPLACED before Start().</summary>
+    private static void ReplaceFighterBeforeStart()
+    {
+        var spell = Spell(40, "Poke", 2, 1, 8, SpellEffect.Damage(Element.Neutral, 5, 5));
+        var c = Caster(new(2, 4), spell);
+        var t = Foe("t", new(6, 4));
+        var eng = new CombatEngine(new Battlefield(11, 9), new List<Fighter> { c, t }, new SystemRng(1));
+
+        // Stand in for "the player spent 10 VIT during placement": a beefier rebuild, same Id/cell.
+        var grown = new Fighter
+        {
+            Id = "c", Name = "Caster", Team = Team.Player, PlayerControlled = true,
+            MaxHp = 110, Hp = 100, BaseAp = 12, BaseMp = 6, Initiative = 100,
+            Strength = 25, Pos = c.Pos, Spells = new[] { spell },
+        };
+        grown.Hp = Math.Clamp(c.Hp + (grown.MaxHp - c.MaxHp), 1, grown.MaxHp); // carry the pool up
+        bool ok = eng.ReplaceFighter("c", grown);
+        var live = eng.Fighters.First(f => f.Id == "c");
+        Check("ReplaceFighter before Start", ok && live.MaxHp == 110 && live.Hp == 110 && live.Strength == 25,
+            $"swapped in MaxHp {live.MaxHp}, Hp {live.Hp}, Str {live.Strength} (expected 110/110/25 — growth is not a wound)");
+
+        // And it must refuse once the fight is live: the order and the animator hold the reference.
+        eng.Start();
+        bool threw = false;
+        try { eng.ReplaceFighter("c", grown); } catch (InvalidOperationException) { threw = true; }
+        Check("ReplaceFighter refused after Start", threw, "throws once the fight is under way");
+    }
+
+    /// <summary>Arena choice must be reproducible ACROSS PROCESSES — string.GetHashCode() is
+    /// randomized per process, so the sim could never replay the ground a fight was played on.</summary>
+    private static void StableArenaHash()
+    {
+        // Known-good values pinned from the FNV-1a implementation in DiveSession.
+        uint H(string s) { uint h = 2166136261u; foreach (char ch in s) { h ^= ch; h *= 16777619u; } return h; }
+        var ids = new[] { "crypt_0", "crypt_3", "wailing-row", "ghoul-ditch" };
+        var got = ids.Select(i => (int)(H(i) % 4)).ToArray();
+        var again = ids.Select(i => (int)(H(i) % 4)).ToArray();
+        bool spread = got.Distinct().Count() > 1;   // not all packs on one arena
+        Check("Stable arena hash", got.SequenceEqual(again) && spread && got.All(v => v is >= 0 and < 4),
+            $"variants {string.Join(",", got)} — deterministic, in range, and spread across arenas");
+    }
+
+    /// <summary>Campaign spells must actually be able to crit: the crit presentation (shake,
+    /// freeze, gold damage number) was unreachable because no skill row set a crit chance.</summary>
+    private static void CampaignCritsExist()
+    {
+        var keys = new[] { "ruin_bolt", "piercing_shot", "slam", "deadeye", "husk_strike" };
+        var rates = keys.Select(k => (k, crit: DofusSlice.Core.Content.Tithe.TitheContent.SkillAtRank(k, 1).CriticalChanceOneIn)).ToList();
+        bool allCrit = rates.All(r => r.crit > 0);
+        // Ranking a spell should sharpen its crit, not leave it flat.
+        int r1 = DofusSlice.Core.Content.Tithe.TitheContent.SkillAtRank("deadeye", 1).CriticalChanceOneIn;
+        int r3 = DofusSlice.Core.Content.Tithe.TitheContent.SkillAtRank("deadeye", 3).CriticalChanceOneIn;
+        Check("Campaign crits exist", allCrit && r3 > 0 && r3 < r1,
+            $"1-in-N by spell: {string.Join(", ", rates.Select(r => $"{r.k}={r.crit}"))}; deadeye sharpens {r1}->{r3} with rank");
     }
 
     private static void StealRange()

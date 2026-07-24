@@ -207,6 +207,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _anim = new BattleAnimator(_proj)
         {
             Sfx = (name, vol) => _sfx.Play(name, vol),
+            // Who is the PLAYER driving right now? Their own actions skip the AI intent
+            // telegraphs — you don't need the game to re-explain the move you just made.
+            IsPiloted = id => _engine != null && !_autoTurn && AvatarTurn && _engine.Current.Id == id,
             // Corpses reuse the exact sheet, pixel height and tint the fighter was drawn with.
             CorpseSpriteOf = f =>
             {
@@ -761,7 +764,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (Pressed(Keys.D2)) _speed = 2f;
             if (Pressed(Keys.D3)) _speed = 4f;
         }
-        float sdt = dt * _speed * CombatPace;
+        // Fast-forward is for WATCHING. Your own turn always plays at base pace — otherwise a
+        // player who hit 4x to skip an AI turn keeps it through their own, where 8ms hit-stop
+        // and blink-fast damage numbers make their blows unreadable.
+        float sdt = dt * (piloting ? 1f : _speed) * CombatPace;
 
         _anim.Update(sdt, _engine.Fighters);
         _camera.Shake(_anim.ConsumeShake());
@@ -924,7 +930,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _hover = _proj.ScreenToCell(_camera.ScreenToWorld(new Vector2(_mouse.X, _mouse.Y)));
 
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        float sdt = _tithe ? dt * _speed * CombatPace : dt; // scale the sim clock by playback speed (base pace baked in)
+        // Speed scales WATCHED play only; your own turn always runs at base pace (see above).
+        float sdt = _tithe
+            ? dt * (!_placing && AvatarTurn && !_autoTurn ? 1f : _speed) * CombatPace
+            : dt;
         _time += dt;
         _anim.Update(sdt, _engine.Fighters); // animations keep playing even after the fight ends
 
@@ -1032,7 +1041,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             Policy.TakeTurn(_engine, _engine.Current);
             _enemyActed = true;
         }
-        else if (!_anim.IsBusy)
+        else if (!_anim.BlocksInput)
         {
             _engine.EndTurn();
         }
@@ -1061,7 +1070,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             MobBrain.TakeTurn(_engine, _engine.Current);
             _enemyActed = true;
         }
-        else if (!_anim.IsBusy)
+        else if (!_anim.BlocksInput)
         {
             _engine.EndTurn();
         }
@@ -1074,7 +1083,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _moveRange = _engine.MovementRange(hero);
 
         // Hold input and the turn clock while an action is animating.
-        if (_anim.IsBusy) return;
+        if (_anim.BlocksInput) return;
 
         // Turn timer: auto-end when it runs out.
         _turnClock -= dt;
@@ -1125,7 +1134,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void EndPlayerTurn()
     {
-        if (_anim.IsBusy) return;
+        if (_anim.BlocksInput) return;
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
@@ -1148,7 +1157,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         var me = _engine.Current;
         _moveRange = _engine.MovementRange(me);
 
-        if (_anim.IsBusy) return;            // input + clock hold while an action replays
+        if (_anim.BlocksInput) return;            // input + clock hold while an action replays
 
         _turnClock -= dt;
         if (_turnClock <= 0f) { _log.Add("the clock ends your turn."); EndAvatarTurn(); return; }
@@ -1203,7 +1212,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     private void EndAvatarTurn()
     {
-        if (_anim.IsBusy) return;
+        if (_anim.BlocksInput) return;
         _selectedSpell = -1;
         _engine.EndTurn();
         _enemyTimer = 0f;
@@ -1520,7 +1529,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // Watched turns show no piloting hints — but YOUR turn is a real Dofus turn.
         if (_tithe && !(AvatarTurn && !_autoTurn)) return;
 
-        if (_anim.IsBusy) return; // hide range hints mid-action
+        if (_anim.BlocksInput) return; // hide range hints mid-action
 
         var hero = _tithe ? _engine.Current : Hero;
         bool playerTurn = hero != null && (_tithe || _engine.Current.PlayerControlled);

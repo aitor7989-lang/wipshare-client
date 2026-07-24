@@ -53,8 +53,24 @@ public sealed class BattleAnimator
     /// an untinted corpse reads as a different creature). Null = defaults.</summary>
     public Func<Fighter, (string sprite, float heightPx, Color tint)>? CorpseSpriteOf { get; set; }
 
-    /// <summary>True while a blocking animation or death fade is still playing.</summary>
+    /// <summary>True while a blocking animation or death fade is still playing. Use this to hold
+    /// the END of a fight (the outcome/loot screens must wait for the last blow to land).</summary>
     public bool IsBusy => _queue.Count > 0 || _corpses.Any(c => !c.Done);
+
+    /// <summary>
+    /// True while an animation the player must not act through is playing — the queue ONLY.
+    /// Deliberately excludes corpse hold+fade: a corpse is decoration, and gating input on it
+    /// meant killing something bought the longest input lockout in the game (~2s) as the reward
+    /// for the best thing you can do. Turn flow and input gate on this; outcome screens on IsBusy.
+    /// </summary>
+    public bool BlocksInput => _queue.Count > 0;
+
+    /// <summary>Is this fighter the one the PLAYER is piloting right now? Intent telegraphs exist
+    /// to explain an AI's plan; replaying them for your own clicks just adds latency to your turn.
+    /// Null (unwired) means "treat everyone as AI" — the old behavior.</summary>
+    public Func<string, bool>? IsPiloted { get; set; }
+
+    private bool Piloted(string id) => IsPiloted?.Invoke(id) ?? false;
 
     public void Reset(IEnumerable<Fighter> fighters)
     {
@@ -84,7 +100,9 @@ public sealed class BattleAnimator
         switch (e)
         {
             case FighterMoved m:
-                _queue.Enqueue(new PathTelegraph(this, m.Path.ToArray(), 0.4f));
+                // You chose this path and watched the preview while choosing it — don't re-shade it.
+                if (!Piloted(m.Fighter.Id))
+                    _queue.Enqueue(new PathTelegraph(this, m.Path.ToArray(), 0.4f));
                 _queue.Enqueue(new MoveAnim(m.Fighter.Id, ToPoints(m.Path), 0.15f, this));
                 if (m.MpSpent > 0)   // the walk's price floats over the walker (UX pass)
                     _queue.Enqueue(new CostFloat(this, m.Fighter.Id, $"-{m.MpSpent} MP",
@@ -99,7 +117,13 @@ public sealed class BattleAnimator
                 break;
             case SpellCast c:
                 _lastCasterId = c.Caster.Id;   // so the struck fighter recoils away from this blow
-                _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target, 0.85f));
+                // A telegraph announces an AI's intent. For your own cast it is pure latency —
+                // keep a short beat so the blow still reads as caused, then get out of the way.
+                _queue.Enqueue(new CastTelegraph(this, c.Caster.Id, c.Spell, c.Target,
+                    Piloted(c.Caster.Id) ? 0.12f : 0.85f,
+                    // The caster's LIVE reach — range buffs/theft move it, and shading the
+                    // authored range would paint cells the engine would refuse.
+                    Math.Max(c.Spell.MinRange, c.Spell.MaxRange + c.Caster.RangeBonus)));
                 if (c.Spell.ApCost > 0)   // the cast's price floats over the caster (UX pass)
                     _queue.Enqueue(new CostFloat(this, c.Caster.Id, $"-{c.Spell.ApCost} AP",
                         DofusSlice.Game.Rendering.Mono.ApInk));
@@ -868,10 +892,12 @@ internal sealed class CastTelegraph : IAnim
     private readonly SpellDef _spell;
     private readonly CellCoord _target;
     private readonly float _dur;
+    private readonly int _maxRange;   // EFFECTIVE reach (range buffs/debuffs applied), not the authored one
     private float _t;
 
-    public CastTelegraph(BattleAnimator a, string id, SpellDef spell, CellCoord target, float dur)
-    { _a = a; _id = id; _spell = spell; _target = target; _dur = dur; }
+    public CastTelegraph(BattleAnimator a, string id, SpellDef spell, CellCoord target, float dur,
+        int maxRange)
+    { _a = a; _id = id; _spell = spell; _target = target; _dur = dur; _maxRange = maxRange; }
 
     public bool Done => _t >= _dur;
     public string? ActorId => _id;
@@ -887,11 +913,11 @@ internal sealed class CastTelegraph : IAnim
             _a.Sfx?.Invoke("click", 0.5f);
         }
         var from = _a.DisplayCellOf(_id);
-        for (int dx = -_spell.MaxRange; dx <= _spell.MaxRange; dx++)
-            for (int dy = -_spell.MaxRange; dy <= _spell.MaxRange; dy++)
+        for (int dx = -_maxRange; dx <= _maxRange; dx++)
+            for (int dy = -_maxRange; dy <= _maxRange; dy++)
             {
                 int d = Math.Abs(dx) + Math.Abs(dy);
-                if (d < _spell.MinRange || d > _spell.MaxRange) continue;
+                if (d < _spell.MinRange || d > _maxRange) continue;
                 if (_spell.LineOnly && dx != 0 && dy != 0) continue;
                 _a.AddTelegraphCell(new CellCoord(from.X + dx, from.Y + dy),
                     (DofusSlice.Game.Rendering.Mono.On ? DofusSlice.Game.Rendering.Mono.Dim

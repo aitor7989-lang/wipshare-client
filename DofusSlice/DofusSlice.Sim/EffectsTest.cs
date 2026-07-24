@@ -18,6 +18,8 @@ public static class EffectsTest
         Pull();
         Swap();
         StealAp();
+        AiUsesRiderSpells();
+        AiRefusesToBuffEnemies();
         ReplaceFighterBeforeStart();
         StableArenaHash();
         CampaignCritsExist();
@@ -315,6 +317,38 @@ public static class EffectsTest
 
     /// <summary>The placement-phase progression fix: a Fighter's stats are an init-only snapshot,
     /// so points spent while placing only reach the fight if the object is REPLACED before Start().</summary>
+    /// <summary>The AI must value a spell's PAYLOAD, not just its damage. Given a bigger plain
+    /// hit and a smaller one carrying poison + vulnerable, the old policy ordered damage spells by
+    /// AP cost and took the first castable one — so the rider spell was never chosen on purpose.</summary>
+    private static void AiUsesRiderSpells()
+    {
+        var plain = Spell(50, "Plain", 4, 1, 8, SpellEffect.Damage(Element.Neutral, 11, 16));
+        var rider = Spell(51, "Rider", 3, 1, 8,
+            SpellEffect.Damage(Element.Neutral, 6, 9),
+            SpellEffect.ApplyStatus(StatusKind.Poison, 4, 2),
+            SpellEffect.ApplyStatus(StatusKind.Vulnerable, 15, 2));
+        var c = Caster(new(2, 4), plain, rider);
+        var t = Foe("t", new(6, 4));
+        var eng = Engine(c, t);
+        DofusSlice.Core.AI.Policy.TakeTurn(eng, c);
+        bool poisoned = t.Statuses.Any(s => s.Kind == StatusKind.Poison);
+        bool vuln = t.Statuses.Any(s => s.Kind == StatusKind.Vulnerable);
+        Check("AI values rider spells", poisoned && vuln,
+            $"after one AI turn the victim carries poison={poisoned}, vulnerable={vuln} (the rider spell was chosen, not just the bigger hit)");
+    }
+
+    /// <summary>...and it must never aim a BUFF at an enemy just because the spell is castable.</summary>
+    private static void AiRefusesToBuffEnemies()
+    {
+        var gift = Spell(52, "Gift", 2, 1, 8, SpellEffect.ApplyStatus(StatusKind.DamageBuff, 30, 3));
+        var c = Caster(new(2, 4), gift);
+        var t = Foe("t", new(6, 4));
+        var eng = Engine(c, t);
+        DofusSlice.Core.AI.Policy.TakeTurn(eng, c);
+        Check("AI refuses to buff enemies", !t.Statuses.Any(s => s.Kind == StatusKind.DamageBuff),
+            "an enemy-targeted damage buff was never cast (scored negative)");
+    }
+
     private static void ReplaceFighterBeforeStart()
     {
         var spell = Spell(40, "Poke", 2, 1, 8, SpellEffect.Damage(Element.Neutral, 5, 5));

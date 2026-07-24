@@ -395,26 +395,88 @@ public static class Policy
     /// wasted overkilling a near-dead soft target while a real threat survives. Failing a kill,
     /// chip the softest. Each attacker re-evaluates per cast, so focus-fire stays adaptive.
     /// </summary>
+    // What one point of a stolen/denied resource is worth in damage-equivalent points. These are
+    // the knobs that decide whether a debuff rider beats a bigger swing.
+    private const int ApTempo = 6, MpTempo = 3, RootValue = 8, RangeTempo = 2;
+
+    /// <summary>
+    /// The worth of one status landing on this victim, in damage-equivalent points. Anything that
+    /// would HELP them scores negative so the AI can never gift an enemy a buff.
+    /// </summary>
+    private static int StatusValueOn(Fighter victim, SpellEffect e, int directDamage)
+    {
+        int turns = Math.Max(1, e.Max);
+        int v = e.Status switch
+        {
+            StatusKind.Poison => e.Min * turns,
+            StatusKind.MpDrain => e.Min * turns * MpTempo,
+            // Pinning matters most against something that wants to close or reposition.
+            StatusKind.Rooted => victim.CurrentMp > 0 ? RootValue : RootValue / 2,
+            StatusKind.DamageDebuff => e.Min * turns / 4,
+            // Breaking defense is worth a share of what will actually be aimed at them next.
+            StatusKind.Vulnerable => e.Min * turns * Math.Max(directDamage, 10) / 100,
+            StatusKind.RangeDebuff => victim.PreferredRangeMax > 1 ? e.Min * turns * RangeTempo : 0,
+            StatusKind.Shield or StatusKind.Regen or StatusKind.DamageBuff
+                or StatusKind.DefenseBuff or StatusKind.RangeBuff => -(e.Min * turns),
+            _ => 0,
+        };
+        // Statuses REFRESH rather than stack (CombatEngine.ApplyStatusEffect), so re-applying one
+        // the victim already carries buys far less — this is what stops debuff spam.
+        if (v > 0 && victim.Statuses.Any(s => s.Kind == e.Status)) v /= 4;
+        return v;
+    }
+
+    /// <summary>What casting this spell at this enemy is worth, damage plus payload.</summary>
+    private static int SpellScoreAgainst(CombatEngine engine, Fighter self, Fighter victim, SpellDef spell)
+    {
+        var est = engine.EstimateDamage(self, spell, victim.Pos);
+        int direct = est.HasValue ? (est.Value.min + est.Value.max) / 2 : 0;
+        int score = direct;
+        foreach (var e in spell.Effects)
+            score += e.Kind switch
+            {
+                EffectKind.StealAp => e.Min * ApTempo,
+                EffectKind.StealMp => e.Min * MpTempo,
+                EffectKind.StealRange => e.Min * RangeTempo * (victim.PreferredRangeMax > 1 ? 2 : 1),
+                EffectKind.ApplyStatus => StatusValueOn(victim, e, direct),
+                // Aimed at an enemy these are pure charity (the engine no-ops most of them, but
+                // scoring them negative keeps the AI from ever wasting the AP).
+                EffectKind.Heal => -(e.Min + e.Max) / 2,
+                EffectKind.GrantAp => -e.Min * ApTempo,
+                _ => 0,
+            };
+        return score;
+    }
+
+    /// <summary>
+    /// Pick the single best (spell, target) this unit can cast right now. The caller's turn loop
+    /// runs this repeatedly, so a whole AP budget gets spent as a sequence.
+    /// Previously this only looked at damage spells, ordered them by AP cost and took the FIRST
+    /// castable one — so a cheap spell only ever fired when the expensive ones were on cooldown,
+    /// and every rider (poison, root, vulnerable, resource theft) was scored as zero and never
+    /// chosen on purpose.
+    /// </summary>
     private static bool TryShootBest(CombatEngine engine, Fighter self)
     {
-        var spells = DamageSpells(self).OrderByDescending(s => s.ApCost).ToList();
-        Fighter? killE = null; SpellDef? killS = null; int killHp = -1;
-        Fighter? chipE = null; SpellDef? chipS = null; int chipHp = int.MaxValue;
+        Fighter? bestE = null; SpellDef? bestS = null;
+        // Ranked lexicographically: land a kill first; among kills drop the BIGGEST thing you can
+        // (and spend the least AP doing it); otherwise take the highest-value cast.
+        (int kill, int primary, int secondary) best = (-1, int.MinValue, int.MinValue);
 
         foreach (var enemy in Enemies(engine, self))
-            foreach (var spell in spells)
+            foreach (var spell in self.Spells)
             {
                 if (!engine.CanCast(self, spell, enemy.Pos, out _)) continue;
-                if (enemy.Hp < chipHp) { chipE = enemy; chipS = spell; chipHp = enemy.Hp; }
                 var est = engine.EstimateDamage(self, spell, enemy.Pos);
-                if (est.HasValue && est.Value.max >= enemy.Hp && enemy.Hp > killHp)
-                    { killE = enemy; killS = spell; killHp = enemy.Hp; }
-                break; // strongest castable spell for this enemy
+                bool kills = est.HasValue && est.Value.max >= enemy.Hp;
+                int score = SpellScoreAgainst(engine, self, enemy, spell);
+                if (!kills && score <= 0) continue;   // never gift a buff or burn AP for nothing
+
+                var rank = kills ? (1, enemy.Hp, -spell.ApCost) : (0, score, 0);
+                if (rank.CompareTo(best) > 0) { best = rank; bestE = enemy; bestS = spell; }
             }
 
-        if (killE != null) return engine.TryCast(self, killS!, killE.Pos);
-        if (chipE != null) return engine.TryCast(self, chipS!, chipE.Pos);
-        return false;
+        return bestE != null && engine.TryCast(self, bestS!, bestE.Pos);
     }
 
     private static int DistToNearestEnemy(CombatEngine engine, Fighter self, CellCoord from) =>

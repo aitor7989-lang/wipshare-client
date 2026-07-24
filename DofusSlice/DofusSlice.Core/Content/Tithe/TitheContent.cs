@@ -569,8 +569,14 @@ public static class TitheContent
 
     /// <summary>The Crypt's linear room chain (Bible §6.8): escalating packs, the last a boss room.</summary>
     public sealed record CryptRoom(string Name, string[] Comp, bool Boss, int Grade = 1);
-    public static IReadOnlyList<CryptRoom> CryptRooms() =>
-        JsonSerializer.Deserialize<CryptRoom[]>(TitheTables.CryptJson, J)!;
+    public static IReadOnlyList<CryptRoom> CryptRooms(int sextonsFelled = 0)
+    {
+        var rooms = JsonSerializer.Deserialize<CryptRoom[]>(TitheTables.CryptJson, J)!;
+        // The boss used to respawn identical forever: same rooms, same grades, same rewards, so
+        // felling the Sexton meant nothing. Each victory thickens the dark below by one grade.
+        if (sextonsFelled <= 0) return rooms;
+        return rooms.Select(r => r with { Grade = r.Grade + sextonsFelled }).ToArray();
+    }
 
     /// <summary>Level-1 max HP of a class (baseHp + starting Vitality), for UI and defaults.</summary>
     public static int ClassMaxHp(string classId) =>

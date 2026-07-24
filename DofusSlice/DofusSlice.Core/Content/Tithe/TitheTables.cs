@@ -392,7 +392,7 @@ public static class TitheTables
       "draught": 80,
       "hireBasePerLevel": 45,
       "essenceSell": 60,   "essenceBuy": 300,   "essenceRemoval": 350,   "vetFee": 60,
-      "titheEveryNDives": 3, "titheBase": 100, "titheGrowth": 80
+      "titheEveryNDives": 3, "titheBase": 100, "titheGrowth": 40
     }
     """;
 

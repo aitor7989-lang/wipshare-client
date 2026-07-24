@@ -300,9 +300,16 @@ public sealed class Campaign
     /// never re-gear, Bible §6.6.9). Duplicates are ignored in the slice — each Adventurer piece is
     /// unique. Returns false if the piece is already owned or unknown.
     /// </summary>
+    /// <summary>Stones paid for a drop you already own — the chase must never dry up.</summary>
+    public const int SalvageStones = 45;
+
     public bool AddGear(string itemId)
     {
-        if (TitheContent.Item(itemId) == null || OwnsGear(itemId)) return false;
+        if (TitheContent.Item(itemId) == null) return false;
+        // A duplicate used to be dropped on the floor. With only 14 pieces in the game that meant
+        // a finished collection turned the Sexton's GUARANTEED drop into a guaranteed no-op —
+        // the reward for the hardest fight was nothing. Duplicates are salvaged for stones.
+        if (OwnsGear(itemId)) { Stones += SalvageStones; return true; }
         Stash.Add(itemId);
         AutoEquipAvatar();
         return true;
@@ -366,15 +373,43 @@ public sealed class Campaign
     /// <summary>The tithe falls due every Nth return to the city; the amount escalates.</summary>
     public bool TitheDue => Dives > 0 && Dives % TitheContent.Prices.TitheEveryNDives == 0;
 
-    public int TitheAmount =>
-        TitheContent.Prices.TitheBase + TitheContent.Prices.TitheGrowth * TithesPaid + TitheDebt;
+    /// <summary>The Keeper's cut stops growing after this many payments. Without a plateau the
+    /// tithe escalates forever against a flat dive income, so failure stops being a risk and
+    /// becomes arithmetic — measured at 100% of runs dead by dive ~14.</summary>
+    public const int TitheGrowthSteps = 4;
 
-    /// <summary>Pay what's due if able, else it rolls into the debt ledger (slice behaviour).</summary>
+    /// <summary>What the Keeper wants this time. NOTE the missing TitheDebt term: rolling the
+    /// unpaid amount into the next bill compounded a single early miss into certain death
+    /// (100 -> 240 -> 420 -> collected). The STRIKE counter is the pressure now; the debt is a
+    /// ledger the UI shames you with, not a spiral.</summary>
+    public int TitheAmount =>
+        TitheContent.Prices.TitheBase
+        + TitheContent.Prices.TitheGrowth * Math.Min(TithesPaid, TitheGrowthSteps);
+
+    /// <summary>Consecutive tithes missed. The game is NAMED for this debt and it had no teeth:
+    /// an unpaid tithe only sized the next bill, forever, so nothing in the campaign could ever
+    /// actually fail. Miss <see cref="TitheGrace"/> in a row and the Keeper collects in person.</summary>
+    public int TitheStrikes { get; set; }
+
+    /// <summary>How many consecutive misses the Keeper tolerates before taking everything.</summary>
+    public const int TitheGrace = 3;
+
+    /// <summary>Missed tithes remaining before the campaign ends (for the UI to warn with).</summary>
+    public int TitheWarningsLeft => Math.Max(0, TitheGrace - TitheStrikes);
+
+    /// <summary>Pay what's due if able, else it rolls into the debt ledger and counts as a strike.</summary>
     public bool PayTithe()
     {
         int due = TitheAmount;
-        if (Stones >= due) { Stones -= due; TitheDebt = 0; TithesPaid++; return true; }
-        TitheDebt = due; // unpaid → escalating ledger
+        if (Stones >= due) { Stones -= due; TitheDebt = 0; TithesPaid++; TitheStrikes = 0; return true; }
+        TitheDebt = due;      // unpaid → escalating ledger
+        TitheStrikes++;
+        if (TitheStrikes >= TitheGrace) Crew.Clear();   // the Keeper collects — campaign over
         return false;
     }
+
+    /// <summary>The Sexton has been put down this many times. Each felling is a real ending: it
+    /// banks a victory and the next Crypt comes back harder, so the boss is a climax and not a
+    /// respawning checkpoint.</summary>
+    public int SextonsFelled { get; set; }
 }

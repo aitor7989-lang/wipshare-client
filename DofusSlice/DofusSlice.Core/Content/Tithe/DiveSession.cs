@@ -302,9 +302,14 @@ public sealed class DiveSession
                 cu.GainXp(u.XpGained);
                 if (u.Died)
                 {
-                    // Downed MERCS die for good. A downed AVATAR is dragged out: wounded,
-                    // at death's door, the dive over — but the campaign continues.
+                    // Downed MERCS die for good. A downed AVATAR is dragged out of the YARD:
+                    // wounded, at death's door, the dive over — but the campaign continues.
+                    // THE CRYPT IS DIFFERENT. It is opt-in, it is deep, it gives you a rest beat
+                    // and a boss, and nothing drags you out of it: falling there ends the run.
+                    // Without this nothing in the campaign could fail (0 wipes in 3,200 sim dives).
                     if (!cu.IsAvatar) { _campaign.Crew.Remove(cu); lost.Add(cu.Name); continue; }
+                    if (pack.Def.Id.StartsWith("crypt_", StringComparison.Ordinal))
+                    { _campaign.Crew.Remove(cu); lost.Add(cu.Name); avatarDown = true; continue; }
                     cu.Wounded = true; cu.CurrentHp = 1; wounded.Add(cu.Name); avatarDown = true;
                     continue;
                 }

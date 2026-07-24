@@ -75,6 +75,9 @@ public static class CampaignSim
         {
             int due = c.TitheAmount;
             log.Add(c.PayTithe() ? $"paid the tithe ({due} st)" : $"COULD NOT PAY the tithe ({due} st) — debt grows");
+            // Missing the tithe enough times ends the campaign outright: everything below this
+            // point assumes a living leader (c.Avatar!), so stop preparing a crew that is gone.
+            if (c.Over) { if (verbose) foreach (var l in log) Console.WriteLine("    " + l); return; }
         }
 
         // 2. Mend the wounded while a Draught is affordable (leave a working reserve).

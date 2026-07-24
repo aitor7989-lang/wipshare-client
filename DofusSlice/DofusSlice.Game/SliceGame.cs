@@ -730,7 +730,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         int lvl = _campaign.Avatar?.Level ?? 1;
         if (lvl < CryptLevel) { _yardMsg = $"The crew is too green — reach level {CryptLevel} to enter the Crypt."; _yardMsgTimer = 3f; return; }
 
-        _cryptRooms = TitheContent.CryptRooms();
+        _cryptRooms = TitheContent.CryptRooms(_campaign.SextonsFelled);
         _cryptRun = true;
         _cryptRoom = 0;
         BeginCryptRoom();
@@ -860,6 +860,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             if (_cryptRooms[_cryptRoom].Boss)
             {
                 _cryptCleared = true; _cryptRun = false; // the altar tears the crew out of the Crypt
+                _campaign.SextonsFelled++;               // a real victory, banked and escalating
+                _log.Add(_campaign.SextonsFelled == 1
+                    ? "THE SEXTON FALLS. the crypt will not forgive a second visit."
+                    : $"THE SEXTON FALLS AGAIN ({_campaign.SextonsFelled}). the dark below thickens.");
                 _scene = Scene.Graveyard; SetupView(_graveMap);
             }
             else { _cryptRoom++; EnterCryptRest(); }      // catch your breath before the next sealing door
@@ -2974,6 +2978,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // service you couldn't afford read as a greyed button with no stated reason.
         _font.Draw(_sb, $"{_campaign.Stones} ESSENCE STONES", 16, 30, 2,
             _campaign.Stones > 0 ? Mono.Ink : Mono.Danger);
+        // Failure must be telegraphed, never a surprise: the Keeper's patience, counted down.
+        if (_campaign.TitheStrikes > 0)
+            _font.Draw(_sb, $"THE KEEPER IS OWED {_campaign.TitheDebt} — "
+                + $"{_campaign.TitheWarningsLeft} MISS(ES) FROM COLLECTION", 16, 52, 1, Mono.Danger);
+        else if (_campaign.SextonsFelled > 0)
+            _font.Draw(_sb, $"SEXTONS FELLED: {_campaign.SextonsFelled}  ·  THE CRYPT RETURNS HARDER",
+                16, 52, 1, Mono.Dim);
         if (_campaign.Crew.Count == 1) // solo start: point the player at their first decision
             _font.Draw(_sb, "YOU DIVE ALONE — THE HIRING POST SELLS COMPANY", 16, 44, 1, (Mono.On ? Mono.Ink : new Color(240, 208, 120)));
         DrawCampaignBand();

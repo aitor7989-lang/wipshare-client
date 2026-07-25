@@ -247,7 +247,7 @@ plus procedurally-built textures.
   must appear in a release has to be generated. Glyph sizes are tuned to the *bloom*, not to
   taste: 16px art pixels dissolve to grey under it and 8px lobes merge into a square, so 12x12
   with a 2x2-block dither is the size that survives. Re-tune if the bloom changes.
-- **`--res=WxH` (window size) vs the VIRTUAL screen.** `ScreenW/ScreenH` (1280x760) are still
+- **`--res=WxH` (window size) vs the VIRTUAL screen.** `ScreenW/ScreenH` (1280x960, 4:3) are still
   compile-time constants and every panel lays out against them with fixed pixel offsets. The
   window is a separate thing: the finished picture is composed at the virtual size and then
   **letterboxed** into whatever `--res=` asks for (`SliceGame.Letterbox` -> `CrtPass.Output`).
@@ -257,6 +257,14 @@ plus procedurally-built textures.
   letterbox as well as the curve, so picking still works when scaled. Text is the limit, not the
   layout: at 480 wide the scale is 0.375 and the 5x7 font lands on ~2x3 px, i.e. unreadable.
   Below roughly 900 wide the game is a picture, not something you can read.
+- **The virtual screen is 4:3 (1280x960)** — the shape of the tube the renderer imitates. The
+  WIDTH was deliberately left at 1280 when moving off 1280x760: every panel is placed with fixed
+  x offsets, so growing only the height leaves horizontal layout untouched and hands the extra
+  200px to the board. The one thing that had to change is `HudTop`, which was a hardcoded 600;
+  it is now `ScreenH - HudBandH` so the bottom bar keeps a fixed 160px height instead of the
+  screen growing the HUD. Anything new that anchors to the bottom must derive from `ScreenH` for
+  the same reason. Note the extra height is mostly padding around the board, not more board: the
+  maps are a fixed size and the camera centres them.
 - **Tube curvature** (`CrtPass.Curve`, `--curve=`, default 0.07, 0 = flat panel). No shader
   pipeline exists here, so the warp is geometry: a 24x24 grid of quads pulled toward the centre
   by `1 - Curve*r^2/2` and drawn through the stock `BasicEffect`. Corners move twice as far as

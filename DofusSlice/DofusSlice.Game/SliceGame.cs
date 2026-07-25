@@ -83,7 +83,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     // picture is scaled into it. Making ~200 layout sites responsive instead would be a
     // different project, and a fixed-aspect picture is the right answer for this art anyway.
     private const int ScreenW = 1280;
-    private const int ScreenH = 760;
+    // 1280x960 is exactly 4:3 — the shape of the tube this thing is pretending to be. The
+    // width is deliberately unchanged: every panel is placed with fixed x offsets against
+    // 1280, so growing only the height leaves horizontal layout untouched and hands the extra
+    // 200px to the board.
+    private const int ScreenH = 960;
 
     private static int WindowW = ScreenW;
     private static int WindowH = ScreenH;
@@ -105,7 +109,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     }
     private const int TileW = 64;
     private const int TileH = 32;
-    private const int HudTop = 600;
+    /// <summary>The bottom bar's height. Fixed, so the HUD does not grow with the screen —
+    /// only the board above it does.</summary>
+    private const int HudBandH = 160;
+
+    /// <summary>Where the bottom bar starts. Derived, not a magic 600: it has to track the
+    /// screen height or a taller screen just makes a taller HUD.</summary>
+    private const int HudTop = ScreenH - HudBandH;
     private const float EnemyStepDelay = 0.55f;
 
     private readonly GraphicsDeviceManager _graphics;
@@ -425,7 +435,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         else _openNpc = -1;
     }
 
-    // Six services fit ABOVE HudTop (600): the last is 552..596. The Temple can offer six
+    // Six services fit ABOVE HudTop: the last is 552..596. The Temple can offer six
     // (treat + two teaches + shelf + surgery + vet), and the old start of 344 put that sixth
     // button at 604..648 — past the panel's own bottom edge and into the band's dead space.
     private static Rectangle PanelButton(int i) => new(360, 292 + i * 52, 560, 44);

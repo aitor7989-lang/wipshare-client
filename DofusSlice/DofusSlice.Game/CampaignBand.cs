@@ -78,7 +78,8 @@ public partial class SliceGame
 
         var plate = new Rectangle(350, HudTop + 6, 580, 106);
         _prim.FillRoundRect(_sb, plate, Mono.RadPanel, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
-        _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Mono.On ? Mono.Dim : Ew.Outline);
+        if (Mono.On) _prim.BracketRect(_sb, plate, Mono.Ink * 0.8f);
+        else _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Ew.Outline);
         _font.Draw(_sb, Trunc($"{a.Name.ToUpperInvariant()} — LEADER", 22), plate.X + 10, plate.Y + 5, 1, Ew.Ink);
 
         int hp = Math.Clamp(a.CurrentHp ?? s.MaxHp, 0, s.MaxHp);

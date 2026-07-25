@@ -16,7 +16,7 @@ public static class Mono
 
     public static readonly Color Bg = new(8, 8, 8);            // the void / screen clear
     public static readonly Color Panel = new(12, 12, 12);      // window body
-    public static readonly Color Ink = new(236, 236, 230);     // primary lines + text
+    public static readonly Color Ink = new(240, 233, 214);     // primary lines + text (warm bone)
     public static readonly Color Dim = new(122, 122, 118);     // secondary text / soft lines
     public static readonly Color Faint = new(52, 52, 50);      // hairlines, grid seams
     public static readonly Color Danger = new(224, 60, 48);    // THE accent: enemies, damage, alarms
@@ -60,12 +60,12 @@ public static class Mono
     public const int RadSlot = 4;
     public const int RadBar = 2;
 
-    /// <summary>A 1-bit frame: near-black fill, crisp 1px border, stepped corners.</summary>
+    /// <summary>A 1-bit frame: near-black fill, hairline border, ornate corner brackets.</summary>
     public static void Frame(SpriteBatch sb, Primitives prim, Rectangle r,
         bool emphasis = false, float fillAlpha = 0.94f)
     {
         prim.FillRoundRect(sb, r, RadPanel, Panel * fillAlpha);
-        prim.StrokeRoundRect(sb, r, RadPanel, 1, emphasis ? Ink : Dim);
+        prim.BracketRect(sb, r, emphasis ? Ink : Ink * 0.8f);
     }
 
     /// <summary>A 1-bit button: border box; hover INVERTS (white fill, black text expected).</summary>

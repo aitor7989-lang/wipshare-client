@@ -2501,7 +2501,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // grid right, the level strip beneath — and the TEAM on the right edge, Dofus-style.
         var plate = new Rectangle(350, HudTop + 6, 580, 106);
         _prim.FillRoundRect(_sb, plate, Mono.RadPanel, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
-        _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Mono.On ? Mono.Dim : Ew.Outline);
+        if (Mono.On) _prim.BracketRect(_sb, plate, Mono.Ink * 0.8f);
+        else _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Ew.Outline);
         _font.Draw(_sb, Trunc(cur.Name.ToUpperInvariant(), 16), plate.X + 10, plate.Y + 5, 1,
             cur.Team == Team.Player ? Ew.Ink : Ew.Danger);
 

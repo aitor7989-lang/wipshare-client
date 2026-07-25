@@ -179,6 +179,53 @@ public sealed class Primitives
         return _cornerEdge[(radius, thickness)] = tex;
     }
 
+    // ---- Bracketed frames ------------------------------------------------------------
+    // The dungeon-UI signature: a hairline frame that thickens into an ornate L at each
+    // corner, with a square notch punched out of the elbow. Same corner-mask + flip path
+    // as the rounded corners, just a different mask — all of it on the 2px grid.
+
+    private readonly Dictionary<(int, int), Texture2D> _cornerBracket = new();
+
+    private Texture2D CornerBracket(int arm, int cell)
+    {
+        if (_cornerBracket.TryGetValue((arm, cell), out var cached)) return cached;
+        int n = arm * cell;
+        var tex = new Texture2D(_gd, n, n);
+        var data = new Color[n * n];
+        void Rect(int cx, int cy, int cw, int ch, bool on)
+        {
+            for (int y = cy * cell; y < (cy + ch) * cell && y < n; y++)
+                for (int x = cx * cell; x < (cx + cw) * cell && x < n; x++)
+                    data[y * n + x] = on ? Color.White : Color.Transparent;
+        }
+        Rect(0, 0, arm, 1, true);        // the outer arms, one cell thick
+        Rect(0, 0, 1, arm, true);
+        Rect(2, 2, arm - 2, 1, true);    // the inner arms, set in by a cell of black
+        Rect(2, 2, 1, arm - 2, true);
+        Rect(2, 2, 1, 1, false);         // and the notch punched from the elbow
+        tex.SetData(data);
+        return _cornerBracket[(arm, cell)] = tex;
+    }
+
+    /// <summary>A hairline frame with an ornate bracket at each corner. <paramref name="arm"/>
+    /// is the bracket length in grid cells; it shrinks on small rects so a short panel keeps a
+    /// frame rather than four brackets meeting in the middle.</summary>
+    public void BracketRect(SpriteBatch sb, Rectangle r, Color color, int arm = 0, int thickness = 1)
+    {
+        int cell = CornerStep;
+        // Scale the bracket with the panel: a fixed arm reads as a hairline tick on a wide
+        // HUD and swallows a small tooltip. Roughly a sixth of the shorter side, as in the
+        // reference art, then clamped so two brackets can never meet.
+        if (arm <= 0) arm = Math.Clamp(Math.Min(r.Width, r.Height) / (cell * 6), 4, 14);
+        arm = Math.Min(arm, Math.Min(r.Width, r.Height) / (2 * cell) - 1);
+        if (arm < 4) { StrokeRect(sb, r, thickness, color); return; }
+        // The hairline runs the full perimeter at half weight; the brackets sit over its
+        // corners at full weight. That hierarchy is what makes the corners read as ornament
+        // instead of the frame just being thick.
+        StrokeRect(sb, r, thickness, color * 0.55f);
+        Corners(sb, r, CornerBracket(arm, cell), arm * cell, color);
+    }
+
     /// <summary>Clamp a requested radius so it can never eat more than a third of the smaller
     /// side — a 10px-tall bar keeps its shape instead of becoming a lozenge.</summary>
     public static int FitRadius(Rectangle r, int radius)

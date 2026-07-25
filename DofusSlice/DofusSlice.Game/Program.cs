@@ -38,7 +38,19 @@ try
         "soft" => DofusSlice.Game.Rendering.CrtLevel.Soft,
         _ => DofusSlice.Game.Rendering.CrtLevel.Soft,
     };
-    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo) { Crt = crt };
+    // --pixels=off|soft|hard picks how far the fat-pixel grid reaches (F7 cycles it in-game).
+    var pixArg = args.FirstOrDefault(a => a.StartsWith("--pixels=", StringComparison.OrdinalIgnoreCase));
+    var pixels = pixArg?.Split('=')[1].ToLowerInvariant() switch
+    {
+        "off" => DofusSlice.Game.Rendering.PixelMode.Off,
+        "hard" => DofusSlice.Game.Rendering.PixelMode.Hard,
+        _ => DofusSlice.Game.Rendering.PixelMode.Soft,
+    };
+    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo)
+    {
+        Crt = crt,
+        Pixels = pixels,
+    };
     game.Run();
 }
 catch (Exception ex)

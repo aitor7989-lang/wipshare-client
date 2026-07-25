@@ -172,7 +172,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _sb = new SpriteBatch(GraphicsDevice);
-        _crt = new CrtPass(GraphicsDevice) { Level = Crt };
+        _crt = new CrtPass(GraphicsDevice) { Level = Crt, Pixels = Pixels, PixelSize = WorldPx };
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
@@ -930,6 +930,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // tracking band drifts at the same rate wherever you are.
         _crtTime += (float)gameTime.ElapsedGameTime.TotalSeconds;
         if (Pressed(Keys.F8)) { _crt.Cycle(); _log.Add($"tube: {_crt.LevelName}"); _sfx.Play("click", 0.4f); }
+        if (Pressed(Keys.F7)) { _crt.CyclePixels(); _log.Add($"fat pixels: {_crt.PixelName}"); _sfx.Play("click", 0.4f); }
 
         // F10: the UI-limits debug scene (the Dofus screenshot rebuilt from the oldUI theme).
         // It needs the theme layer, which sleeps under Mono — the key is inert there.
@@ -1323,6 +1324,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     /// <summary>Starting tube level, settable before Run() (see --crt=). F8 cycles it live.</summary>
     public CrtLevel Crt { get; init; } = CrtLevel.Soft;
+
+    /// <summary>Starting fat-pixel reach (see --pixels=). F7 cycles it live.</summary>
+    public PixelMode Pixels { get; init; } = PixelMode.Soft;
 
     private void BeginWorld()
     {

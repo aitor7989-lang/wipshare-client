@@ -8,6 +8,20 @@ namespace DofusSlice.Game.Rendering;
 public enum CrtLevel { Off = 0, Soft = 1, Full = 2 }
 
 /// <summary>
+/// How far the fat-pixel grid reaches. The world is always on it (it renders at 1/WorldPx and is
+/// point-upscaled); the question is what happens to the HUD, which is drawn at full res on top.
+/// <list type="bullet">
+/// <item>OFF — HUD stays at native resolution, as it has always been.</item>
+/// <item>SOFT — HUD chrome (icons, borders, bars, slots) wears the grid, but the quantized image
+/// is cross-faded with the original so the 5x7 font keeps a readable core.</item>
+/// <item>HARD — the whole screen is quantized, no exceptions. Maximally cohesive; the 1px font
+/// cannot survive it, because seven glyph rows on a 2px grid is 14 screen pixels and the panels
+/// are laid out for 7.</item>
+/// </list>
+/// </summary>
+public enum PixelMode { Off = 0, Soft = 1, Hard = 2 }
+
+/// <summary>
 /// A shader-free CRT/VHS post pass.
 ///
 /// This project has no content pipeline — no .mgcb, no .fx, nothing to compile — and it runs on
@@ -30,13 +44,25 @@ public sealed class CrtPass : IDisposable
     private readonly Texture2D _band;    // 1x64 soft vertical gradient — the drifting VHS band
 
     private RenderTarget2D? _frame;      // the whole composed frame, full res
-    private RenderTarget2D? _half;       // frame / BloomDiv, for the bloom tap
+    private RenderTarget2D? _pix;        // frame / PixelSize — the fat-pixel quantization
+    private RenderTarget2D? _half;       // _pix / BloomDiv, for the bloom tap
     private int _w, _h;
 
-    /// <summary>Bloom source divisor. 4 gives a soft glow without smearing the 1px frames.</summary>
-    private const int BloomDiv = 4;
+    /// <summary>Bloom source divisor, relative to full res.</summary>
+    private const int BloomDiv = 8;
+
+    /// <summary>
+    /// The fat-pixel grid, in screen pixels. Must equal SliceGame.WorldPx: the world already
+    /// renders at 1/WorldPx and is blown back up point-sampled, so quantizing the composed frame
+    /// by the same factor is a lossless round-trip for the board (each 2x2 block IS one world
+    /// pixel) and a real quantization for everything drawn after it — which is the HUD.
+    /// </summary>
+    public int PixelSize { get; init; } = 2;
 
     public CrtLevel Level { get; set; } = CrtLevel.Soft;
+
+    /// <summary>How far the fat-pixel grid reaches. Cycled with F7.</summary>
+    public PixelMode Pixels { get; set; } = PixelMode.Soft;
 
     public CrtPass(GraphicsDevice gd)
     {
@@ -90,6 +116,14 @@ public sealed class CrtPass : IDisposable
         CrtLevel.Soft => "SOFT", CrtLevel.Full => "FULL", _ => "OFF",
     };
 
+    /// <summary>Cycles the fat-pixel reach OFF → SOFT → HARD → OFF.</summary>
+    public PixelMode CyclePixels() => Pixels = (PixelMode)(((int)Pixels + 1) % 3);
+
+    public string PixelName => Pixels switch
+    {
+        PixelMode.Soft => "SOFT", PixelMode.Hard => "HARD", _ => "OFF",
+    };
+
     /// <summary>
     /// The target the frame must be composed into, or null when the pass is off (in which case
     /// everything draws straight to the back buffer and nothing changes).
@@ -115,25 +149,55 @@ public sealed class CrtPass : IDisposable
         bool full = Level == CrtLevel.Full;
         var screen = new Rectangle(0, 0, _w, _h);
 
-        // 1. Downsample for the bloom tap. Linear filtering across a 4x reduction IS the blur;
-        //    no separable-Gaussian pass and no shader needed.
+        // 1. Quantize the WHOLE frame — HUD included — onto the fat-pixel grid. A linear
+        //    downsample by exactly PixelSize lands each destination texel centre on the corner
+        //    between four source texels, so the hardware returns an exact 2x2 box average and
+        //    no dedicated filter is needed. Because the world was already point-upscaled from
+        //    that same grid it survives this untouched; the HUD, drawn at full res afterwards,
+        //    is what actually gets chunked.
+        bool quantize = Pixels != PixelMode.Off;
+        if (quantize)
+        {
+            _gd.SetRenderTarget(_pix);
+            sb.Begin(samplerState: SamplerState.LinearClamp);
+            sb.Draw(_frame, new Rectangle(0, 0, _pix!.Width, _pix.Height), Color.White);
+            sb.End();
+        }
+
+        // 2. Downsample for the bloom tap. Linear filtering across the reduction IS the blur;
+        //    no separable-Gaussian pass and no shader needed. Tap the quantized image so the
+        //    glow follows the fat pixels rather than fighting them.
+        var lit = quantize ? _pix! : _frame;
         _gd.SetRenderTarget(_half);
         _gd.Clear(Color.Transparent);
         sb.Begin(samplerState: SamplerState.LinearClamp);
-        sb.Draw(_frame, new Rectangle(0, 0, _half!.Width, _half.Height), Color.White);
+        sb.Draw(lit, new Rectangle(0, 0, _half!.Width, _half.Height), Color.White);
         sb.End();
 
         _gd.SetRenderTarget(null);
 
-        // 2. The image itself, untouched and point-sampled — the pixels stay pixels.
+        // 3. The quantized image, point-sampled back up — the fat pixels stay fat pixels.
         sb.Begin(samplerState: SamplerState.PointClamp);
-        sb.Draw(_frame, screen, Color.White);
+        sb.Draw(lit, screen, Color.White);
         sb.End();
 
-        // 3. Phosphor bloom + (on FULL) the chromatic fringe. Additive, so this only lifts what
-        //    is already lit: the near-black ground gains ~2/255, ink gains ~70/255.
+        // 3b. SOFT: cross-fade the un-quantized frame back in at half weight. The world is
+        //     bit-identical in both images (it was already on the grid), so it does not move
+        //     at all; only the HUD differs, and there the blend leaves a chunky 2px halo with
+        //     a legible 1px core instead of the unreadable mush a pure box average gives a
+        //     5x7 font.
+        if (Pixels == PixelMode.Soft)
+        {
+            sb.Begin(samplerState: SamplerState.PointClamp);
+            sb.Draw(_frame, screen, Color.White * 0.5f);
+            sb.End();
+        }
+
+        // 4. Phosphor bloom + (on FULL) the chromatic fringe. Additive, so this only lifts what
+        //    is already lit: the near-black ground gains a couple of levels, ink gains a lot.
+        //    It doubles as the contrast the box-average quantization costs thin HUD strokes.
         sb.Begin(blendState: BlendState.Additive, samplerState: SamplerState.LinearClamp);
-        float glow = full ? 0.34f : 0.22f;
+        float glow = full ? 0.68f : 0.44f;
         sb.Draw(_half, Grow(screen, 2), Color.White * glow);           // tight halo
         sb.Draw(_half, Grow(screen, 10), Color.White * (glow * 0.55f)); // wide, soft spill
         if (full)
@@ -175,16 +239,19 @@ public sealed class CrtPass : IDisposable
     private void Ensure(int w, int h)
     {
         if (_frame is not null && _w == w && _h == h) return;
-        _frame?.Dispose(); _half?.Dispose();
+        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose();
         _w = w; _h = h;
-        _frame = new RenderTarget2D(_gd, w, h, false, SurfaceFormat.Color, DepthFormat.None);
-        _half = new RenderTarget2D(_gd, Math.Max(1, w / BloomDiv), Math.Max(1, h / BloomDiv),
-            false, SurfaceFormat.Color, DepthFormat.None);
+        _frame = Target(w, h);
+        _pix = Target(w / PixelSize, h / PixelSize);
+        _half = Target(w / BloomDiv, h / BloomDiv);
     }
+
+    private RenderTarget2D Target(int w, int h) =>
+        new(_gd, Math.Max(1, w), Math.Max(1, h), false, SurfaceFormat.Color, DepthFormat.None);
 
     public void Dispose()
     {
-        _frame?.Dispose(); _half?.Dispose();
+        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose();
         _scan.Dispose(); _vig.Dispose(); _band.Dispose();
     }
 }

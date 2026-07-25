@@ -172,6 +172,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _sb = new SpriteBatch(GraphicsDevice);
+        _crt = new CrtPass(GraphicsDevice) { Level = Crt };
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
@@ -925,6 +926,11 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
         UpdateAmbient();
 
+        // F8 cycles the tube: OFF -> SOFT -> FULL. The clock runs regardless of scene so the
+        // tracking band drifts at the same rate wherever you are.
+        _crtTime += (float)gameTime.ElapsedGameTime.TotalSeconds;
+        if (Pressed(Keys.F8)) { _crt.Cycle(); _log.Add($"tube: {_crt.LevelName}"); _sfx.Play("click", 0.4f); }
+
         // F10: the UI-limits debug scene (the Dofus screenshot rebuilt from the oldUI theme).
         // It needs the theme layer, which sleeps under Mono — the key is inert there.
         if (Pressed(Keys.F10) && _dof.Loaded) _uiDemo = !_uiDemo;
@@ -1280,8 +1286,18 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     protected override void Draw(GameTime gameTime)
     {
+        // The whole frame is composed offscreen so the CRT pass can resolve it through the tube.
+        // With the pass OFF, Begin/End point at the back buffer and do nothing at all.
+        _crt.Begin(ScreenW, ScreenH, Palette.Background);
         GraphicsDevice.Clear(Palette.Background);
 
+        DrawFrame(gameTime);
+
+        _crt.End(_sb, _crtTime);
+    }
+
+    private void DrawFrame(GameTime gameTime)
+    {
         if (_uiDemo) { DrawUiDemo(); base.Draw(gameTime); return; }
         if (_loop && _scene == Scene.City) { DrawCity(); _gum.Draw(); base.Draw(gameTime); return; }
         if (_loop && _scene == Scene.Graveyard) { DrawGraveyard(); _gum.Draw(); base.Draw(gameTime); return; }
@@ -1301,6 +1317,13 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private RenderTarget2D? _worldRt;
     private const int WorldPx = 2;
 
+    // The tube. Owned here because it brackets the entire Draw, not just the world pass.
+    private CrtPass _crt = null!;
+    private float _crtTime;
+
+    /// <summary>Starting tube level, settable before Run() (see --crt=). F8 cycles it live.</summary>
+    public CrtLevel Crt { get; init; } = CrtLevel.Soft;
+
     private void BeginWorld()
     {
         if (Mono.On)
@@ -1319,7 +1342,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         _sb.End();
         if (!Mono.On || _worldRt == null) return;
-        GraphicsDevice.SetRenderTarget(null);
+        // Back to whatever we were composing into — the CRT frame target, or the back buffer
+        // when the pass is off. Hardcoding null here would punch us out of the CRT frame.
+        GraphicsDevice.SetRenderTarget(_crt.FrameTarget);
         _sb.Begin(samplerState: SamplerState.PointClamp);
         _sb.Draw(_worldRt, new Rectangle(0, 0, ScreenW, ScreenH), Color.White);
         _sb.End();

@@ -219,6 +219,26 @@ rank rows need widening from 3 to 5-6 first so ranks 4-6 have somewhere to live.
 2. **The progression curve** — the real reason the Crypt stalls at ~2/6 rooms. A level-3 party
    cannot beat grade-3 rooms; healing them harder barely moved it. Needs a difficulty target.
 3. Weapon attacks · glyphs/traps · enemy threat overlay · title screen · rank rows to 5-6.
+4. **Input/action stacking** — the owner asked for it directly. Today the only queue is
+   `BattleAnimator._queue`, which is the *animation* queue; a click during a busy animation is
+   dropped, not banked. Wanted: a small intent queue on the piloted turn (move → cast → move)
+   drained as the animator frees up, with the pending intents drawn on the board so it never
+   feels like input roulette.
+
+### The tube (CRT/VHS pass) — shipped, tuning notes
+`DofusSlice.Game/Rendering/CrtPass.cs` brackets the whole of `Draw`. **F8** cycles OFF → SOFT →
+FULL; `--crt=off|soft|full` sets the starting level. It is shader-free on purpose: this repo has
+no content pipeline (no `.mgcb`, no `.fx`) and runs DesktopGL, so everything is SpriteBatch blits
+plus procedurally-built textures.
+- The scanline texture is 4x4 (power-of-two, so `PointWrap` tiling is legal everywhere) with a
+  **2px pitch that matches `WorldPx`** — one dark row per fat world pixel, so the grille aligns
+  instead of moiring. Changing `WorldPx` means changing the grille.
+- Bloom is a linear 4x downsample re-blitted additively. On white-ink-on-near-black that lifts
+  ink by ~70/255 and the ground by ~2/255, which is why it glows without fogging the board.
+- FULL adds a ±2px chromatic fringe (again `WorldPx` — at 3px the 7px HUD font visibly doubled)
+  and a drifting tracking band.
+- `EndWorld()` must restore `_crt.FrameTarget`, **not** `null`, or the world pass punches a hole
+  out of the composed frame.
 
 
 Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent first:

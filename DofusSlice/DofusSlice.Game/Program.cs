@@ -28,7 +28,17 @@ try
     bool tithe = !dofus;
     bool loop = tithe && !directFight;
     int seed = args.Select(a => int.TryParse(a, out int s) ? s : (int?)null).FirstOrDefault(s => s != null) ?? 1;
-    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo);
+
+    // --crt=off|soft|full picks the starting tube level (F8 cycles it in-game).
+    var crtArg = args.FirstOrDefault(a => a.StartsWith("--crt=", StringComparison.OrdinalIgnoreCase));
+    var crt = crtArg?.Split('=')[1].ToLowerInvariant() switch
+    {
+        "off" => DofusSlice.Game.Rendering.CrtLevel.Off,
+        "full" => DofusSlice.Game.Rendering.CrtLevel.Full,
+        "soft" => DofusSlice.Game.Rendering.CrtLevel.Soft,
+        _ => DofusSlice.Game.Rendering.CrtLevel.Soft,
+    };
+    using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo) { Crt = crt };
     game.Run();
 }
 catch (Exception ex)

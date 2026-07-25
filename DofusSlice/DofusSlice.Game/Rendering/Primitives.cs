@@ -179,6 +179,54 @@ public sealed class Primitives
         return _cornerEdge[(radius, thickness)] = tex;
     }
 
+    // ---- Generated glyphs ------------------------------------------------------------
+
+    private Texture2D? _slotGlyph;
+
+    /// <summary>The empty-cell mark: a quatrefoil (four overlapping lobes) with a checker
+    /// dither on one diagonal pair. Built at 16x16 art pixels and point-scaled by whole
+    /// factors at draw time, so the dither stays a crisp checker instead of turning to mush.
+    /// Generated rather than drawn — the whole point is that new slots cost no art.</summary>
+    public Texture2D SlotGlyph()
+    {
+        if (_slotGlyph != null) return _slotGlyph;
+        // 12x12 is the size that works. At 16 the art pixels land ~2 screen px and the
+        // dither dissolves to grey under the bloom; at 8 the four lobes overlap so hard the
+        // mark is just a dithered square. At 12 the lobes still leave concave notches at the
+        // edge midpoints, which is what makes it read as a quatrefoil and not a blob.
+        const int n = 12;
+        var data = new Color[n * n];
+        (float cx, float cy, bool dither)[] lobes =
+        {
+            (3.5f, 3.5f, true), (8.5f, 3.5f, false),
+            (3.5f, 8.5f, false), (8.5f, 8.5f, true),
+        };
+        const float r = 3.4f;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                foreach (var (cx, cy, dither) in lobes)
+                {
+                    float dx = x + 0.5f - cx, dy = y + 0.5f - cy;
+                    if (dx * dx + dy * dy > r * r) continue;
+                    // 2x2 blocks, not a 1px checker: a single-pixel checker averages to flat
+                    // grey the moment the bloom touches it.
+                    if (dither && (x / 2 + y / 2) % 2 != 0) continue;
+                    data[y * n + x] = Color.White;
+                    break;
+                }
+        _slotGlyph = new Texture2D(_gd, n, n);
+        _slotGlyph.SetData(data);
+        return _slotGlyph;
+    }
+
+    /// <summary>Draw a 16x16 generated glyph centred in <paramref name="r"/> at a whole scale.</summary>
+    public void GlyphIn(SpriteBatch sb, Texture2D glyph, Rectangle r, Color color, int pad = 4)
+    {
+        int k = Math.Max(1, (Math.Min(r.Width, r.Height) - pad * 2) / glyph.Width);
+        int s = glyph.Width * k;
+        sb.Draw(glyph, new Rectangle(r.Center.X - s / 2, r.Center.Y - s / 2, s, s), color);
+    }
+
     // ---- Bracketed frames ------------------------------------------------------------
     // The dungeon-UI signature: a hairline frame that thickens into an ornate L at each
     // corner, with a square notch punched out of the elbow. Same corner-mask + flip path

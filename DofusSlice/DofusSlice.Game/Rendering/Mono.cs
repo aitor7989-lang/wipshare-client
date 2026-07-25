@@ -14,11 +14,12 @@ public static class Mono
     /// <summary>The master switch: true = the whole game wears the 1-bit skin.</summary>
     public const bool On = true;
 
-    public static readonly Color Bg = new(8, 8, 8);            // the void / screen clear
+    public static readonly Color Bg = new(0, 0, 0);            // the void / screen clear (true black)
     public static readonly Color Panel = new(12, 12, 12);      // window body
     public static readonly Color Ink = new(240, 233, 214);     // primary lines + text (warm bone)
     public static readonly Color Dim = new(122, 122, 118);     // secondary text / soft lines
     public static readonly Color Faint = new(52, 52, 50);      // hairlines, grid seams
+    public static readonly Color Empty = new(72, 66, 63);      // the mark in an empty cell
     public static readonly Color Danger = new(224, 60, 48);    // THE accent: enemies, damage, alarms
 
     // The tactical board: two barely-different floor tones + a visible seam.
@@ -100,11 +101,14 @@ public static class Mono
         if (w > 0) prim.FillRect(sb, new Rectangle(r.X + 2, r.Y + 2, w, r.Height - 4), fill ?? Ink);
     }
 
-    /// <summary>An item/spell slot: 1px cell with stepped corners; selected thickens the border.</summary>
+    /// <summary>An item/spell slot: 1px cell with stepped corners; selected thickens the border.
+    /// An <paramref name="empty"/> cell gets the generated quatrefoil mark, so a bare grid reads
+    /// as deliberate furniture instead of a row of blank holes.</summary>
     public static void Slot(SpriteBatch sb, Primitives prim, Rectangle r,
-        bool hover = false, bool selected = false)
+        bool hover = false, bool selected = false, bool empty = false)
     {
         prim.FillRoundRect(sb, r, RadSlot, Panel);
         prim.StrokeRoundRect(sb, r, RadSlot, selected ? 2 : 1, selected ? Ink : hover ? Ink : Faint);
+        if (empty) prim.GlyphIn(sb, prim.SlotGlyph(), r, hover ? Dim : Empty, pad: 5);
     }
 }

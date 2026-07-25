@@ -2534,7 +2534,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
             var slotR = SpellGridRect(i);
             bool hov = slotR.Contains(kmp);
             bool sel = piloting && i < 6 && i < spells.Count && _selectedSpell == i;
-            if (Mono.On) Mono.Slot(_sb, _prim, slotR, hover: hov, selected: sel);
+            if (Mono.On) Mono.Slot(_sb, _prim, slotR, hover: hov, selected: sel,
+                empty: !(i < 6 && i < spells.Count));
             else
             {
                 _ew.Well(_sb, slotR);

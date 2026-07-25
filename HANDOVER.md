@@ -240,6 +240,13 @@ plus procedurally-built textures.
   The consequence to know about: at `glow` 0.68 the cast-range overlay saturates to near-white,
   and dim HUD labels haze. If either ever needs fixing, dim those two *sources* rather than
   reaching for a threshold here.
+- **Generated UI marks** (`Primitives`): panels wear a hairline frame with an ornate bracket at
+  each corner (`BracketRect`), and empty cells wear a dithered quatrefoil (`SlotGlyph`). Both are
+  built at load time from geometry — no art files — which is the direction the UI is heading:
+  the kit that inspired it (Hexany/Batuhan) is local-only and never shipped, so anything that
+  must appear in a release has to be generated. Glyph sizes are tuned to the *bloom*, not to
+  taste: 16px art pixels dissolve to grey under it and 8px lobes merge into a square, so 12x12
+  with a 2x2-block dither is the size that survives. Re-tune if the bloom changes.
 - **F7** cycles how far the grid reaches: OFF (HUD at native res) / SOFT (HUD chrome on the grid,
   cross-faded with the original at half weight so the 5x7 font keeps a legible 1px core) / HARD
   (no exceptions — and it destroys the font). `--pixels=` sets the start. SOFT is the default.

@@ -175,16 +175,6 @@ public sealed class CrtPass : IDisposable
         sb.Draw(lit, halfRect, Color.White);
         sb.End();
 
-        // 2b. Bright pass, still without a shader: draw the same source over the tap with a
-        //     multiply blend, so the tap becomes blur(lit)^2. A real bloom thresholds the
-        //     highlights; squaring is the cheap monotonic stand-in — ink at 236 keeps 218,
-        //     the cast-range overlay's mid-grey 150 falls to 88, the near-black ground falls
-        //     to nothing. Without this, doubling the bloom saturated every large lit field
-        //     (the range overlay went solid white) instead of making the ink glow.
-        sb.Begin(blendState: Multiply, samplerState: SamplerState.LinearClamp);
-        sb.Draw(lit, halfRect, Color.White);
-        sb.End();
-
         _gd.SetRenderTarget(null);
 
         // 3. The quantized image, point-sampled back up — the fat pixels stay fat pixels.
@@ -240,15 +230,6 @@ public sealed class CrtPass : IDisposable
             sb.End();
         }
     }
-
-    /// <summary>dst = dst * src. Not one of the stock BlendStates, but legal everywhere.</summary>
-    private static readonly BlendState Multiply = new()
-    {
-        ColorSourceBlend = Blend.Zero,
-        ColorDestinationBlend = Blend.SourceColor,
-        AlphaSourceBlend = Blend.Zero,
-        AlphaDestinationBlend = Blend.SourceAlpha,
-    };
 
     private static Rectangle Grow(Rectangle r, int by) =>
         new(r.X - by, r.Y - by, r.Width + by * 2, r.Height + by * 2);

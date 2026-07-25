@@ -233,11 +233,13 @@ plus procedurally-built textures.
 - The scanline texture is 4x4 (power-of-two, so `PointWrap` tiling is legal everywhere) with a
   **2px pitch that matches `WorldPx`** — one dark row per fat world pixel, so the grille aligns
   instead of moiring. Changing `WorldPx` means changing the grille.
-- Bloom is a linear downsample re-blitted additively, **squared first** by a multiply-blend pass
-  (`dst = dst * src`) over the same source. That squaring is the shader-free stand-in for a
-  bright-pass threshold: ink at 236 keeps 218, the cast-range overlay's mid-grey 150 falls to 88,
-  the near-black ground falls to nothing. **Do not remove it** — without it, bloom above about
-  0.5 saturates every large lit field (the range overlay went solid white) instead of lighting ink.
+- Bloom is a linear downsample re-blitted additively, with **no bright-pass threshold** — every
+  lit pixel blooms in proportion to itself, flat mid-grey fields included. That is a deliberate
+  choice, not an oversight: a squaring pass (`dst = dst * src` over the tap) was tried and looked
+  more correct — crisper labels, no clipping — and was rejected as too clean for the look wanted.
+  The consequence to know about: at `glow` 0.68 the cast-range overlay saturates to near-white,
+  and dim HUD labels haze. If either ever needs fixing, dim those two *sources* rather than
+  reaching for a threshold here.
 - **F7** cycles how far the grid reaches: OFF (HUD at native res) / SOFT (HUD chrome on the grid,
   cross-faded with the original at half weight so the 5x7 font keeps a legible 1px core) / HARD
   (no exceptions — and it destroys the font). `--pixels=` sets the start. SOFT is the default.

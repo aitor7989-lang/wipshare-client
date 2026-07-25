@@ -95,7 +95,15 @@ public sealed class CampaignUnit
     {
         0, 0, 110, 650, 1500, 2800, 4800, 7300, 10500, 14500, 19200,
         25200, 32600, 41000, 50500, 61000, 75000, 91000, 115000, 142000, 171000,
+        // Levels 21-30 continue THIS curve's own shape (its per-level step was growing ~10-13%
+        // through the teens, so the steps keep widening at that rate). The band exists so the
+        // campaign has somewhere to put a level-30 ceiling and a rank-5 spell ladder; the numbers
+        // are ours, extrapolated from the rows above, not lifted from anywhere.
+        202000, 236000, 273000, 314000, 359000, 408000, 462000, 521000, 586000, 657000,
     };
+
+    /// <summary>The campaign's level ceiling — the last level the XP curve actually measures.</summary>
+    public const int MaxLevel = 30;
 
     /// <summary>XP needed to advance from <paramref name="level"/> to the next (the 1.29 per-level cost).</summary>
     public static int XpForNextLevel(int level)
@@ -109,7 +117,7 @@ public sealed class CampaignUnit
     public void GainXp(int xp)
     {
         Xp += Math.Max(0, xp);
-        while (Xp >= XpForNextLevel(Level))
+        while (Level < MaxLevel && Xp >= XpForNextLevel(Level))
         {
             Xp -= XpForNextLevel(Level); Level++;
             SpellPoints++;   // 1.29: one spell point per level (Bible §6.3)

@@ -233,8 +233,18 @@ plus procedurally-built textures.
 - The scanline texture is 4x4 (power-of-two, so `PointWrap` tiling is legal everywhere) with a
   **2px pitch that matches `WorldPx`** — one dark row per fat world pixel, so the grille aligns
   instead of moiring. Changing `WorldPx` means changing the grille.
-- Bloom is a linear 4x downsample re-blitted additively. On white-ink-on-near-black that lifts
-  ink by ~70/255 and the ground by ~2/255, which is why it glows without fogging the board.
+- Bloom is a linear downsample re-blitted additively, **squared first** by a multiply-blend pass
+  (`dst = dst * src`) over the same source. That squaring is the shader-free stand-in for a
+  bright-pass threshold: ink at 236 keeps 218, the cast-range overlay's mid-grey 150 falls to 88,
+  the near-black ground falls to nothing. **Do not remove it** — without it, bloom above about
+  0.5 saturates every large lit field (the range overlay went solid white) instead of lighting ink.
+- **F7** cycles how far the grid reaches: OFF (HUD at native res) / SOFT (HUD chrome on the grid,
+  cross-faded with the original at half weight so the 5x7 font keeps a legible 1px core) / HARD
+  (no exceptions — and it destroys the font). `--pixels=` sets the start. SOFT is the default.
+- **HARD is not shippable without a HUD pass.** Seven glyph rows on a 2px grid is fourteen screen
+  pixels; every panel, row and tooltip is laid out for seven. Doing it properly means a 3x5
+  micro-font at 2x scale (6x10 screen px, ~40% taller than today) and re-flowing ~230 font call
+  sites plus the panel rects. HARD exists so the tradeoff can be looked at, not argued about.
 - FULL adds a ±2px chromatic fringe (again `WorldPx` — at 3px the 7px HUD font visibly doubled)
   and a drifting tracking band.
 - `EndWorld()` must restore `_crt.FrameTarget`, **not** `null`, or the world pass punches a hole

@@ -172,7 +172,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     protected override void LoadContent()
     {
         _sb = new SpriteBatch(GraphicsDevice);
-        _crt = new CrtPass(GraphicsDevice) { Level = Crt, Pixels = Pixels, PixelSize = WorldPx };
+        _crt = new CrtPass(GraphicsDevice) { Level = Crt, Pixels = Pixels, PixelSize = WorldPx, Curve = CurveAmount };
         _ascii = new AsciiPass(GraphicsDevice) { Enabled = Ascii, Chromatic = AsciiChromatic };
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
@@ -917,11 +917,24 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (descend) { _cryptRest = false; _sfx.Play("click"); BeginCryptRoom(); }
     }
 
+    /// <summary>The pointer in pre-warp screen space. The tube's curvature moves the picture
+    /// but not the cursor, so every coordinate the game reasons about — hover, picking, drag —
+    /// has to come back through the inverse warp first. Doing it here means the ~200 call sites
+    /// downstream never need to know the screen is curved.</summary>
+    private MouseState ReadMouse()
+    {
+        var m = Mouse.GetState();
+        var p = _crt.Unwarp(new Point(m.X, m.Y));
+        if (p.X == m.X && p.Y == m.Y) return m;
+        return new MouseState(p.X, p.Y, m.ScrollWheelValue,
+            m.LeftButton, m.MiddleButton, m.RightButton, m.XButton1, m.XButton2);
+    }
+
     // ----- Update -------------------------------------------------------------------
 
     protected override void Update(GameTime gameTime)
     {
-        _prevMouse = _mouse; _mouse = Mouse.GetState();
+        _prevMouse = _mouse; _mouse = ReadMouse();
         _prevKeys = _keys; _keys = Keyboard.GetState();
         UpdateGumHud(gameTime);
         if (Pressed(Keys.M)) _sfx.Muted = !_sfx.Muted;
@@ -1349,6 +1362,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     /// <summary>Starting fat-pixel reach (see --pixels=). F7 cycles it live.</summary>
     public PixelMode Pixels { get; init; } = PixelMode.Soft;
+
+    /// <summary>Tube curvature, 0 = flat panel (see --curve=).</summary>
+    public float CurveAmount { get; init; } = 0.07f;
 
     /// <summary>Start in the terminal renderer (see --ascii). F6 toggles it live.</summary>
     public bool Ascii { get; init; }

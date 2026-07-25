@@ -51,9 +51,16 @@ try
     bool ascii = asciiArg != null;
     bool asciiChromatic = !(asciiArg?.EndsWith("=mono", StringComparison.OrdinalIgnoreCase) ?? false);
 
+    // --curve=0.10 sets how far the tube face bows; 0 is a flat panel.
+    var curveArg = args.FirstOrDefault(a => a.StartsWith("--curve=", StringComparison.OrdinalIgnoreCase));
+    float curve = curveArg != null && float.TryParse(curveArg.Split('=')[1],
+        System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+        out float cv) ? Math.Clamp(cv, 0f, 0.5f) : 0.07f;
+
     using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo)
     {
         Crt = crt,
+        CurveAmount = curve,
         Pixels = pixels,
         Ascii = ascii,
         AsciiChromatic = asciiChromatic,

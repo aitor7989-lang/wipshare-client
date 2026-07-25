@@ -247,6 +247,17 @@ plus procedurally-built textures.
   must appear in a release has to be generated. Glyph sizes are tuned to the *bloom*, not to
   taste: 16px art pixels dissolve to grey under it and 8px lobes merge into a square, so 12x12
   with a 2x2-block dither is the size that survives. Re-tune if the bloom changes.
+- **Tube curvature** (`CrtPass.Curve`, `--curve=`, default 0.07, 0 = flat panel). No shader
+  pipeline exists here, so the warp is geometry: a 24x24 grid of quads pulled toward the centre
+  by `1 - Curve*r^2/2` and drawn through the stock `BasicEffect`. Corners move twice as far as
+  edge midpoints, which is what gives a tube its convex sides. The picture *insets* rather than
+  overscanning, so nothing is ever clipped — it just sits in a small black bezel.
+  **`CrtPass.Unwarp` is not optional.** The curve moves the picture but not the cursor, so every
+  pointer coordinate is inverted back through the warp in `SliceGame.ReadMouse` before anything
+  reasons about it. Skip that and hit-testing silently drifts by up to 74px at the corners at
+  Curve 0.10. The inverse is Newton on the forward cubic and round-trips to 0.0000px.
+  **Known gap:** `AsciiPass` writes straight to the back buffer, so the terminal renderer is not
+  curved and does not need unwarping (it is a toggle, so this has not been worth fixing yet).
 - **F6 = the TERMINAL renderer** (`Rendering/AsciiPass.cs`, `--ascii[=mono]`, F5 swaps colour).
   Re-renders the composed frame as a glyph grid. It consumes the same offscreen frame the tube
   would have resolved, so the two are **alternatives, not a stack** — and it needs that frame, so

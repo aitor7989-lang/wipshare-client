@@ -46,7 +46,25 @@ public sealed class CrtPass : IDisposable
     private RenderTarget2D? _frame;      // the whole composed frame, full res
     private RenderTarget2D? _pix;        // frame / PixelSize — the fat-pixel quantization
     private RenderTarget2D? _half;       // _pix / BloomDiv, for the bloom tap
+    private RenderTarget2D? _flat;       // the finished flat picture, when it has to be curved
     private int _w, _h;
+
+    // ---- Tube curvature --------------------------------------------------------------
+    // No shader pipeline in this project, so the warp is geometry: a grid of quads whose
+    // vertices are pulled toward the centre by an amount that grows with distance, drawn
+    // through the stock BasicEffect. Corners move twice as far as edge midpoints, which is
+    // what gives the convex sides and tucked corners of a real tube face.
+
+    private BasicEffect? _warpFx;
+    private VertexPositionTexture[]? _warpVerts;
+    private short[]? _warpIdx;
+    private float _warpBuiltFor = -1f;
+    private const int WarpN = 24;        // grid cells per axis
+
+    /// <summary>Barrel amount, 0 = a flat panel. At <c>c</c> the edge midpoints come in by
+    /// c/2 and the corners by c, so the whole picture insets slightly rather than losing its
+    /// corners off-screen — nothing is clipped, it just sits in a little black bezel.</summary>
+    public float Curve { get; set; } = 0.07f;
 
     /// <summary>Bloom source divisor, relative to full res.</summary>
     private const int BloomDiv = 8;
@@ -175,7 +193,11 @@ public sealed class CrtPass : IDisposable
         sb.Draw(lit, halfRect, Color.White);
         sb.End();
 
-        _gd.SetRenderTarget(null);
+        // Everything from here composes the finished picture. When the tube is curved that
+        // has to land offscreen first, because the warp needs the whole thing as one texture.
+        bool curved = Curve > 0.001f;
+        _gd.SetRenderTarget(curved ? _flat : null);
+        if (curved) _gd.Clear(Color.Black);
 
         // 3. The quantized image, point-sampled back up — the fat pixels stay fat pixels.
         sb.Begin(samplerState: SamplerState.PointClamp);
@@ -229,6 +251,107 @@ public sealed class CrtPass : IDisposable
             sb.Draw(_band, new Rectangle(0, y, _w, BandH), Color.White * 0.045f);
             sb.End();
         }
+
+        if (curved) ResolveCurved();
+    }
+
+    /// <summary>
+    /// Map a back-buffer point back into pre-warp screen space, so hit-testing lands where the
+    /// player sees the thing rather than where it would have been on a flat panel. Without this
+    /// the curve silently breaks input: at Curve 0.10 the corners move about 10% of a half-width,
+    /// which on a 1280-wide screen is ~64px of pointing error.
+    /// </summary>
+    public Point Unwarp(Point p)
+    {
+        if (Curve <= 0.001f || _w == 0 || _h == 0) return p;
+        float halfW = _w / 2f, halfH = _h / 2f;
+        float ud = (p.X - halfW) / halfW, vd = (p.Y - halfH) / halfH;
+        float rd = MathF.Sqrt(ud * ud + vd * vd);
+        if (rd < 1e-5f) return p;
+
+        // The forward map scales a point by s(r) = 1 - Curve*r^2/2, so rd = r - Curve*r^3/2.
+        // Invert that cubic with a few Newton steps — it is smooth and monotonic over the
+        // range we use, so it converges in two or three.
+        float r = rd;
+        for (int i = 0; i < 6; i++)
+        {
+            float f = r - Curve * r * r * r * 0.5f - rd;
+            float df = 1f - 1.5f * Curve * r * r;
+            if (MathF.Abs(df) < 1e-6f) break;
+            r -= f / df;
+        }
+        float k = r / rd;
+        return new Point(
+            (int)MathF.Round(halfW + ud * k * halfW),
+            (int)MathF.Round(halfH + vd * k * halfH));
+    }
+
+    /// <summary>Blit the finished flat picture onto the back buffer through the warped grid.</summary>
+    private void ResolveCurved()
+    {
+        BuildWarp();
+        _gd.SetRenderTarget(null);
+        _gd.Clear(Color.Black);
+
+        _warpFx!.Projection = Matrix.CreateOrthographicOffCenter(0, _w, _h, 0, 0f, 1f);
+        _warpFx.Texture = _flat;
+
+        // Linear, not point: the fat pixels are already baked into _flat, and resampling a
+        // warped grid with point sampling drops whole rows of them where the curve is steep.
+        _gd.SamplerStates[0] = SamplerState.LinearClamp;
+        _gd.BlendState = BlendState.Opaque;
+        _gd.DepthStencilState = DepthStencilState.None;
+        _gd.RasterizerState = RasterizerState.CullNone;
+
+        foreach (var pass in _warpFx.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            _gd.DrawUserIndexedPrimitives(PrimitiveType.TriangleList,
+                _warpVerts!, 0, _warpVerts!.Length,
+                _warpIdx!, 0, _warpIdx!.Length / 3);
+        }
+    }
+
+    private void BuildWarp()
+    {
+        _warpFx ??= new BasicEffect(_gd)
+        {
+            TextureEnabled = true,
+            VertexColorEnabled = false,
+            LightingEnabled = false,
+            World = Matrix.Identity,
+            View = Matrix.Identity,
+        };
+        // The mesh only depends on the curve amount and the screen size; rebuild on change.
+        float key = Curve * 100003f + _w * 31f + _h;
+        if (_warpVerts != null && Math.Abs(key - _warpBuiltFor) < 0.0001f) return;
+        _warpBuiltFor = key;
+
+        int n = WarpN;
+        _warpVerts = new VertexPositionTexture[(n + 1) * (n + 1)];
+        float halfW = _w / 2f, halfH = _h / 2f;
+        for (int j = 0; j <= n; j++)
+            for (int i = 0; i <= n; i++)
+            {
+                float u = i / (float)n * 2f - 1f;      // -1..1 across the screen
+                float v = j / (float)n * 2f - 1f;
+                float r2 = u * u + v * v;              // 0 centre, 1 edge midpoint, 2 corner
+                float s = 1f - Curve * r2 * 0.5f;      // corners pull in twice as far as edges
+                _warpVerts[j * (n + 1) + i] = new VertexPositionTexture(
+                    new Vector3(halfW + u * s * halfW, halfH + v * s * halfH, 0f),
+                    new Vector2(i / (float)n, j / (float)n));
+            }
+
+        _warpIdx = new short[n * n * 6];
+        int k = 0;
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                short a = (short)(j * (n + 1) + i), b = (short)(a + 1);
+                short c = (short)(a + n + 1), d = (short)(c + 1);
+                _warpIdx[k++] = a; _warpIdx[k++] = b; _warpIdx[k++] = c;
+                _warpIdx[k++] = b; _warpIdx[k++] = d; _warpIdx[k++] = c;
+            }
     }
 
     private static Rectangle Grow(Rectangle r, int by) =>
@@ -240,11 +363,12 @@ public sealed class CrtPass : IDisposable
     private void Ensure(int w, int h)
     {
         if (_frame is not null && _w == w && _h == h) return;
-        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose();
+        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose(); _flat?.Dispose();
         _w = w; _h = h;
         _frame = Target(w, h);
         _pix = Target(w / PixelSize, h / PixelSize);
         _half = Target(w / BloomDiv, h / BloomDiv);
+        _flat = Target(w, h);
     }
 
     private RenderTarget2D Target(int w, int h) =>
@@ -252,7 +376,8 @@ public sealed class CrtPass : IDisposable
 
     public void Dispose()
     {
-        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose();
+        _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose(); _flat?.Dispose();
         _scan.Dispose(); _vig.Dispose(); _band.Dispose();
+        _warpFx?.Dispose();
     }
 }

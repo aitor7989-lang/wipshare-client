@@ -1,16 +1,18 @@
 # HANDOVER — `wipshare-client` games (DofusSlice · Gauntlet archived)
 
-_Last updated: 2026-07-21 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · latest work: "Apply §7a AI/shove fixes + archive the Gauntlet"_
+_Last updated: 2026-07-25 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · latest work: "audit-driven improvement programme — 12 commits, see §8"_
 
 ---
 
 ## 0. TL;DR — where we are
 
-- **Go-forward game: _DofusSlice_** — the older "campaign" RPG (internally branded **TITHE**), which the owner finds more fun than the **Gauntlet** roguelite. **The Gauntlet is now ARCHIVED** (this session): its code stays in the repo and still builds, but it no longer auto-releases and is no longer developed. See `Gauntlet/ARCHIVED.md`.
-- **The §7a shared-engine bug-hunt fixes are now APPLIED and verified** (this session). `ForecastShift` walks HP honestly (no more phantom ember "kills"), `TryShove` no longer steals a lethal swing or drags prey the wrong way, and `SettleTurn` keeps bruisers on the line instead of thrashing. Covered by a new `ForecastShift` regression test (`sim effects` → 26 pass) and re-run sims. Details in §7a.
-- **Two games, one shared engine** (`DofusSlice.Core`). Both still build clean on Linux. DofusSlice auto-releases on push; the Gauntlet's CI is now manual-only.
-- **§7c resolved:** the Gauntlet-tuned combat changes that leaked into DofusSlice were **kept** — with the Gauntlet archived, DofusSlice's balance is now the only one that matters, and the DofusSlice sims came back **bit-identical** to before the fixes (no regression). See §7c.
-- **Everything below "8." reflects the state after this session's commit.** A clean checkout / fresh environment loses nothing; the branch is in sync with origin.
+- **Go-forward game: _DofusSlice_** (internally **TITHE**). **The Gauntlet is ARCHIVED**: it still builds, no longer auto-releases, no longer developed (`Gauntlet/ARCHIVED.md`).
+- **A 15-agent audit drove this session's work.** It produced ~30 findings; 8 survived adversarial verification. Everything below §8 is the result. `sim effects` is now **40 tests** (was 26).
+- **The campaign can finally be LOST and WON.** It previously could not fail at all — `Campaign.Over` reads "the avatar is gone" and nothing ever removed the avatar (0 wipes in 3,200 sim dives; `DrawGameOver` unreachable). Now: missing the tithe three times running ends the run, and **falling in the Crypt is final** (the yard still just wounds you). Felling the Sexton is banked and escalates every future Crypt.
+- **Measured balance:** cautious play **15% wipes** over 40 dives (was 0%). Greedy play **100% wipes** — that sim heuristic banks literally nothing (ends on 0 stones), so it is a degenerate strategy rather than a tuning target. Flagged, not "fixed".
+- **Four bugs that shipped** were fixed: placement rank-up did nothing to the fight you were in; the arena was non-deterministic across processes; placement cells came from the wrong map; and the campaign had **no critical hits at all** (all the crit juice was unreachable).
+- **Known-open, verified as NOT done:** weapon attacks (items still carry no damage/AP/range), glyphs & traps, the enemy threat overlay, build divergence within a class (the ladder is still a fixed `Take(level)`), a title screen, and the **progression curve** — the Crypt chain still stalls at ~2/6 rooms because a level-3 party cannot beat grade-3 rooms. That is a POWER problem, not an attrition one: buffing the rest beat to 70% + wound-clearing barely moved it (18→20 of 72).
+- **The sim's crypt runner now models the rest beat.** It didn't, so the audit's brutal "2 rooms in 60" figure measured a Crypt the player never actually fights.
 
 ---
 
@@ -182,6 +184,21 @@ This session's earlier combat changes (below) live in the shared engine/content 
 ---
 
 ## 8. What we did this session (newest → older)
+
+### 2026-07-25 — the audit programme (12 commits)
+Run `git log --oneline 5594cd7..HEAD` for the list. In order:
+1. **Four shipping bugs** — placement rank-up inert (Fighter stats are an init-only snapshot; `CombatEngine.ReplaceFighter` now swaps the avatar in before `Start()`), non-deterministic arena (`string.GetHashCode()` → FNV-1a), placement cells from the yard map not the arena, and no crits in the campaign (skill rows now carry `crit`/`critFail`).
+2. **Unfroze the player's turn** — `BlocksInput` (queue only) instead of `IsBusy` (which counted corpse fade, so a kill cost ~2s of frozen input); AI intent telegraphs no longer replay for your own actions; fast-forward no longer bleeds into your turn.
+3. **Class picker** — the avatar was hardcoded to `cannon`, so the archer and bulwark had literally never been playable. Also added the 9 missing `PixelFont` glyphs (`·` `—` `=` `>` `<` `[` `]` `*` `;`) that were rendering as invisible gaps.
+4. **AI uses its whole kit** — `TryShootBest` took the priciest castable damage spell and stopped; it now scores every (spell, target) pair by damage **plus payload**, and can never gift an enemy a buff.
+5. **Three backlog bugs** — `CanHitFrom` used authored not effective range (a leashed unit repositioned then did nothing); the sim over-charged every fight ~50% (`FightCost` predates `CombatPace`); the Temple's 6th service was unclickable.
+6. **A: healing / summons / riding theft** — all three were engine-complete and unreachable (0 of 27 skill rows healed; the loader had no `summon` case and both builders dropped the team, so a player summon joined the ENEMY).
+7. **B: UI honesty** — cooldowns visible and unusable spells refused with a reason (the reach overlay could previously paint cells the engine would refuse); `CanCast` reasons surfaced; stones shown in the City; the sheet teaches its stats and states the class passive; an **H** help card.
+8. **C: feel** — status pips were unreachable on the board; statuses now flash and name themselves; per-cell footsteps, audible END TURN, a distinct refusal sound, turn-clock warnings. *(Impact-scaling-with-damage deliberately skipped at the owner's request.)*
+9. **D: companions** — crew tabs to gear/read/spend for any member, real names, hidden temperament on hire.
+10. **E: stakes** — the failure states, the Sexton as an escalating ending, duplicate gear salvages for stones.
+11. **Balance** — partial tithe payment avoids a strike; pack reach jitters ±25% per dive so the yard stops printing identical dives; the crypt breather mends 70% and clears wounds.
+
 
 Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent first:
 - **(this session, follow-up) Honour the warm/BONE avatar's ember exemption in `ForecastShift`** — the 7th defect a post-fix verification caught (§7a). New `Fighter.SoftHazardImmune` flag (set by the Gauntlet's `Bless` on the warm/BONE avatar) tells the shove forecast to skip the ember pass for that victim, so an over-counted ember can no longer feed the spike a phantom kill. Gauntlet-only; DofusSlice unaffected. `sim effects` → 26/26; sims unchanged.

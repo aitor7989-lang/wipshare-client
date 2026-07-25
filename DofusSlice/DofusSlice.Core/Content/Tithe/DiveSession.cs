@@ -76,7 +76,16 @@ public sealed class DiveSession
         _campaign = campaign;
         _rng = rng;
         Clock = TitheContent.Graveyard.ClockSeconds;
-        Packs = TitheContent.Graveyard.Packs.Select(p => new PackState { Def = p }).ToList();
+        // The yard used to print IDENTICAL dives forever: fixed reaches meant the same four
+        // nearest packs were the only affordable ones every single time. Jitter each pack's walk
+        // per dive (+/-25%) so which packs are in reach — and therefore the route you take — is a
+        // real decision that changes between dives.
+        Packs = TitheContent.Graveyard.Packs
+            .Select(p => new PackState
+            {
+                Def = p with { Reach = Math.Max(6, p.Reach * (75 + rng.Roll(0, 50)) / 100) },
+            })
+            .ToList();
 
         // Sweep any companion points the player chose not to spend by hand — agency first,
         // safety net second, so an ignored companion still levels sensibly.

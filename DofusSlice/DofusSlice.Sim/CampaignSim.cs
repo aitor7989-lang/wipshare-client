@@ -156,6 +156,11 @@ public static class CampaignSim
 
         for (int i = 0; i < rooms.Count; i++)
         {
+            // THE BREATHER between sealing doors, exactly as the game plays it (SliceGame's
+            // crypt rest beat). Without it this loop measured a crypt the player never fights —
+            // pure uncompensated attrition — and every balance read off it was too harsh.
+            if (i > 0) { foreach (var u in campaign.Crew) u.Wounded = false; campaign.RestCrewPartial(0.70); }
+
             var room = rooms[i];
             var pack = new DiveSession.PackState
             { Def = new TitheContent.PackDef($"crypt_{i}", room.Comp, 0, false, room.Grade) };

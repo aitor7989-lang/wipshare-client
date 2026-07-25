@@ -69,7 +69,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private bool _cryptOnArrive, _cryptCleared, _cryptRun;
     private bool _cryptRest;            // the breather between sealing doors — heal, spend, DESCEND on your word
     private int _cryptRoom;
-    private const double CryptRestHeal = 0.40;   // a rest mends ~40% of max HP; attrition still matters
+    private const double CryptRestHeal = 0.70;   // a rest mends ~70%: the chain was pure attrition (2 rooms cleared in 60 tries)
     private static readonly Rectangle CryptDescendBtn = new(ScreenW / 2 - 96, 470, 192, 40);
     private IReadOnlyList<TitheContent.CryptRoom> _cryptRooms = Array.Empty<TitheContent.CryptRoom>();
     private string _yardMsg = "";
@@ -894,6 +894,10 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _celebrate = null; _celebrating = false;
         _selectedSpell = -1; _selCrew = null;
         _charOpen = _invOpen = _spellOpen = false;
+        // A breather also binds WOUNDS. The crypt chain killed runs by grinding a party down
+        // with no replacement and no cure available below — the rest beat is the only recovery
+        // the Crypt offers, so it has to actually recover you.
+        foreach (var u in _campaign.Crew) u.Wounded = false;
         int mended = _campaign.RestCrewPartial(CryptRestHeal);
         _log.Add(mended > 0 ? $"the crew catches its breath (+{mended} HP restored)"
                             : "the crew catches its breath");

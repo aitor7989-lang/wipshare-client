@@ -397,12 +397,22 @@ public sealed class Campaign
     /// <summary>Missed tithes remaining before the campaign ends (for the UI to warn with).</summary>
     public int TitheWarningsLeft => Math.Max(0, TitheGrace - TitheStrikes);
 
-    /// <summary>Pay what's due if able, else it rolls into the debt ledger and counts as a strike.</summary>
+    /// <summary>
+    /// Pay the Keeper. Paying in full clears the ledger and the strikes. A PARTIAL payment of at
+    /// least half is good faith: the remainder is recorded as debt but costs you no strike — that
+    /// is the difference between "poor this cycle" and "not paying", and without it a play-style
+    /// that banks nothing (greedy) died 100% of the time with no way back.
+    /// Paying under half is a strike; <see cref="TitheGrace"/> in a row and the Keeper collects.
+    /// </summary>
     public bool PayTithe()
     {
         int due = TitheAmount;
         if (Stones >= due) { Stones -= due; TitheDebt = 0; TithesPaid++; TitheStrikes = 0; return true; }
-        TitheDebt = due;      // unpaid → escalating ledger
+
+        int paid = Math.Max(0, Stones);
+        Stones -= paid;
+        TitheDebt = due - paid;
+        if (paid * 2 >= due) return false;              // good faith: debt recorded, no strike
         TitheStrikes++;
         if (TitheStrikes >= TitheGrace) Crew.Clear();   // the Keeper collects — campaign over
         return false;

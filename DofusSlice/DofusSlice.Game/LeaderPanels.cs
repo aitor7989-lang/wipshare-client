@@ -787,9 +787,9 @@ public partial class SliceGame
                 + (d.Cooldown > 0 ? $"  ·  CD {d.Cooldown}" : "");
             _font.Draw(_sb, Trunc(InfoOf(sp), 52), tx, row.Y + 26, 1, Mono.Dim);
             _font.Draw(_sb, rank < maxR
-                    ? Trunc($"NEXT: {InfoOf(TitheContent.SkillAtRank(key, rank + 1))}", 52)
+                    ? Trunc($"RANK {rank + 1}: {RankDelta(sp, TitheContent.SkillAtRank(key, rank + 1))}", 52)
                     : "MAX RANK",
-                tx, row.Y + 42, 1, rank < maxR ? Mono.Faint : Mono.Dim);
+                tx, row.Y + 42, 1, rank < maxR ? Mono.Cast : Mono.Dim);
 
             if (a.SpellPoints > 0 && rank < maxR)
             {
@@ -800,8 +800,50 @@ public partial class SliceGame
             }
         }
 
+        var known = new HashSet<string>(keys);
+        var locked = TitheContent.ClassSkillsAt(a.ClassId, 99)
+            .Select((k, idx) => (key: k, level: idx + 1))
+            .Where(x => !known.Contains(x.key))
+            .ToList();
+        if (locked.Count > 0)
+        {
+            int ly = Math.Min(w.Y + 66 + Math.Min(keys.Count, 6) * 74 + 6, w.Bottom - 78);
+            _font.Draw(_sb, "STILL TO COME", w.X + 26, ly, 1, Mono.Faint);
+            for (int i = 0; i < locked.Count && i < 3; i++)
+            {
+                var sp2 = TitheContent.SkillAtRank(locked[i].key, 1);
+                _font.Draw(_sb, Trunc($"LVL {locked[i].level}  {sp2.Name.ToUpperInvariant()}"
+                        + $"  ·  AP {sp2.ApCost}  ·  RANGE {sp2.MinRange}-{sp2.MaxRange}", 52),
+                    w.X + 26, ly + 14 + i * 13, 1, Mono.Dim);
+            }
+        }
+
         _font.DrawCentered(_sb, "(S OR ESC TO CLOSE)", w.Center.X, w.Bottom - 22, 1, Mono.Dim);
         DrawPanelMsg(w);
+    }
+
+    /// <summary>What one spell point actually buys, as a BEFORE -> AFTER diff. Only the fields that
+    /// change are listed, so the gain is readable at a glance instead of two lines to compare.</summary>
+    private static string RankDelta(DofusSlice.Core.Spells.SpellDef now, DofusSlice.Core.Spells.SpellDef next)
+    {
+        var parts = new List<string>();
+        if (next.ApCost != now.ApCost) parts.Add($"AP {now.ApCost}>{next.ApCost}");
+        if (next.MaxRange != now.MaxRange || next.MinRange != now.MinRange)
+            parts.Add($"RANGE {now.MinRange}-{now.MaxRange}>{next.MinRange}-{next.MaxRange}");
+        if (next.Cooldown != now.Cooldown) parts.Add($"CD {now.Cooldown}>{next.Cooldown}");
+        if (next.CriticalChanceOneIn != now.CriticalChanceOneIn && next.CriticalChanceOneIn > 0)
+            parts.Add($"CRIT 1/{now.CriticalChanceOneIn}>1/{next.CriticalChanceOneIn}");
+        // Damage/heal band, matched by effect order so a rider's numbers are compared to its own.
+        for (int i = 0; i < now.Effects.Count && i < next.Effects.Count; i++)
+        {
+            var a2 = now.Effects[i]; var b = next.Effects[i];
+            if (a2.Kind != b.Kind) continue;
+            if (a2.Kind is not (DofusSlice.Core.Spells.EffectKind.Damage
+                or DofusSlice.Core.Spells.EffectKind.Heal
+                or DofusSlice.Core.Spells.EffectKind.Lifesteal)) continue;
+            if (a2.Min != b.Min || a2.Max != b.Max) parts.Add($"{a2.Min}-{a2.Max}>{b.Min}-{b.Max}");
+        }
+        return parts.Count == 0 ? "no change" : string.Join("  ·  ", parts);
     }
 
     private void ClickSpellPanel(Point m)

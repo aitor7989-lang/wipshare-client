@@ -25,6 +25,7 @@ public sealed class Primitives
 
     public Primitives(GraphicsDevice gd, int tileW, int tileH, int discSize)
     {
+        _gd = gd;
         TileW = tileW;
         TileH = tileH;
         DiscSize = discSize;
@@ -122,6 +123,103 @@ public sealed class Primitives
     }
 
     public void FillRect(SpriteBatch sb, Rectangle rect, Color color) => sb.Draw(Pixel, rect, color);
+
+    // ---- Rounded corners -------------------------------------------------------------
+    // Not an antialiased radius: a staircase cut in steps of CrtPass.WorldPx, so the corner
+    // survives the quantize pass as whole fat pixels instead of being smeared into grey.
+    // Two textures (a fill mask and a border mask) get flipped into the four corners, the
+    // same 9-slice trick the diamond/disc builders above already use.
+
+    /// <summary>Corner step size in screen px — matched to the pixel grid so notches land on it.</summary>
+    public const int CornerStep = SliceGame.WorldPx;
+
+    private readonly Dictionary<int, Texture2D> _cornerFill = new();
+    private readonly Dictionary<(int, int), Texture2D> _cornerEdge = new();
+    private readonly GraphicsDevice _gd;
+
+    /// <summary>How far in the staircase has eaten at band <paramref name="band"/> (0 = outermost).
+    /// A 45° chamfer, which at these sizes reads as round and stays honest about the grid.</summary>
+    private static int Inset(int radius, int band) => radius - band * CornerStep;
+
+    private Texture2D CornerFill(int radius)
+    {
+        if (_cornerFill.TryGetValue(radius, out var cached)) return cached;
+        var tex = new Texture2D(_gd, radius, radius);
+        var data = new Color[radius * radius];
+        for (int y = 0; y < radius; y++)
+        {
+            int inset = Math.Max(0, Inset(radius, y / CornerStep));
+            for (int x = inset; x < radius; x++) data[y * radius + x] = Color.White;
+        }
+        tex.SetData(data);
+        return _cornerFill[radius] = tex;
+    }
+
+    private Texture2D CornerEdge(int radius, int thickness)
+    {
+        if (_cornerEdge.TryGetValue((radius, thickness), out var cached)) return cached;
+        var tex = new Texture2D(_gd, radius, radius);
+        var data = new Color[radius * radius];
+        void Put(int x, int y)
+        {
+            if (x >= 0 && y >= 0 && x < radius && y < radius) data[y * radius + x] = Color.White;
+        }
+        for (int y = 0; y < radius; y++)
+        {
+            int inset = Math.Max(0, Inset(radius, y / CornerStep));
+            int prev = Math.Max(0, Inset(radius, y / CornerStep - 1));
+            for (int t = 0; t < thickness; t++)
+            {
+                Put(inset + t, y);                                   // the riser
+                if (y % CornerStep == 0)                             // the tread, at each step down
+                    for (int x = inset; x < prev; x++) Put(x, y + t);
+            }
+        }
+        tex.SetData(data);
+        return _cornerEdge[(radius, thickness)] = tex;
+    }
+
+    /// <summary>Clamp a requested radius so it can never eat more than a third of the smaller
+    /// side — a 10px-tall bar keeps its shape instead of becoming a lozenge.</summary>
+    public static int FitRadius(Rectangle r, int radius)
+    {
+        int max = Math.Min(r.Width, r.Height) / 3;
+        int fit = Math.Min(radius, max);
+        return fit - fit % CornerStep;   // stay on the grid
+    }
+
+    private void Corners(SpriteBatch sb, Rectangle r, Texture2D tex, int radius, Color color)
+    {
+        int x1 = r.Right - radius, y1 = r.Bottom - radius;
+        sb.Draw(tex, new Vector2(r.X, r.Y), null, color, 0f, Vector2.Zero, 1f, SpriteEffects.None, 0f);
+        sb.Draw(tex, new Vector2(x1, r.Y), null, color, 0f, Vector2.Zero, 1f, SpriteEffects.FlipHorizontally, 0f);
+        sb.Draw(tex, new Vector2(r.X, y1), null, color, 0f, Vector2.Zero, 1f, SpriteEffects.FlipVertically, 0f);
+        sb.Draw(tex, new Vector2(x1, y1), null, color, 0f, Vector2.Zero, 1f,
+            SpriteEffects.FlipHorizontally | SpriteEffects.FlipVertically, 0f);
+    }
+
+    /// <summary>A filled rect with stepped corners. Falls back to a plain fill below 1 step.</summary>
+    public void FillRoundRect(SpriteBatch sb, Rectangle r, int radius, Color color)
+    {
+        radius = FitRadius(r, radius);
+        if (radius < CornerStep) { FillRect(sb, r, color); return; }
+        FillRect(sb, new Rectangle(r.X, r.Y + radius, r.Width, r.Height - 2 * radius), color);
+        FillRect(sb, new Rectangle(r.X + radius, r.Y, r.Width - 2 * radius, radius), color);
+        FillRect(sb, new Rectangle(r.X + radius, r.Bottom - radius, r.Width - 2 * radius, radius), color);
+        Corners(sb, r, CornerFill(radius), radius, color);
+    }
+
+    /// <summary>The border of a stepped-corner rect.</summary>
+    public void StrokeRoundRect(SpriteBatch sb, Rectangle r, int radius, int thickness, Color color)
+    {
+        radius = FitRadius(r, radius);
+        if (radius < CornerStep) { StrokeRect(sb, r, thickness, color); return; }
+        FillRect(sb, new Rectangle(r.X + radius, r.Y, r.Width - 2 * radius, thickness), color);
+        FillRect(sb, new Rectangle(r.X + radius, r.Bottom - thickness, r.Width - 2 * radius, thickness), color);
+        FillRect(sb, new Rectangle(r.X, r.Y + radius, thickness, r.Height - 2 * radius), color);
+        FillRect(sb, new Rectangle(r.Right - thickness, r.Y + radius, thickness, r.Height - 2 * radius), color);
+        Corners(sb, r, CornerEdge(radius, thickness), radius, color);
+    }
 
     public void StrokeRect(SpriteBatch sb, Rectangle r, int thickness, Color color)
     {

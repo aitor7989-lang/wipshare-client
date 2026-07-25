@@ -1316,7 +1316,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     // scale-down and scale-up cancel), so picking and layout code never notice.
 
     private RenderTarget2D? _worldRt;
-    private const int WorldPx = 2;
+    /// <summary>The fat-pixel grid. Shared, because the CRT quantizer and the UI's rounded
+    /// corners both have to land on exactly this grid or they fight it.</summary>
+    internal const int WorldPx = 2;
 
     // The tube. Owned here because it brackets the entire Draw, not just the world pass.
     private CrtPass _crt = null!;
@@ -2370,8 +2372,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         if (Mono.On)
         {
             // 1-bit rollover: ink frame for the crew, the ONE red accent for the dead.
-            _prim.FillRect(_sb, r, Mono.Panel * 0.97f);
-            _prim.StrokeRect(_sb, r, 1, f.Team == Team.Player ? Mono.Ink : Mono.Danger);
+            _prim.FillRoundRect(_sb, r, Mono.RadPanel, Mono.Panel * 0.97f);
+            _prim.StrokeRoundRect(_sb, r, Mono.RadPanel, 1,
+                f.Team == Team.Player ? Mono.Ink : Mono.Danger);
         }
         else if (_dof.Loaded)
         {
@@ -2497,8 +2500,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // The centred plate, straight from the F10 demo HUD: vitals left, the 7x2 spell
         // grid right, the level strip beneath — and the TEAM on the right edge, Dofus-style.
         var plate = new Rectangle(350, HudTop + 6, 580, 106);
-        _prim.FillRect(_sb, plate, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
-        _prim.StrokeRect(_sb, plate, 1, Mono.On ? Mono.Dim : Ew.Outline);
+        _prim.FillRoundRect(_sb, plate, Mono.RadPanel, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
+        _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Mono.On ? Mono.Dim : Ew.Outline);
         _font.Draw(_sb, Trunc(cur.Name.ToUpperInvariant(), 16), plate.X + 10, plate.Y + 5, 1,
             cur.Team == Team.Player ? Ew.Ink : Ew.Danger);
 
@@ -2777,7 +2780,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
             // The card wears the TEAM color: your side blue, theirs red, the dead faint.
             if (Mono.On)
-                _prim.StrokeRect(_sb, r, current ? 2 : 1, !shownAlive ? Mono.Faint
+                _prim.StrokeRoundRect(_sb, r, Mono.RadPanel, current ? 2 : 1, !shownAlive ? Mono.Faint
                     : f.Team == Team.Player ? Mono.Ally : Mono.Danger);
 
             // The fighter's HEAD on the card, Dofus-style (token disc when no art is baked).
@@ -3337,8 +3340,9 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
                 w, 8 + groups.Count * lp);
             if (Mono.On)
             {
-                _prim.FillRect(_sb, box, Mono.Panel * 0.94f);
-                _prim.StrokeRect(_sb, box, WorldPx, Mono.Dim);   // 2px: survives the half-res pass
+                _prim.FillRoundRect(_sb, box, Mono.RadPanel, Mono.Panel * 0.94f);
+                // 2px stroke: survives the half-res pass, and matches the corner step exactly
+                _prim.StrokeRoundRect(_sb, box, Mono.RadPanel, WorldPx, Mono.Dim);
             }
             else if (_dof.Loaded) _dof.Panel(_sb, box);
             else

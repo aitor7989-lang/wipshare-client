@@ -52,20 +52,36 @@ public static class Mono
         _ => Ink,
     };
 
-    /// <summary>A 1-bit frame: near-black fill, crisp 1px border.</summary>
+    // Corner radii, in screen px and always multiples of the 2px grid. Panels get the
+    // biggest step, the small interactive chrome less, so a 20px button doesn't turn into a
+    // pill. FitRadius clamps anything that would eat more than a third of the shorter side.
+    public const int RadPanel = 6;
+    public const int RadButton = 2;   // buttons are short; 4 turned them into lozenges
+    public const int RadSlot = 4;
+    public const int RadBar = 2;
+
+    /// <summary>A 1-bit frame: near-black fill, crisp 1px border, stepped corners.</summary>
     public static void Frame(SpriteBatch sb, Primitives prim, Rectangle r,
         bool emphasis = false, float fillAlpha = 0.94f)
     {
-        prim.FillRect(sb, r, Panel * fillAlpha);
-        prim.StrokeRect(sb, r, 1, emphasis ? Ink : Dim);
+        prim.FillRoundRect(sb, r, RadPanel, Panel * fillAlpha);
+        prim.StrokeRoundRect(sb, r, RadPanel, 1, emphasis ? Ink : Dim);
     }
 
     /// <summary>A 1-bit button: border box; hover INVERTS (white fill, black text expected).</summary>
     public static void Button(SpriteBatch sb, Primitives prim, Rectangle r,
         bool hover = false, bool disabled = false)
     {
-        if (hover && !disabled) { prim.FillRect(sb, r, Ink); prim.StrokeRect(sb, r, 1, Ink); }
-        else { prim.FillRect(sb, r, Panel); prim.StrokeRect(sb, r, 1, disabled ? Faint : Ink); }
+        if (hover && !disabled)
+        {
+            prim.FillRoundRect(sb, r, RadButton, Ink);
+            prim.StrokeRoundRect(sb, r, RadButton, 1, Ink);
+        }
+        else
+        {
+            prim.FillRoundRect(sb, r, RadButton, Panel);
+            prim.StrokeRoundRect(sb, r, RadButton, 1, disabled ? Faint : Ink);
+        }
     }
 
     /// <summary>Ink for a label sitting on a <see cref="Button"/> in the given state.</summary>
@@ -76,17 +92,19 @@ public static class Mono
     public static void Bar(SpriteBatch sb, Primitives prim, Rectangle r, float frac,
         Color? fill = null)
     {
-        prim.FillRect(sb, r, Panel);
-        prim.StrokeRect(sb, r, 1, Dim);
+        prim.FillRoundRect(sb, r, RadBar, Panel);
+        prim.StrokeRoundRect(sb, r, RadBar, 1, Dim);
         int w = (int)((r.Width - 4) * Math.Clamp(frac, 0f, 1f));
+        // The fill stays square: a rounded sliver at low HP would read as less than it is,
+        // and the track's own corners already carry the shape.
         if (w > 0) prim.FillRect(sb, new Rectangle(r.X + 2, r.Y + 2, w, r.Height - 4), fill ?? Ink);
     }
 
-    /// <summary>An item/spell slot: sharp 1px cell; selected inverts the border weight.</summary>
+    /// <summary>An item/spell slot: 1px cell with stepped corners; selected thickens the border.</summary>
     public static void Slot(SpriteBatch sb, Primitives prim, Rectangle r,
         bool hover = false, bool selected = false)
     {
-        prim.FillRect(sb, r, Panel);
-        prim.StrokeRect(sb, r, selected ? 2 : 1, selected ? Ink : hover ? Ink : Faint);
+        prim.FillRoundRect(sb, r, RadSlot, Panel);
+        prim.StrokeRoundRect(sb, r, RadSlot, selected ? 2 : 1, selected ? Ink : hover ? Ink : Faint);
     }
 }

@@ -43,7 +43,7 @@ public partial class SliceGame
             bool sel = i == Math.Clamp(_crewSel, 0, crew.Count - 1);
             bool hov = r.Contains(mp);
             Mono.Button(_sb, _prim, r, hover: hov && !sel, disabled: false);
-            if (sel) _prim.StrokeRect(_sb, r, 2, Mono.Ink);
+            if (sel) _prim.StrokeRoundRect(_sb, r, Mono.RadButton, 2, Mono.Ink);
             _font.DrawCentered(_sb, Trunc(crew[i].Name.ToUpperInvariant(), 10), r.Center.X, r.Y + 8, 1,
                 sel ? Mono.Ink : Mono.ButtonInk(hov && !sel));
         }
@@ -102,8 +102,8 @@ public partial class SliceGame
             line2 == null ? 0 : _font.Measure(line2, 1))) + 20;
         int h = line2 == null ? 44 : 57;
         var r = new Rectangle(Math.Min(mp.X + 14, ScreenW - wdt - 6), Math.Max(6, mp.Y - h - 6), wdt, h);
-        _prim.FillRect(_sb, r, Mono.Panel * 0.97f);
-        _prim.StrokeRect(_sb, r, 1, Mono.Ink);
+        _prim.FillRoundRect(_sb, r, Mono.RadPanel, Mono.Panel * 0.97f);
+        _prim.StrokeRoundRect(_sb, r, Mono.RadPanel, 1, Mono.Ink);
         _font.Draw(_sb, title, r.X + 9, r.Y + 6, 1, Mono.Ink);
         _font.Draw(_sb, line1, r.X + 9, r.Y + 20, 1, Mono.Dim);
         if (line2 != null) _font.Draw(_sb, line2, r.X + 9, r.Y + 33, 1, Mono.Dim);
@@ -220,8 +220,8 @@ public partial class SliceGame
     private void DrawSheetRow(Rectangle r, string label, string value, Point mp, string? icon = null,
         Color? iconTint = null)
     {
-        _prim.FillRect(_sb, r, Mono.Panel);
-        _prim.StrokeRect(_sb, r, 1, Mono.Faint);
+        _prim.FillRoundRect(_sb, r, Mono.RadPanel, Mono.Panel);
+        _prim.StrokeRoundRect(_sb, r, Mono.RadPanel, 1, Mono.Faint);
         int lx = r.X + 10;
         if (icon != null && DrawIconRect(icon, new Rectangle(r.X + 8, r.Center.Y - 8, 16, 16), iconTint, pad: 0))
             lx = r.X + 30;
@@ -306,8 +306,8 @@ public partial class SliceGame
 
         // The equipment doll — your character standing among their slots (demo geometry).
         var doll = DollRect;
-        _prim.FillRect(_sb, doll, new Color(10, 10, 10));
-        _prim.StrokeRect(_sb, doll, 1, Mono.Faint);
+        _prim.FillRoundRect(_sb, doll, Mono.RadPanel, new Color(10, 10, 10));
+        _prim.StrokeRoundRect(_sb, doll, Mono.RadPanel, 1, Mono.Faint);
         string? hoverCardTitle = null, hoverCard1 = null, hoverCard2 = null;
 
         var bySlot = a.Equipment.ToDictionary(TitheContent.ItemSlot, id => id);
@@ -465,12 +465,13 @@ public partial class SliceGame
             string dSlot = TitheContent.ItemSlot(_dragItem);
             if (!_dragFromDoll)
                 foreach (var d in DollSlots)
-                { if (d.slot == dSlot) _prim.StrokeRect(_sb, DollSlotRect(d), 2, Mono.Walk); }
+                { if (d.slot == dSlot) _prim.StrokeRoundRect(_sb, DollSlotRect(d), Mono.RadSlot, 2, Mono.Walk); }
             else
-                _prim.StrokeRect(_sb, new Rectangle(w.X + 390, w.Y + 62, 5 * 45, 8 * 45), 2, Mono.Walk);
+                _prim.StrokeRoundRect(_sb, new Rectangle(w.X + 390, w.Y + 62, 5 * 45, 8 * 45),
+                    Mono.RadPanel, 2, Mono.Walk);
             var at = new Rectangle(mp.X - 18, mp.Y - 18, 36, 36);
             if (!DrawIconRect("icon_slot_" + dSlot, at, Mono.Ink, pad: 0))
-                _prim.StrokeRect(_sb, at, 1, Mono.Ink);
+                _prim.StrokeRoundRect(_sb, at, Mono.RadSlot, 1, Mono.Ink);
             OutlinedCentered(Trunc(TitheContent.ItemName(_dragItem).ToUpperInvariant(), 9), mp.X, mp.Y + 22, 1, Mono.Ink);
         }
     }
@@ -753,8 +754,8 @@ public partial class SliceGame
             var sp = TitheContent.UnitSkill(a, key);
             int rank = a.RankOf(key), maxR = TitheContent.MaxRank(key);
             var row = SpellRowR(i);
-            _prim.FillRect(_sb, row, Mono.Panel);
-            _prim.StrokeRect(_sb, row, 1, Mono.Faint);
+            _prim.FillRoundRect(_sb, row, Mono.RadSlot, Mono.Panel);
+            _prim.StrokeRoundRect(_sb, row, Mono.RadSlot, 1, Mono.Faint);
 
             // The spell's glyph well, like the combat bar's slots (letter when not baked).
             var well = new Rectangle(row.X + 8, row.Y + 10, 46, 46);

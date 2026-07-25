@@ -77,8 +77,8 @@ public partial class SliceGame
         var kmp = new Point(_mouse.X, _mouse.Y);
 
         var plate = new Rectangle(350, HudTop + 6, 580, 106);
-        _prim.FillRect(_sb, plate, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
-        _prim.StrokeRect(_sb, plate, 1, Mono.On ? Mono.Dim : Ew.Outline);
+        _prim.FillRoundRect(_sb, plate, Mono.RadPanel, Mono.On ? new Color(14, 14, 14) : Ew.Surface);
+        _prim.StrokeRoundRect(_sb, plate, Mono.RadPanel, 1, Mono.On ? Mono.Dim : Ew.Outline);
         _font.Draw(_sb, Trunc($"{a.Name.ToUpperInvariant()} — LEADER", 22), plate.X + 10, plate.Y + 5, 1, Ew.Ink);
 
         int hp = Math.Clamp(a.CurrentHp ?? s.MaxHp, 0, s.MaxHp);

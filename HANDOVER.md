@@ -1,6 +1,6 @@
 # HANDOVER — `wipshare-client` games (DofusSlice · Gauntlet archived)
 
-_Last updated: 2026-07-25 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · latest work: "audit-driven improvement programme — 12 commits, see §8"_
+_Last updated: 2026-07-25 · branch `claude/dofus-engine-vertical-slice-7ijlfm` · latest work: "audit-driven improvement programme — 16 commits, see §8" · HEAD `911db47`_
 
 ---
 
@@ -197,7 +197,28 @@ Run `git log --oneline 5594cd7..HEAD` for the list. In order:
 8. **C: feel** — status pips were unreachable on the board; statuses now flash and name themselves; per-cell footsteps, audible END TURN, a distinct refusal sound, turn-clock warnings. *(Impact-scaling-with-damage deliberately skipped at the owner's request.)*
 9. **D: companions** — crew tabs to gear/read/spend for any member, real names, hidden temperament on hire.
 10. **E: stakes** — the failure states, the Sexton as an escalating ending, duplicate gear salvages for stones.
-11. **Balance** — partial tithe payment avoids a strike; pack reach jitters ±25% per dive so the yard stops printing identical dives; the crypt breather mends 70% and clears wounds.
+11. **Balance** — partial tithe payment avoids a strike; pack reach jitters ±25% per dive so the yard stops printing identical dives; the crypt breather mends 70% and clears wounds. **The sim's crypt runner now models the rest beat** — it didn't, so the audit's "2 rooms in 60" measured a Crypt the player never fights.
+12. **Class kits → Crâ / Sacrieur / Iop shapes**, ladders 4 → 7 spells. NOTE: the first attempt collapsed the crypt 20 → 4 of 72 because `ClassSkillsAt` is `Skills.Take(level)` — whatever sits in slots 1-4 IS the low-level kit, and utility there strips a level-3 party of its damage. Reordered; back to 20.
+13. **Spell window** — a "STILL TO COME" block listing locked spells and the level that grants them, and the rank-up line is now a BEFORE > AFTER diff of only the fields that change.
+14. **Level band to 30** — `XpCurve` extended on its own shape, `Campaign.MaxLevel` added, `GainXp` stops at the ceiling instead of extrapolating forever.
+15. **`docs/challenges.md`** — the fight-challenge system specced against this engine (see below).
+
+### ⚠️ Provenance note — read before touching class numbers
+The class kits are **modelled on** Crâ / Sacrieur / Iop mechanics from general knowledge. **Every
+number in them is ours** — AP costs, ranges, damage bands, cooldowns, crit rates. No Dofus stat
+table was ever fetched; a web search returned forum threads and guides only. Do not describe these
+values as "1.29 accurate". If real values are wanted, the 1.29 **emulator projects** (Araknemu,
+SunDofus, Shivas, Jumbo, GDCore) ship spell tables as SQL — that is the place to get them, and the
+rank rows need widening from 3 to 5-6 first so ranks 4-6 have somewhere to live.
+
+### Next up, highest value first
+1. **Fight challenges** — fully specced in `DofusSlice/docs/challenges.md`. ~22 rules need NO
+   engine change; entry points are `UpdateTithePlacement` (offer), `WireEngine` (a `ChallengeWatch`
+   that fails LOUDLY the moment a rule breaks) and `TitheResolution.Resolve` (multiplier). This is
+   the cheapest fix for "every crypt run is identical", the biggest replayability problem found.
+2. **The progression curve** — the real reason the Crypt stalls at ~2/6 rooms. A level-3 party
+   cannot beat grade-3 rooms; healing them harder barely moved it. Needs a difficulty target.
+3. Weapon attacks · glyphs/traps · enemy threat overlay · title screen · rank rows to 5-6.
 
 
 Branch `claude/dofus-engine-vertical-slice-7ijlfm`, most recent first:

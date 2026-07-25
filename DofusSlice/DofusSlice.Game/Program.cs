@@ -46,10 +46,17 @@ try
         "hard" => DofusSlice.Game.Rendering.PixelMode.Hard,
         _ => DofusSlice.Game.Rendering.PixelMode.Soft,
     };
+    // --ascii[=mono] starts in the terminal renderer (F6 toggles it, F5 swaps colour mode).
+    var asciiArg = args.FirstOrDefault(a => a.StartsWith("--ascii", StringComparison.OrdinalIgnoreCase));
+    bool ascii = asciiArg != null;
+    bool asciiChromatic = !(asciiArg?.EndsWith("=mono", StringComparison.OrdinalIgnoreCase) ?? false);
+
     using var game = new DofusSlice.Game.SliceGame(tithe, seed, boss, loop, uiDemo)
     {
         Crt = crt,
         Pixels = pixels,
+        Ascii = ascii,
+        AsciiChromatic = asciiChromatic,
     };
     game.Run();
 }

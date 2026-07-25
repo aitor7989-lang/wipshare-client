@@ -173,6 +173,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         _sb = new SpriteBatch(GraphicsDevice);
         _crt = new CrtPass(GraphicsDevice) { Level = Crt, Pixels = Pixels, PixelSize = WorldPx };
+        _ascii = new AsciiPass(GraphicsDevice) { Enabled = Ascii, Chromatic = AsciiChromatic };
         _prim = new Primitives(GraphicsDevice, TileW, TileH, 64);
         _font = new PixelFont(_prim.Pixel);
         _sprites = new SpriteBank(GraphicsDevice);
@@ -931,6 +932,19 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _crtTime += (float)gameTime.ElapsedGameTime.TotalSeconds;
         if (Pressed(Keys.F8)) { _crt.Cycle(); _log.Add($"tube: {_crt.LevelName}"); _sfx.Play("click", 0.4f); }
         if (Pressed(Keys.F7)) { _crt.CyclePixels(); _log.Add($"fat pixels: {_crt.PixelName}"); _sfx.Play("click", 0.4f); }
+        if (Pressed(Keys.F6))
+        {
+            _ascii.Enabled = !_ascii.Enabled;
+            if (_ascii.Enabled && _crt.Level == CrtLevel.Off) _crt.Level = CrtLevel.Soft;
+            _log.Add($"terminal: {(_ascii.Enabled ? "ON" : "off")}");
+            _sfx.Play("click", 0.4f);
+        }
+        if (Pressed(Keys.F5) && _ascii.Enabled)
+        {
+            _ascii.Chromatic = !_ascii.Chromatic;
+            _log.Add($"terminal colour: {(_ascii.Chromatic ? "chromatic" : "mono")}");
+            _sfx.Play("click", 0.4f);
+        }
 
         // F10: the UI-limits debug scene (the Dofus screenshot rebuilt from the oldUI theme).
         // It needs the theme layer, which sleeps under Mono — the key is inert there.
@@ -1294,7 +1308,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
         DrawFrame(gameTime);
 
-        _crt.End(_sb, _crtTime);
+        // The terminal pass consumes the same composed frame the tube would have resolved,
+        // so the two are alternatives rather than a stack.
+        if (_ascii.Enabled && _crt.FrameTarget != null)
+            _ascii.Apply(_sb, _crt.FrameTarget, ScreenW, ScreenH);
+        else
+            _crt.End(_sb, _crtTime);
     }
 
     private void DrawFrame(GameTime gameTime)
@@ -1322,6 +1341,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     // The tube. Owned here because it brackets the entire Draw, not just the world pass.
     private CrtPass _crt = null!;
+    private AsciiPass _ascii = null!;
     private float _crtTime;
 
     /// <summary>Starting tube level, settable before Run() (see --crt=). F8 cycles it live.</summary>
@@ -1329,6 +1349,12 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
 
     /// <summary>Starting fat-pixel reach (see --pixels=). F7 cycles it live.</summary>
     public PixelMode Pixels { get; init; } = PixelMode.Soft;
+
+    /// <summary>Start in the terminal renderer (see --ascii). F6 toggles it live.</summary>
+    public bool Ascii { get; init; }
+
+    /// <summary>Terminal renderer colour mode (see --ascii=mono). F5 swaps it live.</summary>
+    public bool AsciiChromatic { get; init; } = true;
 
     private void BeginWorld()
     {

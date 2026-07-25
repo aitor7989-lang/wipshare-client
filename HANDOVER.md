@@ -247,6 +247,17 @@ plus procedurally-built textures.
   must appear in a release has to be generated. Glyph sizes are tuned to the *bloom*, not to
   taste: 16px art pixels dissolve to grey under it and 8px lobes merge into a square, so 12x12
   with a 2x2-block dither is the size that survives. Re-tune if the bloom changes.
+- **F6 = the TERMINAL renderer** (`Rendering/AsciiPass.cs`, `--ascii[=mono]`, F5 swaps colour).
+  Re-renders the composed frame as a glyph grid. It consumes the same offscreen frame the tube
+  would have resolved, so the two are **alternatives, not a stack** — and it needs that frame, so
+  enabling it forces the tube on if it was off. The cheap trick: drawing the frame into a
+  one-texel-per-cell render target with linear filtering IS the per-cell average, so the CPU only
+  does one small GetData. Glyphs are rasterised once into an atlas because at ~20k cells a
+  per-pixel glyph draw would be ~700k quads a frame.
+  **It is a toggle, not a candidate default:** at a 6x8 cell the HUD's 5x7 text is re-sampled to
+  roughly one cell per glyph and becomes unreadable. Making it shippable means the HUD stops being
+  drawn-then-converted and starts being *authored* on the character grid — a different UI, not a
+  setting.
 - **F7** cycles how far the grid reaches: OFF (HUD at native res) / SOFT (HUD chrome on the grid,
   cross-faded with the original at half weight so the 5x7 font keeps a legible 1px core) / HARD
   (no exceptions — and it destroys the font). `--pixels=` sets the start. SOFT is the default.

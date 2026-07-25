@@ -79,10 +79,11 @@ public sealed class AsciiPass : IDisposable
         _buf = new Color[cols * rows];
     }
 
-    /// <summary>Resolve <paramref name="source"/> to the back buffer as glyphs.</summary>
-    public void Apply(SpriteBatch sb, Texture2D source, int screenW, int screenH)
+    /// <summary>Resolve <paramref name="source"/> to the back buffer as glyphs, filling
+    /// <paramref name="dest"/> — the letterboxed rect the picture occupies in the window.</summary>
+    public void Apply(SpriteBatch sb, Texture2D source, Rectangle dest)
     {
-        Ensure(screenW, screenH);
+        Ensure(dest.Width, dest.Height);
 
         // One texel per cell, linear-filtered: the hardware returns each cell's average.
         _gd.SetRenderTarget(_cells);
@@ -105,7 +106,7 @@ public sealed class AsciiPass : IDisposable
                 int idx = (int)MathF.Round(MathF.Min(1f, lum * 1.35f) * (Ramp.Length - 1));
                 if (idx <= 0) continue;
                 sb.Draw(_atlas,
-                    new Rectangle(col * CellW, row * CellH, GlyphW, GlyphH),
+                    new Rectangle(dest.X + col * CellW, dest.Y + row * CellH, GlyphW, GlyphH),
                     new Rectangle(idx * GlyphW, 0, GlyphW, GlyphH),
                     Chromatic ? Boost(c) : Phosphor);
             }

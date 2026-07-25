@@ -78,8 +78,31 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     private const int CryptLevel = 3;
     private const float PlaceSeconds = 30f;           // the 1.29 ready-phase countdown
     private float _placeClock = PlaceSeconds;
+    // The VIRTUAL screen. Every panel in the game is laid out against these numbers with
+    // fixed pixel offsets, so they stay put: the window can be any size, and the finished
+    // picture is scaled into it. Making ~200 layout sites responsive instead would be a
+    // different project, and a fixed-aspect picture is the right answer for this art anyway.
     private const int ScreenW = 1280;
     private const int ScreenH = 760;
+
+    private static int WindowW = ScreenW;
+    private static int WindowH = ScreenH;
+
+    /// <summary>Set the window size (see --res=). Must be called before the game is built.
+    /// The virtual screen is unchanged; the picture is letterboxed into whatever you ask for.</summary>
+    public static void SetResolution(int w, int h)
+    {
+        WindowW = Math.Max(320, w);
+        WindowH = Math.Max(240, h);
+    }
+
+    /// <summary>The virtual screen fitted into the window, aspect preserved and centred.</summary>
+    private static Rectangle Letterbox()
+    {
+        float scale = Math.Min(WindowW / (float)ScreenW, WindowH / (float)ScreenH);
+        int w = (int)(ScreenW * scale), h = (int)(ScreenH * scale);
+        return new Rectangle((WindowW - w) / 2, (WindowH - h) / 2, w, h);
+    }
     private const int TileW = 64;
     private const int TileH = 32;
     private const int HudTop = 600;
@@ -141,8 +164,8 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         _uiDemo = uiDemo;
         _graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = ScreenW,
-            PreferredBackBufferHeight = ScreenH,
+            PreferredBackBufferWidth = WindowW,
+            PreferredBackBufferHeight = WindowH,
         };
         Content.RootDirectory = "Content";
         IsMouseVisible = true;
@@ -1316,6 +1339,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
     {
         // The whole frame is composed offscreen so the CRT pass can resolve it through the tube.
         // With the pass OFF, Begin/End point at the back buffer and do nothing at all.
+        _crt.Output = Letterbox();
         _crt.Begin(ScreenW, ScreenH, Palette.Background);
         GraphicsDevice.Clear(Palette.Background);
 
@@ -1324,7 +1348,7 @@ public sealed partial class SliceGame : Microsoft.Xna.Framework.Game
         // The terminal pass consumes the same composed frame the tube would have resolved,
         // so the two are alternatives rather than a stack.
         if (_ascii.Enabled && _crt.FrameTarget != null)
-            _ascii.Apply(_sb, _crt.FrameTarget, ScreenW, ScreenH);
+            _ascii.Apply(_sb, _crt.FrameTarget, Letterbox());
         else
             _crt.End(_sb, _crtTime);
     }

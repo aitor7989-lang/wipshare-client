@@ -66,6 +66,10 @@ public sealed class CrtPass : IDisposable
     /// corners off-screen — nothing is clipped, it just sits in a little black bezel.</summary>
     public float Curve { get; set; } = 0.07f;
 
+    /// <summary>Where the finished picture lands on the back buffer. Null = fill it 1:1.
+    /// Set this to a letterboxed rect when the window is not the virtual screen's size.</summary>
+    public Rectangle? Output { get; set; }
+
     /// <summary>Bloom source divisor, relative to full res.</summary>
     private const int BloomDiv = 8;
 
@@ -146,12 +150,11 @@ public sealed class CrtPass : IDisposable
     /// The target the frame must be composed into, or null when the pass is off (in which case
     /// everything draws straight to the back buffer and nothing changes).
     /// </summary>
-    public RenderTarget2D? FrameTarget => Level == CrtLevel.Off ? null : _frame;
+    public RenderTarget2D? FrameTarget => _frame;
 
     /// <summary>Point every draw at the offscreen frame. Call once at the top of Draw.</summary>
     public void Begin(int screenW, int screenH, Color clear)
     {
-        if (Level == CrtLevel.Off) { _gd.SetRenderTarget(null); return; }
         Ensure(screenW, screenH);
         _gd.SetRenderTarget(_frame);
         _gd.Clear(clear);
@@ -163,7 +166,18 @@ public sealed class CrtPass : IDisposable
     /// </summary>
     public void End(SpriteBatch sb, float time)
     {
-        if (Level == CrtLevel.Off || _frame is null) return;
+        if (_frame is null) return;
+        if (Level == CrtLevel.Off)
+        {
+            // The tube is off, but the picture may still need scaling into a smaller window,
+            // so it goes through the same resolve. A 1:1 resolve is byte-for-byte the frame.
+            _gd.SetRenderTarget(_flat);
+            sb.Begin(samplerState: SamplerState.PointClamp);
+            sb.Draw(_frame, new Rectangle(0, 0, _w, _h), Color.White);
+            sb.End();
+            Resolve(sb);
+            return;
+        }
         bool full = Level == CrtLevel.Full;
         var screen = new Rectangle(0, 0, _w, _h);
 
@@ -193,11 +207,10 @@ public sealed class CrtPass : IDisposable
         sb.Draw(lit, halfRect, Color.White);
         sb.End();
 
-        // Everything from here composes the finished picture. When the tube is curved that
-        // has to land offscreen first, because the warp needs the whole thing as one texture.
-        bool curved = Curve > 0.001f;
-        _gd.SetRenderTarget(curved ? _flat : null);
-        if (curved) _gd.Clear(Color.Black);
+        // Everything from here composes the finished picture, and it lands offscreen: the
+        // resolve below needs the whole thing as one texture to warp and/or scale it.
+        _gd.SetRenderTarget(_flat);
+        _gd.Clear(Color.Black);
 
         // 3. The quantized image, point-sampled back up — the fat pixels stay fat pixels.
         sb.Begin(samplerState: SamplerState.PointClamp);
@@ -252,7 +265,27 @@ public sealed class CrtPass : IDisposable
             sb.End();
         }
 
-        if (curved) ResolveCurved();
+        Resolve(sb);
+    }
+
+    /// <summary>
+    /// Put the finished picture on the back buffer. <see cref="Output"/> is where it lands —
+    /// the whole window normally, or a letterboxed rect when the window is not the same shape
+    /// as the virtual screen everything is laid out against.
+    /// </summary>
+    private void Resolve(SpriteBatch sb)
+    {
+        var dest = Output ?? new Rectangle(0, 0, _w, _h);
+        if (Curve > 0.001f) { ResolveCurved(dest); return; }
+
+        _gd.SetRenderTarget(null);
+        _gd.Clear(Color.Black);
+        // Point when it is 1:1 (the fat pixels must stay exact), linear when it is being
+        // rescaled, where point sampling would drop whole rows of them.
+        bool exact = dest.Width == _w && dest.Height == _h;
+        sb.Begin(samplerState: exact ? SamplerState.PointClamp : SamplerState.LinearClamp);
+        sb.Draw(_flat, dest, Color.White);
+        sb.End();
     }
 
     /// <summary>
@@ -263,9 +296,11 @@ public sealed class CrtPass : IDisposable
     /// </summary>
     public Point Unwarp(Point p)
     {
-        if (Curve <= 0.001f || _w == 0 || _h == 0) return p;
-        float halfW = _w / 2f, halfH = _h / 2f;
-        float ud = (p.X - halfW) / halfW, vd = (p.Y - halfH) / halfH;
+        if (_w == 0 || _h == 0) return p;
+        var dest = Output ?? new Rectangle(0, 0, _w, _h);
+        float halfW = dest.Width / 2f, halfH = dest.Height / 2f;
+        float ud = (p.X - dest.X - halfW) / halfW, vd = (p.Y - dest.Y - halfH) / halfH;
+        if (Curve <= 0.001f) return ToVirtual(ud, vd);
         float rd = MathF.Sqrt(ud * ud + vd * vd);
         if (rd < 1e-5f) return p;
 
@@ -281,19 +316,23 @@ public sealed class CrtPass : IDisposable
             r -= f / df;
         }
         float k = r / rd;
-        return new Point(
-            (int)MathF.Round(halfW + ud * k * halfW),
-            (int)MathF.Round(halfH + vd * k * halfH));
+        return ToVirtual(ud * k, vd * k);
     }
 
+    /// <summary>Normalised (-1..1) picture coordinates back to virtual screen pixels.</summary>
+    private Point ToVirtual(float u, float v) =>
+        new((int)MathF.Round((u + 1f) * 0.5f * _w), (int)MathF.Round((v + 1f) * 0.5f * _h));
+
     /// <summary>Blit the finished flat picture onto the back buffer through the warped grid.</summary>
-    private void ResolveCurved()
+    private void ResolveCurved(Rectangle dest)
     {
-        BuildWarp();
+        BuildWarp(dest);
         _gd.SetRenderTarget(null);
         _gd.Clear(Color.Black);
 
-        _warpFx!.Projection = Matrix.CreateOrthographicOffCenter(0, _w, _h, 0, 0f, 1f);
+        _warpFx!.Projection = Matrix.CreateOrthographicOffCenter(
+            0, _gd.PresentationParameters.BackBufferWidth,
+            _gd.PresentationParameters.BackBufferHeight, 0, 0f, 1f);
         _warpFx.Texture = _flat;
 
         // Linear, not point: the fat pixels are already baked into _flat, and resampling a
@@ -312,7 +351,7 @@ public sealed class CrtPass : IDisposable
         }
     }
 
-    private void BuildWarp()
+    private void BuildWarp(Rectangle dest)
     {
         _warpFx ??= new BasicEffect(_gd)
         {
@@ -323,13 +362,14 @@ public sealed class CrtPass : IDisposable
             View = Matrix.Identity,
         };
         // The mesh only depends on the curve amount and the screen size; rebuild on change.
-        float key = Curve * 100003f + _w * 31f + _h;
+        float key = Curve * 100003f + dest.Width * 31f + dest.Height * 7f + dest.X * 3f + dest.Y;
         if (_warpVerts != null && Math.Abs(key - _warpBuiltFor) < 0.0001f) return;
         _warpBuiltFor = key;
 
         int n = WarpN;
         _warpVerts = new VertexPositionTexture[(n + 1) * (n + 1)];
-        float halfW = _w / 2f, halfH = _h / 2f;
+        float halfW = dest.Width / 2f, halfH = dest.Height / 2f;
+        float cx = dest.X + halfW, cy = dest.Y + halfH;
         for (int j = 0; j <= n; j++)
             for (int i = 0; i <= n; i++)
             {
@@ -338,7 +378,7 @@ public sealed class CrtPass : IDisposable
                 float r2 = u * u + v * v;              // 0 centre, 1 edge midpoint, 2 corner
                 float s = 1f - Curve * r2 * 0.5f;      // corners pull in twice as far as edges
                 _warpVerts[j * (n + 1) + i] = new VertexPositionTexture(
-                    new Vector3(halfW + u * s * halfW, halfH + v * s * halfH, 0f),
+                    new Vector3(cx + u * s * halfW, cy + v * s * halfH, 0f),
                     new Vector2(i / (float)n, j / (float)n));
             }
 

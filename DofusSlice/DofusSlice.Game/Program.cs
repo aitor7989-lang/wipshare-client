@@ -51,6 +51,15 @@ try
     bool ascii = asciiArg != null;
     bool asciiChromatic = !(asciiArg?.EndsWith("=mono", StringComparison.OrdinalIgnoreCase) ?? false);
 
+    // --res=WxH sets the window size (default 1280x760).
+    var resArg = args.FirstOrDefault(a => a.StartsWith("--res=", StringComparison.OrdinalIgnoreCase));
+    if (resArg != null)
+    {
+        var parts = resArg.Split('=')[1].Split('x', 'X', ',');
+        if (parts.Length == 2 && int.TryParse(parts[0], out int rw) && int.TryParse(parts[1], out int rh))
+            DofusSlice.Game.SliceGame.SetResolution(rw, rh);
+    }
+
     // --curve=0.10 sets how far the tube face bows; 0 is a flat panel.
     var curveArg = args.FirstOrDefault(a => a.StartsWith("--curve=", StringComparison.OrdinalIgnoreCase));
     float curve = curveArg != null && float.TryParse(curveArg.Split('=')[1],

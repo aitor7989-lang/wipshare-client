@@ -328,15 +328,14 @@ public sealed class Warren
         }
     }
 
-    /// <summary>Raise a parapet on the void ring around a chamber — after isolation, so the
-    /// shave cannot delete it. The Warden and every Vault are always walled (an arena and a
-    /// treasury read as built places); a Shrine only sometimes, so some stand open to the dark.
-    /// Only void becomes rock: the doorway is Dirt and survives untouched.</summary>
+    /// <summary>Raise a parapet on the void ring around EVERY chamber — after isolation, so the
+    /// shave cannot delete it. Special rooms are built places: an arena, a treasury, a shrine —
+    /// walls are what make them read as rooms rather than as wide spots in the cave. Only void
+    /// becomes rock: the doorway is Dirt and survives untouched.</summary>
     private void WallRooms(TileKind[,] tiles, List<RoomRect> rooms)
     {
         foreach (var r in rooms)
         {
-            if (r.Kind == RoomKind.Shrine && _rng.Roll(0, 99) < 40) continue;
             for (int y = r.Y - 1; y <= r.Y + r.H; y++)
                 for (int x = r.X - 1; x <= r.X + r.W; x++)
                 {

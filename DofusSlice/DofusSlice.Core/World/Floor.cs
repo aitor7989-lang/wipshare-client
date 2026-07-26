@@ -3,9 +3,8 @@ using DofusSlice.Core.Grid;
 namespace DofusSlice.Core.World;
 
 /// <summary>A room that is more than corridor. Placed against the floor as a whole, which is why
-/// the generator produces a FLOOR and not a row stream: "the Warden is at the end" and "no two
-/// shrines adjacent" are statements about the whole, and a generator that only knows the last row
-/// cannot make them.</summary>
+/// the generator produces a FLOOR and not a stream: "the Warden is at the end" and "no two shrines
+/// adjacent" are statements about the whole.</summary>
 public enum RoomKind
 {
     None,
@@ -17,105 +16,100 @@ public enum RoomKind
     Warden,
 }
 
+/// <summary>The four headings a corridor can run. The path turns between segments, so a floor is a
+/// wandering network rather than a strip — an earlier version hardcoded depth to the Y axis, which
+/// meant the corridor could only ever run one direction.</summary>
+public enum Heading { North, East, South, West }
+
+/// <summary>One step of the walk: where the corridor's centre is, and what it is there.</summary>
+public readonly struct PathStep
+{
+    public int X { get; init; }
+    public int Y { get; init; }
+    public Heading Dir { get; init; }
+    public SegmentKind Kind { get; init; }
+    public RoomKind Room { get; init; }
+    public int Segment { get; init; }
+
+    /// <summary>0 open .. 100 single-file, measured ACROSS the heading at this step. THE scalar
+    /// every other system reads, so tightness means one number everywhere.</summary>
+    public int Constriction { get; init; }
+}
+
 /// <summary>
-/// One generated floor: the ground, in full, from entry to Warden.
+/// One generated floor: a 2D grid of ground, plus the path that was walked through it.
 ///
-/// Everything is generated up front. Fog of war is NOT a property of this type — the floor simply
-/// exists, and what the player has seen is a separate mask over it (<see cref="Fog"/>). One truth,
-/// one derived view. The earlier design generated lazily at a frontier to make "it raises from the
-/// deeps" literal, which cost the ability to place anything globally and bought nothing: a floor is
-/// a few thousand cells, so there was never a memory problem to solve.
+/// Everything is generated up front. Fog of war is not a property of this type — the floor exists,
+/// and what the player has seen is a separate mask over it (<see cref="Fog"/>). One truth, one
+/// derived view.
 /// </summary>
 public sealed class Floor
 {
     public int Width { get; }
-    public int Length { get; }
+    public int Height { get; }
 
-    /// <summary>[x, y]. y increases with depth.</summary>
+    /// <summary>[x, y]. Everything not carved is <see cref="TileKind.Void"/> — the deeps.</summary>
     public TileKind[,] Tiles { get; }
 
-    public SegmentKind[] RowKind { get; }
-    public RoomKind[] RowRoom { get; }
+    /// <summary>The walk, in order. Index into this is what "depth" means now: distance along the
+    /// path rather than a Y coordinate. Light radius, telegraphs and fog all key off it.</summary>
+    public IReadOnlyList<PathStep> Path { get; }
 
-    /// <summary>Which segment each row belongs to. Kind alone cannot identify a segment — two
-    /// Throats in a row are two segments, and anything detecting boundaries by "the kind changed"
-    /// merges them. That is not hypothetical: dropping this field in a refactor silently zeroed the
-    /// chained-ambush metric for the second time.</summary>
-    public int[] RowSegment { get; }
-
-    /// <summary>Which floor of the dungeon this is, 1-based. Drives the difficulty ramp.</summary>
     public int Number { get; }
+    public (int X, int Y) Entry => (Path[0].X, Path[0].Y);
+    public (int X, int Y) Exit => (Path[^1].X, Path[^1].Y);
 
-    /// <summary>0 open .. 100 single-file, per row. THE scalar every other system reads.</summary>
-    public int[] Constriction { get; }
-
-    /// <summary>Column the hero starts on, and the column of the Warden's exit.</summary>
-    public int EntryX { get; }
-    public int ExitX { get; internal set; }
-
-    public Floor(int width, int length, int entryX, int number = 1)
+    public Floor(int width, int height, IReadOnlyList<PathStep> path, TileKind[,] tiles, int number)
     {
-        Width = width; Length = length; EntryX = entryX; Number = number;
-        Tiles = new TileKind[width, length];
-        RowKind = new SegmentKind[length];
-        RowRoom = new RoomKind[length];
-        RowSegment = new int[length];
-        Constriction = new int[length];
+        Width = width; Height = height; Path = path; Tiles = tiles; Number = number;
     }
 
     /// <summary>Water is NOT walkable — you see and shoot across it, you do not wade it. It was
-    /// missing from this test, which would have counted a flooded cistern as open floor and let the
-    /// passability proof pass through water.</summary>
+    /// missing from this test once, which let the passability proof cross a flooded room.</summary>
     public bool Walkable(int x, int y) =>
-        x >= 0 && x < Width && y >= 0 && y < Length &&
+        x >= 0 && x < Width && y >= 0 && y < Height &&
         Tiles[x, y] is not (TileKind.Void or TileKind.Rock or TileKind.Water);
 
-    /// <summary>First walkable column on a row, or -1.</summary>
-    public int FirstWalkable(int y)
-    {
-        for (int x = 0; x < Width; x++) if (Walkable(x, y)) return x;
-        return -1;
-    }
-
     /// <summary>
-    /// Is there an orthogonally-connected path from the entry row to the last row?
+    /// Is there an orthogonally-connected route from the entry to the Warden?
     ///
-    /// This is the invariant that actually matters, and it is NOT the same as "every row has a
-    /// walkable cell" — the check this replaced. Movement here is orthogonal, so a single-cell row
-    /// at column 5 followed by a single-cell row at column 6 leaves two cells that are diagonally
-    /// adjacent and mutually unreachable. Every row passes "has a walkable cell"; the floor is
-    /// unwinnable. On a one-way descent with nothing behind you, that is a dead run.
+    /// Not the same as "every step has floor near it": movement is orthogonal, so two cells that are
+    /// merely diagonally adjacent are mutually unreachable. On a one-way descent an unreachable exit
+    /// is a dead run the player cannot even walk back to diagnose.
     /// </summary>
-    public bool IsPassable(out int reachedDepth)
+    public bool IsPassable(out int reachedSteps)
     {
-        var seen = new bool[Width, Length];
-        var queue = new Queue<(int X, int Y)>();
-        reachedDepth = -1;
+        var seen = new bool[Width, Height];
+        var q = new Queue<(int X, int Y)>();
+        var (ex, ey) = Entry;
+        reachedSteps = 0;
+        if (!Walkable(ex, ey)) return false;
 
-        for (int x = 0; x < Width; x++)
-            if (Walkable(x, 0)) { seen[x, 0] = true; queue.Enqueue((x, 0)); }
-
-        while (queue.Count > 0)
+        seen[ex, ey] = true; q.Enqueue((ex, ey));
+        while (q.Count > 0)
         {
-            var (cx, cy) = queue.Dequeue();
-            reachedDepth = Math.Max(reachedDepth, cy);
-            Span<(int dx, int dy)> steps = stackalloc (int, int)[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
+            var (cx, cy) = q.Dequeue();
+            Span<(int, int)> steps = stackalloc (int, int)[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
             foreach (var (dx, dy) in steps)
             {
                 int nx = cx + dx, ny = cy + dy;
                 if (!Walkable(nx, ny) || seen[nx, ny]) continue;
                 seen[nx, ny] = true;
-                queue.Enqueue((nx, ny));
+                q.Enqueue((nx, ny));
             }
         }
-        return reachedDepth >= Length - 1;
+
+        // How far along the walk is reachable — a partial figure localises the break.
+        for (int i = 0; i < Path.Count; i++)
+        {
+            if (!seen[Path[i].X, Path[i].Y]) break;
+            reachedSteps = i + 1;
+        }
+        return reachedSteps == Path.Count;
     }
 }
 
-/// <summary>
-/// What the player has seen, kept apart from what exists. Deliberately dumb: the floor is the
-/// single source of truth about ground, and this is a mask over it.
-/// </summary>
+/// <summary>What the player has seen, kept apart from what exists.</summary>
 public sealed class Fog
 {
     private readonly bool[,] _seen;
@@ -124,28 +118,24 @@ public sealed class Fog
     public Fog(Floor floor)
     {
         _floor = floor;
-        _seen = new bool[floor.Width, floor.Length];
+        _seen = new bool[floor.Width, floor.Height];
     }
 
     public bool Seen(int x, int y) =>
-        x >= 0 && x < _floor.Width && y >= 0 && y < _floor.Length && _seen[x, y];
+        x >= 0 && x < _floor.Width && y >= 0 && y < _floor.Height && _seen[x, y];
 
-    /// <summary>Light everything within <paramref name="radius"/> of a point, by Chebyshev
-    /// distance so the lit area is a square-ish pool rather than a diamond — a diamond of
-    /// torchlight reads as a game rule, and this one wants to read as a lamp.</summary>
+    /// <summary>Light a pool around a point, by Chebyshev distance so it reads as a lamp rather than
+    /// as a game rule — a diamond of torchlight announces itself as geometry.</summary>
     public void Reveal(int cx, int cy, int radius)
     {
-        for (int y = Math.Max(0, cy - radius); y <= Math.Min(_floor.Length - 1, cy + radius); y++)
+        for (int y = Math.Max(0, cy - radius); y <= Math.Min(_floor.Height - 1, cy + radius); y++)
             for (int x = Math.Max(0, cx - radius); x <= Math.Min(_floor.Width - 1, cx + radius); x++)
                 _seen[x, y] = true;
     }
 
-    public int SeenCount()
+    /// <summary>Walk the whole path with a torch — the reveal a player would have earned.</summary>
+    public void WalkWithTorch(int radius)
     {
-        int n = 0;
-        for (int y = 0; y < _floor.Length; y++)
-            for (int x = 0; x < _floor.Width; x++)
-                if (_seen[x, y]) n++;
-        return n;
+        foreach (var s in _floor.Path) Reveal(s.X, s.Y, radius);
     }
 }

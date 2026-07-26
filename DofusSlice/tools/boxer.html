@@ -473,7 +473,8 @@
       // Undo is a navigation: jump to where the change is visible and resync every
       // header that names the current character — a hidden undo reads as a dead key.
       if (activeTab !== "sprite") showTab("sprite");
-      afterCharEdit(true);
+      afterCharEdit(false);
+      saveChars();             // undo persists NOW — a debounce window here loses the undo on close
       charSelUi(); playUi();
       return back;
     }
@@ -558,13 +559,18 @@
     // red-ink request (the export path is uncached and disagreed with the preview).
     const key = `${name}|${rot}|${fi}|${opts.ink ? opts.ink.join(".") : "-"}${opts.tile ? "t" : "-"}|${charVer}`;
     let cv = sprCache.get(key);
-    if (!cv) {
-      cv = document.createElement("canvas");
-      cv.width = SPR_W; cv.height = SPR_H;
-      drawModel(cv.getContext("2d"), c.frames[fi], rot, opts);
-      if (sprCache.size > 160) sprCache.clear();
-      sprCache.set(key, cv);
+    if (cv) {
+      // LRU: refresh recency on hit. The old nuke-all eviction met a 192-sprite live
+      // working set (4 chars x 4 facings x 12 frames) by clearing the cache every
+      // frame — the demo arena ran at 7 fps rebuilding sprites it had just drawn.
+      sprCache.delete(key); sprCache.set(key, cv);
+      return cv;
     }
+    cv = document.createElement("canvas");
+    cv.width = SPR_W; cv.height = SPR_H;
+    drawModel(cv.getContext("2d"), c.frames[fi], rot, opts);
+    if (sprCache.size >= 256) sprCache.delete(sprCache.keys().next().value);
+    sprCache.set(key, cv);
     return cv;
   }
 
@@ -613,12 +619,19 @@
   }
 
   let prevDirty = true;
+  // Persistence is DEBOUNCED for strokes: saveChars re-serializes the whole library, and
+  // doing that once per moved pixel made drag cost scale with library size. Structural
+  // ops (rename/delete/import/undo) still save immediately via saveChars().
+  let saveT = 0;
+  function saveCharsSoon() { clearTimeout(saveT); saveT = setTimeout(saveChars, 300); }
+  window.addEventListener("beforeunload", () => saveChars());
   function afterCharEdit(pushSave = true) {
     charVer++;
+    sprCache.clear();          // every cached sprite of this library version is now stale
     prevDirty = true;
     drawEdit();
     drawFramesUi();
-    if (pushSave) saveChars();
+    if (pushSave) saveCharsSoon();
   }
 
   function setVox(x, y, v) {
@@ -1108,7 +1121,21 @@
   let demoLoaded = false;
   try {
     const d = JSON.parse(localStorage.getItem("wander.demo") || "null");
-    if (d && Array.isArray(d.worn) && Array.isArray(d.units)) { demo = d; demoLoaded = true; }
+    if (d && Array.isArray(d.worn) && Array.isArray(d.units)) {
+      // Sanitize CONTENTS, not just the envelope: a null unit or non-numeric phase in
+      // stored data threw a TypeError on every animation frame — and re-saved itself.
+      demo = {
+        worn: d.worn.filter(w => typeof w === "string"),
+        units: d.units
+          .filter(u => u && typeof u === "object" && typeof u.name === "string")
+          .map(u => ({
+            name: u.name, rot: (+u.rot || 0) & 3,
+            x: clamp((+u.x || 0) | 0, 0, DP - 1), y: clamp((+u.y || 0) | 0, 0, DP - 1),
+            phase: (+u.phase || 0) | 0,
+          })),
+      };
+      demoLoaded = true;
+    }
   } catch (e) {}
   if (!demoLoaded && chars.size) {
     const names = [...chars.keys()];

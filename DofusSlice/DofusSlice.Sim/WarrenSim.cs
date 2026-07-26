@@ -4,8 +4,8 @@ using DofusSlice.Core.World;
 namespace DofusSlice.Sim;
 
 /// <summary>
-/// Headless harness for the WANDERER path generator. Two jobs: print a descent so a human can
-/// look at it, and measure a long one so the grammar gets tuned from numbers instead of vibes.
+/// Headless harness for the WANDERER floor generator: print a floor so a human can look at it,
+/// measure many so the grammar is tuned from numbers, and prove every floor can be walked.
 /// </summary>
 public static class WarrenSim
 {
@@ -27,132 +27,157 @@ public static class WarrenSim
         _ => 'o',
     };
 
-    /// <summary>Print <paramref name="rows"/> rows of a seeded descent.</summary>
-    public static int Dump(int seed, int rows)
+    /// <summary>Print a seeded floor, optionally as the player would see it: only what a torch of
+    /// <paramref name="sight"/> has lit along the way.</summary>
+    public static int Dump(int seed, int rows, int sight = 0)
     {
-        var w = new Warren(seed);
-        Console.WriteLine($"WARREN  seed={seed}  rows={rows}  width={Warren.Width}");
-        Console.WriteLine("  '.' floor  ':' worn floor  '#' rock  ' ' the deeps");
-        Console.WriteLine("  right column: segment kind, then constriction 0-100\n");
-
-        var last = (SegmentKind)(-1);
-        for (int d = 0; d < rows; d++)
+        var floor = new Warren(seed).Generate(Math.Max(60, rows));
+        Fog? fog = null;
+        if (sight > 0)
         {
-            var row = w.RowAt(d);
-            string line = new(row.Cells.Select(Glyph).ToArray());
-            // A rule at every segment boundary, so the grammar's pacing is visible as pacing
-            // rather than having to be inferred from the tiles.
-            if (row.Kind != last)
+            // Walk the link column down the floor with a torch — the reveal the player would get.
+            fog = new Fog(floor);
+            for (int y = 0; y < floor.Length; y++)
             {
-                Console.WriteLine($"      {new string('-', Warren.Width)}  {row.Kind}");
-                last = row.Kind;
+                int x = floor.FirstWalkable(y);
+                if (x >= 0) fog.Reveal(x, y, sight);
             }
-            Console.WriteLine($"{d,4}  |{line}|  {Mark(row.Kind)} {row.Constriction,3}");
+        }
+
+        Console.WriteLine($"FLOOR  seed={seed}  {floor.Width}x{floor.Length}" +
+                          (sight > 0 ? $"  fog: sight {sight}" : ""));
+        Console.WriteLine("  '.' floor  ':' worn  '#' rock  ' ' unseen or the deeps\n");
+
+        var lastRoom = (RoomKind)(-1);
+        var lastKind = (SegmentKind)(-1);
+        for (int y = 0; y < Math.Min(rows, floor.Length); y++)
+        {
+            if (floor.RowKind[y] != lastKind || floor.RowRoom[y] != lastRoom)
+            {
+                string label = floor.RowRoom[y] == RoomKind.None
+                    ? floor.RowKind[y].ToString()
+                    : $"** {floor.RowRoom[y].ToString().ToUpperInvariant()} **";
+                Console.WriteLine($"      {new string('-', floor.Width)}  {label}");
+                lastKind = floor.RowKind[y]; lastRoom = floor.RowRoom[y];
+            }
+
+            var sb = new System.Text.StringBuilder();
+            for (int x = 0; x < floor.Width; x++)
+                sb.Append(fog is null || fog.Seen(x, y) ? Glyph(floor.Tiles[x, y]) : ' ');
+
+            Console.WriteLine($"{y,4}  |{sb}|  {Mark(floor.RowKind[y])} {floor.Constriction[y],3}");
         }
         return 0;
     }
 
-    /// <summary>Walk a long descent and report the distribution. This is the tuning instrument:
-    /// the grammar is a pile of weights, and weights are exactly the kind of thing that feels
-    /// right and measures wrong.</summary>
-    public static int Stats(int seed, int rows)
+    /// <summary>Distribution across many floors. The grammar is a pile of weights, and weights are
+    /// exactly the thing that feels right and measures wrong.</summary>
+    public static int Stats(int floors, int length)
     {
-        var w = new Warren(seed);
         var kinds = new Dictionary<SegmentKind, int>();
-        var segments = new List<(SegmentKind Kind, int Start)>();
-        var buckets = new int[5];          // constriction 0-19, 20-39, ... 80-100
-        int peakLive = 0, throatRuns = 0;
-        int lastSeg = -1;
-        bool prevSegThroat = false;
-        // Depth drives the grammar and saturates around 120, so a 4000-row sample is ~97%
-        // "deepest difficulty". Reported split, or the headline number describes a regime the
-        // player spends almost none of the run in.
-        int shallowRows = 0, shallowTight = 0, deepRows = 0, deepTight = 0;
+        var rooms = new Dictionary<RoomKind, int>();
+        var buckets = new int[5];
+        int totalRows = 0, throatRuns = 0, shallowRows = 0, shallowTight = 0, deepRows = 0, deepTight = 0;
 
-        for (int d = 0; d < rows; d++)
+        for (int s = 0; s < floors; s++)
         {
-            var row = w.RowAt(d);
-            kinds[row.Kind] = kinds.GetValueOrDefault(row.Kind) + 1;
-            buckets[Math.Min(4, row.Constriction / 20)]++;
+            // Sweep floors 1..10 so the ramp is exercised, not just floor 1.
+            var floor = new Warren(s).Generate(length, 1 + s % 10);
+            totalRows += floor.Length;
 
-            if (row.SegmentIndex != lastSeg)
+            int lastSeg = -1;
+            bool prevSegThroat = false;
+            for (int y = 0; y < floor.Length; y++)
             {
-                segments.Add((row.Kind, d));
-                if (row.Kind == SegmentKind.Throat && prevSegThroat) throatRuns++;
-                prevSegThroat = row.Kind == SegmentKind.Throat;
-                lastSeg = row.SegmentIndex;
+                kinds[floor.RowKind[y]] = kinds.GetValueOrDefault(floor.RowKind[y]) + 1;
+                buckets[Math.Min(4, floor.Constriction[y] / 20)]++;
+
+                bool tight = floor.Constriction[y] >= 60;
+                if (floor.Number <= 3) { shallowRows++; if (tight) shallowTight++; }
+                else { deepRows++; if (tight) deepTight++; }
+
+                // By SEGMENT, never by kind: kind-change cannot see two Throats in a row.
+                if (floor.RowSegment[y] != lastSeg)
+                {
+                    if (floor.RowKind[y] == SegmentKind.Throat && prevSegThroat) throatRuns++;
+                    prevSegThroat = floor.RowKind[y] == SegmentKind.Throat;
+                    lastSeg = floor.RowSegment[y];
+                }
+                if (y == 0 || floor.RowRoom[y] != floor.RowRoom[y - 1])
+                    rooms[floor.RowRoom[y]] = rooms.GetValueOrDefault(floor.RowRoom[y]) + 1;
             }
-
-            bool tightRow = row.Constriction >= 60;
-            if (d < 120) { shallowRows++; if (tightRow) shallowTight++; }
-            else { deepRows++; if (tightRow) deepTight++; }
-
-            // The collapse, exercised: keep a brink trailing the light so LiveRows should sit
-            // flat forever. If this climbs, the tail is being held alive somewhere and the
-            // one-way premise is decorative rather than real.
-            w.Forget(d - 24);
-            peakLive = Math.Max(peakLive, w.LiveRows);
         }
 
-        Console.WriteLine($"WARREN STATS  seed={seed}  rows={rows}\n");
-        Console.WriteLine($"  segments        {segments.Count}  (mean {rows / (float)segments.Count:F1} rows)");
-        Console.WriteLine($"  peak live rows  {peakLive}   <- must stay flat; the collapse is real if it does");
-        Console.WriteLine($"  back-to-back throats  {throatRuns}   <- the chained-ambush threat\n");
+        Console.WriteLine($"FLOOR STATS  {floors} floors, target length {length}  ({totalRows} rows)\n");
+        Console.WriteLine($"  mean floor length     {totalRows / (float)floors:F1} rows");
+        Console.WriteLine($"  chained throats       {throatRuns}  ({throatRuns / (float)floors:F2} per floor)");
+        Console.WriteLine($"  special rooms/floor   Vault {rooms.GetValueOrDefault(RoomKind.Vault) / (float)floors:F2}" +
+                          $"   Shrine {rooms.GetValueOrDefault(RoomKind.Shrine) / (float)floors:F2}" +
+                          $"   Warden {rooms.GetValueOrDefault(RoomKind.Warden) / (float)floors:F2}\n");
 
         Console.WriteLine("  ROW SHARE BY ARCHETYPE");
         foreach (var (k, n) in kinds.OrderByDescending(kv => kv.Value))
-            Console.WriteLine($"    {k,-9} {n,5}  {n * 100f / rows,5:F1}%  {new string('#', n * 40 / rows)}");
+            Console.WriteLine($"    {k,-9} {n,6}  {n * 100f / totalRows,5:F1}%  {new string('#', n * 40 / totalRows)}");
 
         Console.WriteLine("\n  CONSTRICTION DISTRIBUTION");
         string[] names = { "  0-19 open", " 20-39", " 40-59", " 60-79", "80-100 tight" };
         for (int i = 0; i < buckets.Length; i++)
-            Console.WriteLine($"    {names[i],-14} {buckets[i],5}  {buckets[i] * 100f / rows,5:F1}%  " +
-                              $"{new string('#', buckets[i] * 40 / rows)}");
+            Console.WriteLine($"    {names[i],-14} {buckets[i],6}  {buckets[i] * 100f / totalRows,5:F1}%  " +
+                              $"{new string('#', buckets[i] * 40 / totalRows)}");
 
-        // The design cares about one number above all: how often the ground is tight enough for a
-        // chokepoint ambush to mean something. Too rare and the centrepiece beat never fires; too
-        // common and it stops being an event.
-        float tight = (buckets[3] + buckets[4]) * 100f / rows;
-        Console.WriteLine($"\n  TIGHT GROUND (constriction 60+): {tight:F1}% overall");
-        if (shallowRows > 0)
-            Console.WriteLine($"    depth 0-119   {shallowTight * 100f / shallowRows,5:F1}%  (the ramp)");
-        if (deepRows > 0)
-            Console.WriteLine($"    depth 120+    {deepTight * 100f / deepRows,5:F1}%  (saturated)");
-        Console.WriteLine(tight is >= 15f and <= 35f
-            ? "  -> in band (15-35%): chokepoints are frequent enough to threaten, rare enough to matter."
-            : "  -> OUT OF BAND (want 15-35%). Tune the grammar weights in Warren.PickKind.");
+        float tightAll = (buckets[3] + buckets[4]) * 100f / totalRows;
+        Console.WriteLine($"\n  TIGHT GROUND (60+): {tightAll:F1}% overall");
+        if (shallowRows > 0) Console.WriteLine($"    floors 1-3    {shallowTight * 100f / shallowRows,5:F1}%");
+        if (deepRows > 0) Console.WriteLine($"    floors 4-10   {deepTight * 100f / deepRows,5:F1}%");
+        Console.WriteLine(tightAll is >= 15f and <= 35f
+            ? "  -> in band (15-35%)."
+            : "  -> OUT OF BAND (want 15-35%). Tune Warren.PickKind.");
         return 0;
     }
 
-    /// <summary>Verify the generator holds its invariants over many seeds. Cheap, and it covers
-    /// the failure that would be worst to find later: a row you cannot walk through at all, on a
-    /// path that by definition has no way around and no way back.</summary>
-    public static int Verify(int seeds, int rows)
+    /// <summary>
+    /// Prove every floor can actually be walked, entry to Warden.
+    ///
+    /// This replaced a check that every row had SOME walkable cell — which is necessary and
+    /// nowhere near sufficient. Movement is orthogonal, so a width-1 row at column 5 above a
+    /// width-1 row at column 6 gives two cells that are only diagonally adjacent: the old check
+    /// passed and the floor was unwinnable. On a one-way descent that is a dead run, and the
+    /// player could not even walk back to see why.
+    /// </summary>
+    public static int Verify(int floors, int length)
     {
-        int fails = 0;
-        for (int s = 0; s < seeds; s++)
+        int fails = 0, worst = int.MaxValue;
+        for (int s = 0; s < floors; s++)
         {
-            var w = new Warren(s);
-            for (int d = 0; d < rows; d++)
+            var floor = new Warren(s).Generate(length, 1 + s % 10);
+
+            if (!floor.IsPassable(out int reached))
             {
-                var row = w.RowAt(d);
-                if (row.Cells.Length != Warren.Width)
-                { Console.WriteLine($"  seed {s} row {d}: width {row.Cells.Length}"); fails++; }
-                if (!Enumerable.Range(0, Warren.Width).Any(row.Walkable))
-                { Console.WriteLine($"  seed {s} row {d}: IMPASSABLE"); fails++; }
-                if (row.Constriction is < 0 or > 100)
-                { Console.WriteLine($"  seed {s} row {d}: constriction {row.Constriction}"); fails++; }
+                Console.WriteLine($"  seed {s}: IMPASSABLE — reached row {reached} of {floor.Length - 1}");
+                fails++;
+                worst = Math.Min(worst, reached);
             }
 
-            // Determinism: same seed, same ground. The sim is worthless without it.
-            var a = new Warren(s); var b = new Warren(s);
-            for (int d = 0; d < 40; d++)
-                if (!a.RowAt(d).Cells.SequenceEqual(b.RowAt(d).Cells))
-                { Console.WriteLine($"  seed {s} row {d}: NOT DETERMINISTIC"); fails++; break; }
+            for (int y = 0; y < floor.Length; y++)
+                if (floor.FirstWalkable(y) < 0)
+                { Console.WriteLine($"  seed {s} row {y}: no walkable cell"); fails++; break; }
+
+            if (floor.RowRoom[^1] != RoomKind.Warden)
+            { Console.WriteLine($"  seed {s}: floor does not end in the Warden's chamber"); fails++; }
+
+            // Determinism: same seed, same floor, or the sim is worthless.
+            var b = new Warren(s).Generate(length, 1 + s % 10);
+            if (b.Length != floor.Length) { Console.WriteLine($"  seed {s}: NOT DETERMINISTIC (length)"); fails++; }
+            else
+                for (int y = 0; y < floor.Length && fails == 0; y++)
+                    for (int x = 0; x < floor.Width; x++)
+                        if (floor.Tiles[x, y] != b.Tiles[x, y])
+                        { Console.WriteLine($"  seed {s} ({x},{y}): NOT DETERMINISTIC"); fails++; break; }
         }
+
         Console.WriteLine(fails == 0
-            ? $"warren verify: {seeds} seeds x {rows} rows — all passed."
-            : $"warren verify: {fails} FAILURES.");
+            ? $"floor verify: {floors} floors x ~{length} rows — passable, deterministic, Warden-terminated."
+            : $"floor verify: {fails} FAILURES (shallowest reach {worst}).");
         return fails == 0 ? 0 : 1;
     }
 }

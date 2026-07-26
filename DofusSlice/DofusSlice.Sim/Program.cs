@@ -13,9 +13,10 @@ if (args.Length > 0 && args[0] == "warren")
 {
     // The WANDERER path generator, headless. dump = look at it, stats = tune it, verify = trust it.
     int wseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 1;
-    if (args.Contains("stats")) return WarrenSim.Stats(wseed, 4000);
-    if (args.Contains("verify")) return WarrenSim.Verify(200, 400);
-    return WarrenSim.Dump(wseed, 70);
+    if (args.Contains("stats")) return WarrenSim.Stats(80, 200);
+    if (args.Contains("verify")) return WarrenSim.Verify(400, 200);
+    int sight = args.Contains("fog") ? 4 : 0;
+    return WarrenSim.Dump(wseed, 80, sight);
 }
 
 if (args.Length > 0 && args[0] == "campaign")

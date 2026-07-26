@@ -41,7 +41,6 @@ public sealed class CrtPass : IDisposable
     private readonly GraphicsDevice _gd;
     private readonly Texture2D _scan;    // 4x4 POT, 1 dark row in 2 — tiled with PointWrap
     private readonly Texture2D _vig;     // 64x64 radial darkening, stretched with LinearClamp
-    private readonly Texture2D _band;    // 1x64 soft vertical gradient — the drifting VHS band
 
     private RenderTarget2D? _frame;      // the whole composed frame, full res
     private RenderTarget2D? _pix;        // frame / PixelSize — the fat-pixel quantization
@@ -116,18 +115,6 @@ public sealed class CrtPass : IDisposable
             }
         _vig.SetData(vig);
 
-        // The drifting tracking band: a soft lobe, brightest in the middle, additive.
-        const int B = 64;
-        _band = new Texture2D(gd, 1, B);
-        var band = new Color[B];
-        for (int y = 0; y < B; y++)
-        {
-            float t = y / (float)(B - 1);
-            float lobe = MathF.Sin(t * MathF.PI);
-            byte v = (byte)(lobe * lobe * 255f);
-            band[y] = new Color(v, v, v, v);
-        }
-        _band.SetData(band);
     }
 
     /// <summary>Cycles OFF → SOFT → FULL → OFF. Returns the new level so callers can log it.</summary>
@@ -160,10 +147,10 @@ public sealed class CrtPass : IDisposable
         _gd.Clear(clear);
     }
 
-    /// <summary>
-    /// Resolve the frame to the back buffer through the tube. <paramref name="time"/> is total
-    /// elapsed seconds and drives the one moving part (the tracking band).
-    /// </summary>
+    /// <summary>Resolve the frame to the back buffer through the tube. <paramref name="time"/>
+    /// is total elapsed seconds; nothing moving uses it today (the VHS tracking band is gone —
+    /// it was the one element that drew attention to itself instead of to the board), but the
+    /// signature keeps it so bringing a moving part back is not an API change.</summary>
     public void End(SpriteBatch sb, float time)
     {
         if (_frame is null) return;
@@ -246,7 +233,7 @@ public sealed class CrtPass : IDisposable
         }
         sb.End();
 
-        // 4. The grille, the tube edge, and the drifting tracking band.
+        // 4. The grille and the tube edge.
         sb.Begin(samplerState: SamplerState.PointWrap);
         sb.Draw(_scan, screen, screen, Color.White * (full ? 0.16f : 0.10f));
         sb.End();
@@ -255,15 +242,6 @@ public sealed class CrtPass : IDisposable
         sb.Draw(_vig, screen, Color.White * (full ? 0.55f : 0.35f));
         sb.End();
 
-        if (full)
-        {
-            const int BandH = 140;
-            float span = _h + BandH;
-            int y = (int)((time * 26f) % span) - BandH;   // ~13s to crawl the screen
-            sb.Begin(blendState: BlendState.Additive, samplerState: SamplerState.LinearClamp);
-            sb.Draw(_band, new Rectangle(0, y, _w, BandH), Color.White * 0.045f);
-            sb.End();
-        }
 
         Resolve(sb);
     }
@@ -417,7 +395,7 @@ public sealed class CrtPass : IDisposable
     public void Dispose()
     {
         _frame?.Dispose(); _pix?.Dispose(); _half?.Dispose(); _flat?.Dispose();
-        _scan.Dispose(); _vig.Dispose(); _band.Dispose();
+        _scan.Dispose(); _vig.Dispose();
         _warpFx?.Dispose();
     }
 }

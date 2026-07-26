@@ -9,6 +9,15 @@ if (args.Length > 0 && args[0] == "effects")
     return EffectsTest.Run();
 }
 
+if (args.Length > 0 && args[0] == "warren")
+{
+    // The WANDERER path generator, headless. dump = look at it, stats = tune it, verify = trust it.
+    int wseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 1;
+    if (args.Contains("stats")) return WarrenSim.Stats(wseed, 4000);
+    if (args.Contains("verify")) return WarrenSim.Verify(200, 400);
+    return WarrenSim.Dump(wseed, 70);
+}
+
 if (args.Length > 0 && args[0] == "campaign")
 {
     // The whole M2 loop, headless: city prep -> dive -> eject -> city, repeating.

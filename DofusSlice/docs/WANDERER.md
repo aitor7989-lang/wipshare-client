@@ -1,8 +1,11 @@
 # WANDERER — design brief
 
-_Status: **design only**, nothing built. Rev 2, after an adversarial design panel (3 research
-lenses + 3 critics + synthesis). Rev 1's own text is quoted where the panel refuted it, because
-the refutations are more useful than the claims were._
+_Status: design, **plus one built piece** — the path generator (`Core/World/Warren.cs`), headless
+and standalone. Nothing else exists. See §5a._
+
+_Rev 2 history: after an adversarial design panel (3 research lenses + 3 critics +
+synthesis). Rev 1's own text is quoted where the panel refuted it, because the refutations are
+more useful than the claims were._
 
 > **Retitled deliberately.** Rev 1 called this "the next version". It is not. WANDERER ships as a
 > **second mode in the same solution**, with TITHE runnable as a control and a kill date set.
@@ -160,6 +163,56 @@ WFC's usual infinite-world weakness — independent chunks conflicting at seams 
 here: one advancing frontier means exactly one seam, and the deleted tail stops constraints
 propagating backwards. **This reasoning survived the panel intact. It is cut from the slice on
 cost, not merit** (§8).
+
+### 5a. What is actually built
+
+`DofusSlice.Core/World/Warren.cs` + `DofusSlice.Sim/WarrenSim.cs`. Run it:
+
+```
+dotnet run --project DofusSlice.Sim -- warren 7        # print a descent
+dotnet run --project DofusSlice.Sim -- warren stats    # measure the grammar
+dotnet run --project DofusSlice.Sim -- warren verify   # 200 seeds x 400 rows of invariants
+```
+
+Built **against** the panel's advice, which was to cut the generator from the slice. That advice
+stands and is not overturned: this cannot tell us whether the game is fun, and building the
+visible thing first is how a project feels productive while dodging the question that kills it.
+It was built anyway because it is the one component with zero coupling to any undecided system,
+and it is useful even if WANDERER is abandoned. **Step zero (§8) is still owed.**
+
+It is a **lazy row stream, not a map** — `RowAt(depth)`, generated forward and cached, with
+`Forget(depth)` dropping the tail. So "raises from the deeps" and "collapses behind" cost nothing
+and need no rolling window and no coordinate rebasing; those belong to the game loop.
+
+Measured (seed 1, 4000 rows): tight ground **17.5% at depth 0-119 rising to 31.2% past 120** — the
+deeps genuinely tighten; back-to-back Throats fire in ~6% of segments, so the chained ambush is a
+live threat rather than a pattern; live rows pin flat at 25, so the collapse really does free
+ground. 200 seeds x 400 rows pass invariants including "no impassable row" — which on a path with
+no way around and no way back would be an unwinnable run.
+
+Four bugs the harness caught that reading the code would not have:
+1. **The funnel ate the chokepoint.** Width eased one step per row, so a short Throat spent all its
+   rows narrowing and never reached width 1. Tight ground measured 7.7% against a 15-35% target.
+2. **Constriction was quantised to six values.** Symmetric half-widths can only produce odd widths,
+   so 58% of rows piled into one bucket and the "moderately tight" band was empty. Sides are now
+   independent.
+3. **The chained-ambush rule was cancelled by its own guard.** A cooling-off check ran
+   unconditionally and vetoed the Throat-follows-Throat weight sitting three lines above it.
+4. **A crash from two jitters agreeing.** Both sides rolling wide on a Hall made the carve wider
+   than the corridor and inverted the centreline clamp. Sides were capped individually but never
+   as a sum.
+
+And one the harness got wrong about itself: back-to-back Throats reported 0 for a while because
+the stats detected segment boundaries by *kind change*, which merges two consecutive Throats into
+one. Rows now carry a `SegmentIndex`. **A metric that cannot observe the thing it counts reads
+exactly like a feature that is not working.**
+
+Known and deliberate: width is constant within a segment (the ease completes in 1-2 rows), so a
+long Corridor is a uniform 2-wide stretch. That is legible — you can read "this is a two-wide
+run" at a glance — but it is not organic. Whether to add intra-segment variation is a
+legibility-versus-texture call worth making deliberately rather than drifting into.
+
+---
 
 ---
 

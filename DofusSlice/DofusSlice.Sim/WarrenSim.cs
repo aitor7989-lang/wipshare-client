@@ -295,6 +295,39 @@ public static class WarrenSim
                 fails++;
             }
 
+            // The Warden's chamber must be SEALED: at most a doorway's worth of walkable cells in
+            // the one-cell ring around its rect. "Exit inside the chamber" alone is not enough —
+            // the wandering walk used to cross the room's future footprint, and after isolation
+            // the ring kept every old path cell, so three quarters of floors had a boss room you
+            // could stroll into from several sides. A room with many mouths is a bulge, and the
+            // arena fight it stages can be skipped around. Geometric, like the exit check: count
+            // the ring's walkable cells, allow the doorway plus the width floor beside it.
+            if (warden.W > 0)
+            {
+                int doorway = 0;
+                for (int y = warden.Y - 1; y <= warden.Y + warden.H; y++)
+                    for (int x = warden.X - 1; x <= warden.X + warden.W; x++)
+                    {
+                        bool ring = x == warden.X - 1 || x == warden.X + warden.W ||
+                                    y == warden.Y - 1 || y == warden.Y + warden.H;
+                        if (ring && floor.Walkable(x, y)) doorway++;
+                    }
+                if (doorway > 3)
+                { Console.WriteLine($"  seed {s}: Warden ring BREACHED — {doorway} walkable doorway cells"); fails++; }
+            }
+
+            // The MinWidth invariant, read from the same Constriction every other system reads:
+            // outside a Throat (tight by design) and outside chambers (their own geometry), no
+            // step may be single-file. The width pass used to refuse to widen exactly where the
+            // path crossed a sealed room's shaved ring, so the invariant held everywhere except
+            // the one place players are funnelled through.
+            {
+                int pinched = floor.Path.Count(st =>
+                    st.Kind != SegmentKind.Throat && st.Room == RoomKind.None && st.Constriction >= 100);
+                if (pinched > 0)
+                { Console.WriteLine($"  seed {s}: {pinched} single-file non-Throat steps (MinWidth defeated)"); fails++; }
+            }
+
             // Every special room must be REACHABLE from the entry — passability alone only proves
             // the Warden. Room isolation shaves cells around chambers, and a shave that severed a
             // shrine's spur would leave a sealed treasure the player can see and never enter, with

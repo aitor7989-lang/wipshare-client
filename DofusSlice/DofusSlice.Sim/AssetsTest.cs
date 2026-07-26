@@ -125,6 +125,27 @@ public static class AssetsTest
             """{"v":2,"kind":"char","n":4,"h":4,"frames":[]}"""));
         Throws("reject bad shade char", () => TileLibrary.Parse(
             """{"v":1,"floor":[],"worn":["..9"]}"""));
+
+        // Hostile-shape guards: each of these used to escape as some OTHER exception type —
+        // InvalidOperationException from GetInt32/GetString on the wrong ValueKind, the
+        // framework's context-free FormatException for a fractional int, JsonReaderException
+        // for truncated text — or, for the frame flood, as a 1.5 GiB allocation from 146 KiB
+        // of JSON. A loader has ONE failure contract (FormatException naming the spot), and
+        // these prove the whole surface honours it.
+        Throws("reject string v (char)", () => BoxSprite.Parse(
+            """{"v":"2","kind":"char","n":4,"h":4,"frames":[[]]}"""));
+        Throws("reject string v (tiles)", () => TileLibrary.Parse(
+            """{"v":"2","floor":[]}"""));
+        Throws("reject non-string kind", () => BoxSprite.Parse(
+            """{"v":2,"kind":123,"n":4,"h":4,"frames":[[]]}"""));
+        Throws("reject frame flood", () => BoxSprite.Parse(
+            $$"""{"v":2,"kind":"char","n":4,"h":4,"frames":[{{string.Join(",", Enumerable.Repeat("[]", 100))}}]}"""));
+        Throws("reject absurd fps", () => BoxSprite.Parse(
+            """{"v":2,"kind":"char","n":4,"h":4,"fps":2000000000,"frames":[[]]}"""));
+        Throws("reject truncated JSON", () => BoxSprite.Parse(
+            """{"v":2,"""));
+        Throws("reject fractional n", () => BoxSprite.Parse(
+            """{"v":2,"kind":"char","n":4.5,"h":4,"frames":[[]]}"""));
     }
 
     /// <summary>Serialize frame 0 of the knight back to row strings and compare against the JSON

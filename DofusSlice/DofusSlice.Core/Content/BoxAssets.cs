@@ -66,22 +66,33 @@ public sealed class BoxSprite
 
     public static BoxSprite Parse(string json)
     {
-        using var doc = JsonDocument.Parse(json);
+        using var doc = ParseDocument(json, "char");
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new FormatException("char: root is not a JSON object");
 
         // v1 exports predate the "frames" array (one implicit frame under "layers"); both still
         // load so old art never has to be re-exported. Anything newer than we understand is
-        // refused OUT LOUD — a v3 file probably means new semantics we would misread.
+        // refused OUT LOUD — a v3 file probably means new semantics we would misread. A 'v'
+        // that is not an integer at all gets the same loud treatment: GetInt32 on a string or
+        // array leaks an InvalidOperationException, which reads as a parser bug rather than a
+        // bad file.
         if (root.TryGetProperty("v", out var vEl))
         {
-            int v = vEl.GetInt32();
+            if (vEl.ValueKind != JsonValueKind.Number || !vEl.TryGetInt32(out int v))
+                throw new FormatException("char: 'v' is not an integer");
             if (v is not (1 or 2)) throw new FormatException($"char: unsupported version v={v} (expected 1 or 2)");
         }
 
-        if (root.TryGetProperty("kind", out var kindEl) && kindEl.GetString() is string kind && kind != "char")
-            throw new FormatException($"char: kind \"{kind}\" is not \"char\" — wrong asset type for this parser");
+        // Same reasoning for 'kind': strict about MEANING, but a null stays tolerated the way a
+        // missing property is — only a value that claims to be something else gets refused.
+        if (root.TryGetProperty("kind", out var kindEl) && kindEl.ValueKind != JsonValueKind.Null)
+        {
+            if (kindEl.ValueKind != JsonValueKind.String)
+                throw new FormatException("char: 'kind' is not a string");
+            if (kindEl.GetString() is string kind && kind != "char")
+                throw new FormatException($"char: kind \"{kind}\" is not \"char\" — wrong asset type for this parser");
+        }
 
         string name = root.TryGetProperty("name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
             ? nameEl.GetString()! : "";
@@ -93,16 +104,26 @@ public sealed class BoxSprite
         if (n is < 1 or > 32) throw new FormatException($"char: n={n} out of range 1..32");
         if (h is < 1 or > 32) throw new FormatException($"char: h={h} out of range 1..32");
 
-        // v1 files carry no fps; 6 is the editor's default playback rate.
-        int fps = root.TryGetProperty("fps", out var fpsEl) && fpsEl.ValueKind == JsonValueKind.Number
-            ? fpsEl.GetInt32() : 6;
-        if (fps < 1) throw new FormatException($"char: fps={fps} must be >= 1");
+        // v1 files carry no fps; 6 is the editor's default playback rate. The editor clamps its
+        // own exports to 1..12 — 60 leaves generous headroom for hand-authored files while still
+        // refusing the absurd (an fps in the billions is a corrupt or hostile file, and every
+        // renderer divides by it).
+        int fps = 6;
+        if (root.TryGetProperty("fps", out var fpsEl) && fpsEl.ValueKind == JsonValueKind.Number &&
+            !fpsEl.TryGetInt32(out fps))
+            throw new FormatException("char: 'fps' is not an integer");
+        if (fps is < 1 or > 60) throw new FormatException($"char: fps={fps} out of range 1..60");
 
         var frames = new List<byte[,,]>();
         if (root.TryGetProperty("frames", out var framesEl))
         {
             if (framesEl.ValueKind != JsonValueKind.Array)
                 throw new FormatException("char: 'frames' is not an array");
+            // Bound the allocation BEFORE decoding anything: every frame is an n*n*h array, so
+            // a file that is a few kilobytes of "[],[]…" can demand gigabytes. 64 frames is far
+            // beyond any animation the editor can author; past it the file is not art.
+            if (framesEl.GetArrayLength() > 64)
+                throw new FormatException($"char: {framesEl.GetArrayLength()} frames (max 64)");
             int fi = 0;
             foreach (var frameEl in framesEl.EnumerateArray())
                 frames.Add(ParseFrame(frameEl, fi++, n, h));
@@ -160,9 +181,21 @@ public sealed class BoxSprite
 
     private static int RequireInt(JsonElement root, string prop)
     {
-        if (!root.TryGetProperty(prop, out var el) || el.ValueKind != JsonValueKind.Number)
-            throw new FormatException($"char: missing or non-numeric '{prop}'");
-        return el.GetInt32();
+        // TryGetInt32 rather than GetInt32: a fractional number ("n": 4.5) must fail naming the
+        // property, not with the framework's context-free "value is not in a supported format".
+        if (!root.TryGetProperty(prop, out var el) || el.ValueKind != JsonValueKind.Number ||
+            !el.TryGetInt32(out int value))
+            throw new FormatException($"char: missing or non-integer '{prop}'");
+        return value;
+    }
+
+    /// <summary>Malformed JSON must surface as the same <see cref="FormatException"/> every other
+    /// bad-file case throws — a caller catching load errors should not also need to know which
+    /// JSON library sits underneath (JsonReaderException leaked to the game once).</summary>
+    internal static JsonDocument ParseDocument(string json, string what)
+    {
+        try { return JsonDocument.Parse(json); }
+        catch (JsonException e) { throw new FormatException($"{what}: invalid JSON: {e.Message}"); }
     }
 }
 
@@ -198,13 +231,19 @@ public sealed class TileLibrary
 
     public static TileLibrary Parse(string json)
     {
-        using var doc = JsonDocument.Parse(json);
+        using var doc = BoxSprite.ParseDocument(json, "tiles");
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new FormatException("tiles: root is not a JSON object");
 
-        if (root.TryGetProperty("v", out var vEl) && vEl.GetInt32() is int v && v != 1)
-            throw new FormatException($"tiles: unsupported version v={v} (expected 1)");
+        // Same version discipline as the char parser: a non-integer 'v' is a bad file, not a
+        // parser crash, and anything but v1 is refused out loud.
+        if (root.TryGetProperty("v", out var vEl))
+        {
+            if (vEl.ValueKind != JsonValueKind.Number || !vEl.TryGetInt32(out int v))
+                throw new FormatException("tiles: 'v' is not an integer");
+            if (v != 1) throw new FormatException($"tiles: unsupported version v={v} (expected 1)");
+        }
 
         // All four slots exist up front (see Floor's doc comment); parsing fills what the file has.
         var floor = new byte[4][,];

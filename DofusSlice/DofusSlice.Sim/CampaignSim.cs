@@ -301,8 +301,12 @@ public static class CampaignSim
         var samples = new List<string>();
         for (int seed = 1; seed <= tries; seed++)
         {
+            // Campaigns start SOLO since the fun pivot, so a fresh game IS the survivor's
+            // opening — a crew of one is as short-handed as it gets. This used to remove a
+            // member on top, which deleted the avatar from a crew of one and turned every
+            // "dive" into a no-op: the hire-path proof below never ran and the harness failed
+            // while the feature worked.
             var c = Campaign.NewGame("cannon");
-            c.Crew.Remove(c.Crew.Last()); // short-handed on purpose — the survivor's opening
             c.Stones += 100;
             var dive = new DiveSession(c, new SystemRng(seed * 977 + 5));
             if (dive.Survivor != null) offered++;

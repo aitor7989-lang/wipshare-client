@@ -73,6 +73,14 @@ public sealed class DiveSession
 
     public DiveSession(Campaign campaign, IRng rng)
     {
+        // Nobody dives alone with nobody: a campaign whose crew is empty is a campaign that is
+        // over (the avatar is gone), and every step below — pack fights, XP shares, the survivor
+        // roll off the avatar's level — quietly assumes at least one living body. Failing loud
+        // here turns "the sim ran a ghost dive and reported nonsense" into an immediate bug.
+        if (campaign.Crew.Count == 0)
+            throw new InvalidOperationException(
+                "cannot start a dive with no living crew — the campaign is already over");
+
         _campaign = campaign;
         _rng = rng;
         Clock = TitheContent.Graveyard.ClockSeconds;

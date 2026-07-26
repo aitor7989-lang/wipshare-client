@@ -99,10 +99,12 @@ public sealed class Floor
         if (!Walkable(ex, ey)) return false;
 
         seen[ex, ey] = true; q.Enqueue((ex, ey));
+        // Hoisted out of the loop: the four directions never change, and a stackalloc inside
+        // a loop re-reserves stack space every iteration for the same constant data (CA2014).
+        Span<(int, int)> steps = stackalloc (int, int)[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
         while (q.Count > 0)
         {
             var (cx, cy) = q.Dequeue();
-            Span<(int, int)> steps = stackalloc (int, int)[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
             foreach (var (dx, dy) in steps)
             {
                 int nx = cx + dx, ny = cy + dy;

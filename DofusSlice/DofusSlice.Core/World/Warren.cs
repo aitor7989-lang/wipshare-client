@@ -66,6 +66,11 @@ public sealed class Warren
     private static float TightBudget(int floorNumber) =>
         0.11f + 0.09f * Math.Clamp((floorNumber - 1) / 7f, 0f, 1f);
 
+    /// <summary>Across-the-heading slides a room siting may try, nearest-centre first (see the
+    /// siting scan in <see cref="Walk"/>). The range keeps the entry column two cells clear of
+    /// the side walls, inside the Warden chamfer.</summary>
+    private static readonly int[] SiteShifts = { 0, -1, 1, 2 };
+
     private readonly IRng _rng;
 
     public Warren(IRng rng) => _rng = rng;
@@ -381,7 +386,11 @@ public sealed class Warren
     ///   WIDTH FLOOR — a non-Throat step narrower than 3 across (or ANY step narrower than
     ///   MinWidth) gets ground carved back, so tight ground exists only where a Throat put it
     ///   and the plan-level TightBudget prices what the floor actually contains. Cells beside
-    ///   special rooms are never touched: widening through a seal would breach the chamber.
+    ///   special rooms are never touched — EXCEPT when the step being widened is itself a
+    ///   ring-crossing (a doorway): refusing there defeated MinWidth at exactly the one place
+    ///   every run is funnelled through. Widening a doorway PARALLEL to the wall is fine; the
+    ///   line that may never be crossed is carving INTO the chamber, so cells inside any room
+    ///   rect stay untouchable.
     ///
     ///   RE-MEASURE — every step's Constriction is recomputed from the finished tiles as the
     ///   contiguous walkable run across the heading through the centre.
@@ -410,6 +419,12 @@ public sealed class Warren
             var across = Across(st.Dir);
             var (ax, ay) = across;
 
+            // A step standing in a room's shaved ring is a DOORWAY: for it, and only for it,
+            // the NearRoom guard below relaxes to "not inside any room rect", because a doorway
+            // that cannot widen parallel to the wall stays single-file forever — the guard was
+            // protecting the seal by defeating MinWidth at the one crossing every run uses.
+            bool atDoorway = NearRoom(st.X, st.Y);
+
             int want = st.Kind == SegmentKind.Throat || st.Room != RoomKind.None ? MinWidth : 3;
             int walk = Measure(st, across);
             bool grew = true;
@@ -426,8 +441,8 @@ public sealed class Warren
                     int t = 1;
                     while (t <= MaxHalf && Walk(st.X + ax * sign * t, st.Y + ay * sign * t)) t++;
                     int x = st.X + ax * sign * t, y = st.Y + ay * sign * t;
-                    if (t > MaxHalf || x < 1 || y < 1 || x >= GridW - 1 || y >= GridH - 1 ||
-                        NearRoom(x, y)) continue;
+                    if (t > MaxHalf || x < 1 || y < 1 || x >= GridW - 1 || y >= GridH - 1) continue;
+                    if (atDoorway ? rooms.Any(r => r.Contains(x, y)) : NearRoom(x, y)) continue;
                     if (tiles[x, y] is TileKind.Void or TileKind.Rock or TileKind.Water)
                     {
                         tiles[x, y] = TileKind.Dirt;
@@ -450,6 +465,14 @@ public sealed class Warren
     {
         if (_rng.Roll(0, 99) >= percent) return;
         int size = RoomSize(kind, _rng);
+
+        // A spur must keep its distance from every chamber already placed. Its cells are spared
+        // by IsolateRooms BY DESIGN (they are the one legitimate mouth of the spur's own room),
+        // so a spur corridor threading another room's one-cell ring re-opens that room's seal —
+        // measured: a shrine's corridor once ran the full length of the Warden's ring and left
+        // the boss chamber enterable along its whole east wall.
+        bool NearRooms(int x, int y) =>
+            rooms.Any(r => x >= r.X - 1 && x < r.X + r.W + 1 && y >= r.Y - 1 && y < r.Y + r.H + 1);
 
         // The sealed-margin test is strict by design, so a lazy search finds a home about one time
         // in five and the room becomes accidentally near-impossible rather than deliberately rare.
@@ -480,15 +503,24 @@ public sealed class Warren
                 {
                     int reach = k0 - 1 + len;
                     int rcx = st.X + dx * (reach + size / 2), rcy = st.Y + dy * (reach + size / 2);
-                    if (!AreaVoid(tiles, rcx - size / 2 - 1, rcy - size / 2 - 1, size + 2, size + 2))
+                    int bx0 = rcx - size / 2 - 1, by0 = rcy - size / 2 - 1;
+                    if (!AreaVoid(tiles, bx0, by0, size + 2, size + 2))
+                        continue;
+                    // Void is necessary but not sufficient: another room's shaved ring is Void
+                    // too, and a footprint whose margin lands there would share a wall with it.
+                    if (rooms.Any(r => bx0 <= r.X + r.W && bx0 + size + 1 >= r.X - 1 &&
+                                       by0 <= r.Y + r.H && by0 + size + 1 >= r.Y - 1))
                         continue;
 
+                    // The whole band from the path to the room stays clear of other chambers,
+                    // including the k < k0 stretch that crosses the corridor's own carved band.
                     bool clear = true;
-                    for (int k = k0; k <= reach && clear; k++)
+                    for (int k = 1; k <= reach && clear; k++)
                     {
                         int cx = st.X + dx * k, cy = st.Y + dy * k;
                         if (cx < 1 || cy < 1 || cx >= GridW - 1 || cy >= GridH - 1 ||
-                            tiles[cx, cy] != TileKind.Void) clear = false;
+                            NearRooms(cx, cy) ||
+                            (k >= k0 && tiles[cx, cy] != TileKind.Void)) clear = false;
                     }
                     if (!clear) continue;
 
@@ -580,9 +612,13 @@ public sealed class Warren
         // roll, so two straight segments could chain into a 25-cell ruler run — the cap is here.
         int held = 0;
         var lastStep = dir;
+        // Budget for room-siting escapes (see below). Bounded so a pathological floor cannot
+        // wander forever hunting a seal; the least-crossed fallback catches whatever remains.
+        int escapes = 0;
 
-        foreach (var p in plan)
+        for (int pi = 0; pi < plan.Count; pi++)
         {
+            var p = plan[pi];
             seg++;
             p.Pattern = _rng.Roll(0, 2);
             if (seg > 0)
@@ -600,12 +636,119 @@ public sealed class Warren
             // the extra two steps marched the walk straight out the far wall, which put the floor
             // EXIT outside the Warden's chamber on 19 floors in 20 — "the boss is always the way
             // out" was true in the plan and false on the ground.
+            // A sited room segment marches on trust: the siting proved the whole straight
+            // approach and the rect itself fit the grid, so the rim steer must not second-guess
+            // it — a steer firing mid-approach (its comfort margin is wider than the siting's)
+            // would veer the walk away from the chamber it just placed.
+            bool roomSited = false;
             if (p.Room != RoomKind.None)
             {
                 int size = RoomSize(p.Room, _rng);
-                var (rdx, rdy) = Delta(dir);
-                rooms.Add(CarveRoom(tiles, cx + rdx * (size / 2), cy + rdy * (size / 2), size, p.Room));
-                p.Steps = size;
+
+                // SITE THE CHAMBER ON PATH-CLEAR GROUND, not wherever the walk happens to stand.
+                // The room used to be carved at the walk's current position, and the wandering
+                // path frequently crossed that footprint earlier in the floor — IsolateRooms
+                // spares every path cell, so each old crossing stayed a walkable mouth through
+                // the seal and three quarters of Warden chambers could be entered from the side.
+                // Scan AHEAD for the first offset whose footprint plus a one-cell margin contains
+                // NO walked cell, then march the walk the extra offset so it still enters through
+                // the front wall. Old NON-path carving in the way is fine — the seal only needs
+                // the ring, IsolateRooms strips everything there the path does not own, and
+                // CarveRoom overwrites whatever sits inside the rect. (Demanding untouched rock
+                // like a spur does was tried first and failed on most floors: two hundred steps
+                // of wandering leave few 10x10 virgin blocks in reach. Scanning one heading was
+                // tried second and still fell back on two floors in three — the walk ends at the
+                // heart of its own scribble, so the room segment now picks WHICHEVER of the three
+                // forward headings clears first rather than trusting the turn already rolled.)
+                // The endpoint must also keep the per-step rim steer satisfied for the WHOLE
+                // approach — Room(k + size + 3) at the start implies Room(3) at every step of a
+                // straight march — or the steer would veer the walk mid-approach and the room
+                // would be carved somewhere the path never goes.
+                var walked = new HashSet<(int, int)>();
+                foreach (var st in path) walked.Add((st.X, st.Y));
+
+                // How many walked cells the footprint-plus-ring would trap at this site. Zero is
+                // a clean seal; anything else counts the mouths the ring would keep. A site is
+                // valid when the UNCLAMPED rect fits the carveable grid: the walk marches down
+                // the rect's entry column, so a clamp that slid the rect would misalign the two
+                // and the path would exit through a side wall. Fitting the grid is the WHOLE
+                // bounds requirement — the rim steer's 6-cell comfort margin is deliberately not
+                // applied here, because the walk spends its whole run steered AWAY from the rim,
+                // which makes the rim exactly where the unwalked ground for a clean seal is left.
+                //
+                // s slides the rect ACROSS the heading, so the walk may enter off-centre: the
+                // last few floors with no centred site have one a couple of cells sideways, and
+                // an off-centre door reads no worse than a centred one. The range keeps the
+                // entry column two cells clear of the side walls, inside the Warden chamfer.
+                int SiteCost(Heading h, int k, int s)
+                {
+                    var (dx, dy) = Delta(h);
+                    var (sx, sy) = Across(h);
+                    int x0 = cx + dx * (k + size / 2) + sx * s - size / 2;
+                    int y0 = cy + dy * (k + size / 2) + sy * s - size / 2;
+                    if (x0 < 1 || y0 < 1 || x0 > GridW - size - 1 || y0 > GridH - size - 1)
+                        return int.MaxValue;
+                    int cost = 0;
+                    for (int y = y0 - 1; y <= y0 + size; y++)
+                        for (int x = x0 - 1; x <= x0 + size; x++)
+                            if (walked.Contains((x, y))) cost++;
+                    return cost;
+                }
+
+                // Straight ahead first (a chamber you walk into face-on), then the sides in a
+                // rolled order so the escape hatch carries no chirality. Reversal is never a
+                // candidate — it would march back over the ground just walked. The scan runs
+                // deep because the price of a long approach is a wide avenue, and the price of
+                // no site at all is a breached boss room.
+                bool sideFirst = _rng.Roll(0, 1) == 0;
+                var headings = new[]
+                {
+                    dir,
+                    sideFirst ? Left(dir) : Right(dir),
+                    sideFirst ? Right(dir) : Left(dir),
+                };
+                int off = 0, shift = 0;
+                bool found = false;
+                int bestCost = int.MaxValue;
+                foreach (var h in headings)
+                {
+                    for (int k = 0; k <= 32 && !found; k++)
+                        foreach (int s in SiteShifts)
+                        {
+                            int cost = SiteCost(h, k, s);
+                            if (cost == 0) { off = k; shift = s; dir = h; found = true; break; }
+                            // No perfect site anywhere: remember the least-crossed one rather
+                            // than dropping the room blind where the walk stands — every walked
+                            // cell the ring traps is a mouth the seal must keep, so fewest
+                            // trapped is the best available approximation of sealed.
+                            if (cost < bestCost)
+                            { bestCost = cost; off = k; shift = s; dir = h; }
+                        }
+                    if (found) break;
+                }
+
+                // ESCAPE HATCH: no clean site from here at all. Rather than accept a breached
+                // chamber, requeue the room and spend this segment as a short corridor — the
+                // walk moves, the candidate space moves with it, and the siting runs again from
+                // wherever the corridor ends. Bounded, because a floor whose every reachable
+                // block is trodden could hunt forever; when the budget is gone the least-crossed
+                // site above is what ships, and the verifier's doorway assertion is what says
+                // how often that actually happens rather than a hope that it never does.
+                if (!found && escapes < 8)
+                {
+                    escapes++;
+                    plan.Insert(pi + 1, p);
+                    p = new Plan { Kind = SegmentKind.Corridor, Steps = 6, Pattern = p.Pattern };
+                }
+                else
+                {
+                    roomSited = found || bestCost != int.MaxValue;
+                    var (odx, ody) = Delta(dir);
+                    var (oax, oay) = Across(dir);
+                    rooms.Add(CarveRoom(tiles, cx + odx * (off + size / 2) + oax * shift,
+                                        cy + ody * (off + size / 2) + oay * shift, size, p.Room));
+                    p.Steps = off + size;
+                }
             }
 
             int baseHalf = TargetHalf(p);
@@ -639,8 +782,9 @@ public sealed class Warren
                 }
 
                 // Steer off the rim rather than clipping into it, or a floor runs off the grid and
-                // gets silently truncated against the boundary.
-                if (!Room(cx, cy, stepDir, 3))
+                // gets silently truncated against the boundary. Never on a sited room approach —
+                // that march is already proven in-grid, see roomSited above.
+                if (!roomSited && !Room(cx, cy, stepDir, 3))
                 {
                     var alt = _rng.Roll(0, 1) == 0 ? Left(stepDir) : Right(stepDir);
                     stepDir = Room(cx, cy, alt, 3) ? alt

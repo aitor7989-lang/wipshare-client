@@ -285,6 +285,33 @@ public static class WarrenSim
             if (floor.Path[^1].Room != RoomKind.Warden)
             { Console.WriteLine($"  seed {s}: does not end in the Warden's chamber"); fails++; }
 
+            // Every special room must be REACHABLE from the entry — passability alone only proves
+            // the Warden. Room isolation shaves cells around chambers, and a shave that severed a
+            // shrine's spur would leave a sealed treasure the player can see and never enter, with
+            // the entry-to-Warden proof still green.
+            foreach (var room in floor.Rooms)
+            {
+                var seenR = new bool[floor.Width, floor.Height];
+                var qr = new Queue<(int X, int Y)>();
+                var (rx, ry) = floor.Entry;
+                seenR[rx, ry] = true; qr.Enqueue((rx, ry));
+                bool roomHit = false;
+                while (qr.Count > 0 && !roomHit)
+                {
+                    var (cx2, cy2) = qr.Dequeue();
+                    if (room.Contains(cx2, cy2)) { roomHit = true; break; }
+                    foreach (var (ddx, ddy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                    {
+                        int nx2 = cx2 + ddx, ny2 = cy2 + ddy;
+                        if (nx2 < 0 || ny2 < 0 || nx2 >= floor.Width || ny2 >= floor.Height) continue;
+                        if (!floor.Walkable(nx2, ny2) || seenR[nx2, ny2]) continue;
+                        seenR[nx2, ny2] = true; qr.Enqueue((nx2, ny2));
+                    }
+                }
+                if (!roomHit)
+                { Console.WriteLine($"  seed {s}: {room.Kind} at ({room.X},{room.Y}) UNREACHABLE"); fails++; }
+            }
+
             // Every step adjacent to the last, or "one orthogonal cell per step" is a comment rather
             // than a property — and the structural passability argument rests entirely on it.
             for (int i = 1; i < floor.Path.Count; i++)

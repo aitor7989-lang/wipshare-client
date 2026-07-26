@@ -76,6 +76,11 @@ public sealed class Warren
         public SegmentKind Kind;
         public int Steps;
         public RoomKind Room;
+        /// <summary>Which decoration pattern this segment wears, rolled once per segment. The old
+        /// decoration keyed on the CELL's coordinates (cx+cy), which advances every step — so every
+        /// gallery striped diagonally and every cistern's bank zigzagged, one pattern everywhere,
+        /// dressed up as variety.</summary>
+        public int Pattern;
     }
 
     private static (int dx, int dy) Delta(Heading h) => h switch
@@ -106,8 +111,10 @@ public sealed class Warren
                 tiles[x, y] = TileKind.Void;
 
         var rooms = new List<RoomRect>();
+        var spurCells = new HashSet<(int, int)>();
         var path = Walk(tiles, plan, rooms);
-        AddSpurRooms(tiles, path, rooms);
+        AddSpurRooms(tiles, path, rooms, spurCells);
+        IsolateRooms(tiles, path, rooms, spurCells);
 
         // FINAL PASS: force the whole centre line walkable, after every segment has been carved.
         //
@@ -236,17 +243,45 @@ public sealed class Warren
     /// chamber touches nothing except its own corridor. That is what makes it feel sealed rather
     /// than like a bulge in the warren.
     /// </summary>
-    private void AddSpurRooms(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms)
+    private void AddSpurRooms(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,
+                              HashSet<(int, int)> spurCells)
     {
         // Rare, but not so rare the median run never sees one: the Shrine is the only source of
         // abilities in the design, and an identity-defining room that shows up on 6% of floors is
         // the Diablo 3 launch failure rather than scarcity.
-        TrySpur(tiles, path, rooms, RoomKind.Shrine, 55);
-        TrySpur(tiles, path, rooms, RoomKind.Vault, 34);
+        TrySpur(tiles, path, rooms, RoomKind.Shrine, 55, spurCells);
+        TrySpur(tiles, path, rooms, RoomKind.Vault, 34, spurCells);
+    }
+
+    /// <summary>
+    /// Strip the one-cell ring around every special room back to void, sparing only the path and
+    /// the spur corridors. The seal is checked when a spur room is PLACED, but the Warden is carved
+    /// mid-walk and later segments are free to wander up against its walls — so by the end of
+    /// generation a "sealed" chamber could have corridor pressed along two sides. A room with
+    /// neighbours is a bulge; a room in rock with one way in is a place.
+    ///
+    /// Only band EDGES are shaved, never path centres, so passability survives — and the verifier
+    /// proves that over 400 floors rather than trusting this comment.
+    /// </summary>
+    private static void IsolateRooms(TileKind[,] tiles, List<PathStep> path,
+                                     List<RoomRect> rooms, HashSet<(int, int)> spurCells)
+    {
+        var keep = new HashSet<(int, int)>(spurCells);
+        foreach (var st in path) keep.Add((st.X, st.Y));
+
+        foreach (var r in rooms)
+            for (int y = r.Y - 1; y <= r.Y + r.H; y++)
+                for (int x = r.X - 1; x <= r.X + r.W; x++)
+                {
+                    bool ring = x == r.X - 1 || x == r.X + r.W || y == r.Y - 1 || y == r.Y + r.H;
+                    if (!ring || x < 1 || y < 1 || x >= GridW - 1 || y >= GridH - 1) continue;
+                    if (keep.Contains((x, y))) continue;
+                    tiles[x, y] = TileKind.Void;
+                }
     }
 
     private void TrySpur(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,
-                         RoomKind kind, int percent)
+                         RoomKind kind, int percent, HashSet<(int, int)> spurCells)
     {
         if (_rng.Roll(0, 99) >= percent) return;
         int size = RoomSize(kind, _rng);
@@ -276,7 +311,11 @@ public sealed class Warren
                     }
                     if (!clear) continue;
 
-                    for (int k = 1; k <= len; k++) tiles[st.X + dx * k, st.Y + dy * k] = TileKind.Dirt;
+                    for (int k = 1; k <= len; k++)
+                    {
+                        tiles[st.X + dx * k, st.Y + dy * k] = TileKind.Dirt;
+                        spurCells.Add((st.X + dx * k, st.Y + dy * k));
+                    }
                     rooms.Add(CarveRoom(tiles, rcx, rcy, size, kind));
                     return;
                 }
@@ -324,6 +363,7 @@ public sealed class Warren
         foreach (var p in plan)
         {
             seg++;
+            p.Pattern = _rng.Roll(0, 2);
             if (seg > 0) dir = Turn(dir, cx, cy, p.Steps);
 
             // A special room is carved whole, centred far enough along the heading that the path
@@ -366,7 +406,7 @@ public sealed class Warren
                         : Room(cx, cy, Left(Left(alt)), 3) ? Left(Left(alt)) : alt;
                 }
 
-                CarveAcross(tiles, cx, cy, dir, halfL, halfR, p, out int walk);
+                CarveAcross(tiles, cx, cy, dir, halfL, halfR, p, i, out int walk);
 
                 path.Add(new PathStep
                 {
@@ -409,7 +449,7 @@ public sealed class Warren
     }
 
     private void CarveAcross(TileKind[,] tiles, int cx, int cy, Heading dir,
-                             int halfL, int halfR, Plan p, out int walkable)
+                             int halfL, int halfR, Plan p, int step, out int walkable)
     {
         var (ax, ay) = Across(dir);
         int lo = -halfL, hi = halfR;
@@ -427,7 +467,7 @@ public sealed class Warren
             if (tiles[x, y] == TileKind.Void) tiles[x, y] = TileKind.Dirt;
         }
 
-        Decorate(tiles, cx, cy, dir, lo, hi, p);
+        Decorate(tiles, cx, cy, dir, lo, hi, p, step);
 
         // The centre is always walkable, after decoration — a pillar or a spine landing on it would
         // otherwise sever the only guaranteed route.
@@ -478,7 +518,8 @@ public sealed class Warren
         return (int)MathF.Round(100f * (1f - MathF.Sqrt(t)));
     }
 
-    private void Decorate(TileKind[,] tiles, int cx, int cy, Heading dir, int lo, int hi, Plan p)
+    private void Decorate(TileKind[,] tiles, int cx, int cy, Heading dir, int lo, int hi,
+                          Plan p, int step)
     {
         if (p.Room != RoomKind.None) return;
         var (ax, ay) = Across(dir);
@@ -492,34 +533,77 @@ public sealed class Warren
         switch (p.Kind)
         {
             case SegmentKind.Gallery:
-                // Colonnades, phased so pillars form runs along the corridor rather than one wall.
-                for (int t = lo + 1; t < hi; t++)
-                    if (t != 0 && ((t + cx + cy) % 4) == 0) Put(t, TileKind.Rock);
+                // Three colonnade patterns, chosen per segment. Keyed on STEP and OFFSET — never on
+                // the cell's coordinates, which advance every step and turn any modulo into a
+                // diagonal stripe regardless of what it was meant to be.
+                switch (p.Pattern)
+                {
+                    case 0: // twin rows of pillars down the flanks
+                        if (step % 3 == 1) { Put(lo + 1, TileKind.Rock); Put(hi - 1, TileKind.Rock); }
+                        break;
+                    case 1: // a staggered checker through the middle
+                        for (int t = lo + 1; t < hi; t++)
+                            if (t != 0 && (t - lo) % 2 == step % 2 && step % 2 == 0)
+                                Put(t, TileKind.Rock);
+                        break;
+                    default: // broken colonnade: paired pillars with gaps where they collapsed
+                        if (step % 4 == 1 && _rng.Roll(0, 100) < 70) Put(lo + 1, TileKind.Rock);
+                        if (step % 4 == 3 && _rng.Roll(0, 100) < 70) Put(hi - 1, TileKind.Rock);
+                        break;
+                }
                 break;
 
             case SegmentKind.Cairn:
-                for (int t = lo; t <= hi; t++)
+                switch (p.Pattern)
                 {
-                    if (t == 0) continue;
-                    int roll = _rng.Roll(0, 100);
-                    // Spikes are WALKABLE damage, so unlike rubble they price a route rather than
-                    // closing it — a different decision, not a smaller room.
-                    if (roll < 13) Put(t, TileKind.Rock);
-                    else if (roll < 20) Put(t, TileKind.Spikes);
+                    case 0: // scattered rubble and bone
+                        for (int t = lo; t <= hi; t++)
+                        {
+                            if (t == 0) continue;
+                            int roll = _rng.Roll(0, 100);
+                            if (roll < 13) Put(t, TileKind.Rock);
+                            else if (roll < 20) Put(t, TileKind.Spikes);
+                        }
+                        break;
+                    case 1: // a collapsed heap against one wall, thinning toward the middle
+                        for (int t = lo; t <= hi; t++)
+                        {
+                            if (t == 0) continue;
+                            int fromWall = Math.Min(t - lo, hi - t);
+                            if (_rng.Roll(0, 100) < 34 - fromWall * 12) Put(t, TileKind.Rock);
+                        }
+                        break;
+                    default: // a spike field with rubble islands
+                        for (int t = lo; t <= hi; t++)
+                        {
+                            if (t == 0) continue;
+                            if (_rng.Roll(0, 100) < 16) Put(t, TileKind.Spikes);
+                            else if (step % 3 == 0 && _rng.Roll(0, 100) < 10) Put(t, TileKind.Rock);
+                        }
+                        break;
                 }
                 break;
 
             case SegmentKind.Cistern:
-                // Standing water down one side: see across it, shoot across it, never walk it. The
-                // room stops being wide for the purpose of closing distance.
-                bool nearSide = ((cx + cy) / 3) % 2 == 0;
+            {
+                // A POOL, not a stripe. The water is an ellipse centred midway along the segment:
+                // (across/ra)^2 + (along/rl)^2 <= 1, so the bank curves — it swells to full width
+                // at the middle and pinches out at both ends. The old bank was "everything past
+                // half-width on one side", a straight line the segment carried for its whole run.
+                float mid = (p.Steps - 1) / 2f;
+                float rl = Math.Max(2f, p.Steps / 2f - 0.5f);
+                // The pool hugs one side (rolled per segment) so there is always a dry bank.
+                bool nearSide = p.Pattern % 2 == 0;
+                float centreT = nearSide ? lo + (hi - lo) * 0.3f : lo + (hi - lo) * 0.7f;
+                float ra = Math.Max(1.5f, (hi - lo) * 0.42f);
                 for (int t = lo; t <= hi; t++)
                 {
                     if (t == 0) continue;
-                    if (nearSide ? t <= lo + (hi - lo) / 2 : t >= hi - (hi - lo) / 2)
-                        Put(t, TileKind.Water);
+                    float u = (t - centreT) / ra, v = (step - mid) / rl;
+                    if (u * u + v * v <= 1f) Put(t, TileKind.Water);
                 }
                 break;
+            }
 
             case SegmentKind.Fork:
                 // A spine you can see and shoot across but not walk, offset off the centre line.
@@ -528,7 +612,7 @@ public sealed class Warren
 
             case SegmentKind.Hall:
                 for (int t = lo; t <= hi; t++)
-                    if (t != 0 && (t + cx) % 5 == 0) Put(t, TileKind.Path);
+                    if (t != 0 && (t - lo + step) % 5 == 0) Put(t, TileKind.Path);
 
                 // CHASM, strictly inside with floor on both sides. Placed at the edge it is not a
                 // chasm at all — indistinguishable from the wall being one cell nearer, with nothing

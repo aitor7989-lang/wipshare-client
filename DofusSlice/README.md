@@ -228,6 +228,12 @@ cd DofusSlice
 dotnet run --project DofusSlice.Game     # the playable window (MonoGame DesktopGL)
 dotnet run --project DofusSlice.Sim      # headless auto-played fight, prints the turn log
 dotnet run --project DofusSlice.Sim effects   # combat-mechanics self-test
+dotnet run --project DofusSlice.Sim assets    # asset-format self-test
+dotnet run --project DofusSlice.Sim warren 7          # WANDERER floor generator: print a floor (docs/WANDERER.md §5a)
+dotnet run --project DofusSlice.Sim warren 7 fog      # the same floor behind a walked torch
+dotnet run --project DofusSlice.Sim warren stats      # measure the grammar over 80 floors
+dotnet run --project DofusSlice.Sim warren verify     # 400 floors of invariants
+dotnet run --project DofusSlice.Sim warren era        # expressive-range plot, 600 floors
 ```
 
 Get the SDK with `winget install Microsoft.DotNet.SDK.8` (Windows) or `brew install dotnet-sdk`

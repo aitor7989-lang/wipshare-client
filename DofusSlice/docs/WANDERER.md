@@ -1,7 +1,7 @@
 # WANDERER — design brief
 
-_Status: design, **plus one built piece** — the path generator (`Core/World/Warren.cs`), headless
-and standalone. Nothing else exists. See §5a._
+_Status: design, **plus one built piece** — the floor generator (`Core/World/Warren.cs` +
+`Floor.cs`), headless and standalone. Nothing else exists. See §5a._
 
 _Rev 2 history: after an adversarial design panel (3 research lenses + 3 critics +
 synthesis). Rev 1's own text is quoted where the panel refuted it, because the refutations are
@@ -153,25 +153,38 @@ that's left.
 
 ## 5. The generator
 
-Two layers: a **segment grammar** (Markov chain over archetypes, each carrying a **Constriction**
-number that generator, ambush placer, AI and sim all read) for macro; **Wang tiles** for micro.
-One integer: `Frontier == depth(hero) + Sight`. Rows beyond it do not exist — advancing the
-frontier *is* generation *and is* the reveal. No hidden pre-generated buffer, because that creates
-two competing truths about what exists.
+Two layers, both keyed to one scalar: a **segment grammar** (a weighted Markov chain over seven
+archetypes — Throat, Corridor, Gallery, Hall, Fork, Cairn, Cistern — each existing because it
+changes what an ambush in it would *mean*) for macro; **eased widths with ragged banks** for
+micro. Every step carries a **Constriction** number (0 open .. 100 single-file) that generator,
+ambush placer, AI and sim all read, so "tight" means one number everywhere.
 
-WFC's usual infinite-world weakness — independent chunks conflicting at seams — is its *best* case
-here: one advancing frontier means exactly one seam, and the deleted tail stops constraints
-propagating backwards. **This reasoning survived the panel intact. It is cut from the slice on
-cost, not merit** (§8).
+The load-bearing change since this section was first written: **the floor is generated whole, up
+front** — a walk that turns across a 56×56 grid — and what the player has seen is a **separate
+mask over it** (`Fog`, in `Floor.cs`). The original spec was a lazy row stream (`Frontier ==
+depth(hero) + Sight`; rows beyond it do not exist), chosen precisely to avoid two competing
+truths about what exists. The stream died on rooms: "the Warden is at the end", "a shrine is
+sealed in rock with one way in", "no walkable scrap is adrift in the void" are **statements about
+the whole floor**, and a generator that cannot see past its own frontier can promise none of
+them. So the truths swapped places. The floor is the one truth; "raises from the deeps" and
+"collapses behind" become the derived view — the fog mask revealing, and (in the game loop, still
+unbuilt) re-hiding. One truth, one derived view: the same discipline the frontier argument was
+defending, applied where the constraints actually live. "Depth" survives as distance **along the
+path**, which is what light, telegraphs and fog care about — it is just no longer an axis of the
+grid, and the walk is free to turn. (Wang tiles for micro remain cut on cost, not merit; the
+eased-width carve turned out to be enough texture for now.)
 
 ### 5a. What is actually built
 
-`DofusSlice.Core/World/Warren.cs` + `DofusSlice.Sim/WarrenSim.cs`. Run it:
+`DofusSlice.Core/World/Warren.cs` + `Floor.cs` (floor, path, fog) + `DofusSlice.Sim/WarrenSim.cs`
+(the harness). Run it:
 
 ```
-dotnet run --project DofusSlice.Sim -- warren 7        # print a descent
-dotnet run --project DofusSlice.Sim -- warren stats    # measure the grammar
-dotnet run --project DofusSlice.Sim -- warren verify   # 200 seeds x 400 rows of invariants
+dotnet run --project DofusSlice.Sim -- warren 7        # print a floor: terrain + marks
+dotnet run --project DofusSlice.Sim -- warren 7 fog    # the same floor behind a walked torch
+dotnet run --project DofusSlice.Sim -- warren stats    # measure the grammar over 80 floors
+dotnet run --project DofusSlice.Sim -- warren verify   # 400 floors of invariants
+dotnet run --project DofusSlice.Sim -- warren era      # expressive-range plot, 600 floors
 ```
 
 Built **against** the panel's advice, which was to cut the generator from the slice. That advice
@@ -180,39 +193,96 @@ visible thing first is how a project feels productive while dodging the question
 It was built anyway because it is the one component with zero coupling to any undecided system,
 and it is useful even if WANDERER is abandoned. **Step zero (§8) is still owed.**
 
-It is a **lazy row stream, not a map** — `RowAt(depth)`, generated forward and cached, with
-`Forget(depth)` dropping the tail. So "raises from the deeps" and "collapses behind" cost nothing
-and need no rolling window and no coordinate rebasing; those belong to the game loop.
+**The walk.** MACRO builds a plan first: segment kinds chained by weights that ramp with depth
+(Throats and Cisterns rise, Halls fall), the same kind never rolled twice running — repetition is
+what makes a generated run feel generated — with one exception: **Throat may follow Throat**, and
+grows likelier with depth, because back-to-back chokepoints are the chained ambush the design
+wants to threaten. A Warden segment is appended as the terminal chamber, then a **TightBudget**
+pass demotes whole Throats to Corridors until tight ground fits a per-floor budget that itself
+ramps (11% on floor 1 to 20% by floor 8) — a flat cap silently cancelled the depth ramp, because
+the weights produced more chokepoints deeper down and the budget deleted exactly the surplus; a
+cap and a curve only conflict if the cap is not itself the curve. Demoting rather than shortening
+keeps survivors at full length: a budget spent on many stubby chokepoints buys tension nowhere.
+MICRO carves the plan as a walk advancing **one orthogonal cell per step**, which makes the
+centre line connected by construction, turns included. Each segment eases toward asymmetric
+per-side width targets (at most two cells per step — a slower ease let the funnel eat the
+chokepoint), each bank carries a lazy ±1 jitter walk so corridors erode rather than draft
+(never in a Throat, whose exact width *is* the archetype, and never in a chamber, whose wall is a
+wall), turns are **staircased** — the first few steps alternate old and new heading, so a corner
+is a diagonal shoulder rather than a drafted right angle — and a heading held more than 12 steps
+stops being offered, because straight-favouring rolls otherwise chain across segments into
+25-cell ruler runs.
 
-Measured (seed 1, 4000 rows): tight ground **17.5% at depth 0-119 rising to 31.2% past 120** — the
-deeps genuinely tighten; back-to-back Throats fire in ~6% of segments, so the chained ambush is a
-live threat rather than a pattern; live rows pin flat at 25, so the collapse really does free
-ground. 200 seeds x 400 rows pass invariants including "no impassable row" — which on a path with
-no way around and no way back would be an unwinnable run.
+**The rooms.** Shrines and Vaults hang off the main path on **dead-end spurs**, rolled per floor
+(55% / 34%) and placed only where the footprint plus a one-cell margin is untouched rock. They
+used to be promoted segments, which meant the walk was carved straight through them — a reward
+you cannot avoid is not a reward, it is a checkpoint. As a sealed spur they cost a detour, which
+on a clock is a real decision. The **Warden** is the terminal chamber, an 8×8 chamfered octagon
+with pillar stubs, and it is **sited, not dropped**: the walk scans ahead across three forward
+headings and sideways shifts for the first footprint-plus-ring containing **no walked cell** —
+carving it wherever the walk happened to stand left three quarters of boss rooms enterable from
+the side, because the wandering path had already crossed the footprint and every old crossing
+stayed a mouth through the seal. If no clean site exists the room is requeued and the walk spends
+a short corridor moving somewhere better (bounded, then a least-crossed fallback), and the
+verifier asserts the result: **at most 3 walkable doorway cells** in the ring around the chamber.
+The exit is proven to sit *inside* the chamber geometrically — the old nominal check ("is the
+last step tagged Warden") stayed green while the walk marched out the far wall on 19 floors in 20.
 
-Four bugs the harness caught that reading the code would not have:
-1. **The funnel ate the chokepoint.** Width eased one step per row, so a short Throat spent all its
-   rows narrowing and never reached width 1. Tight ground measured 7.7% against a 15-35% target.
-2. **Constriction was quantised to six values.** Symmetric half-widths can only produce odd widths,
-   so 58% of rows piled into one bucket and the "moderately tight" band was empty. Sides are now
-   independent.
-3. **The chained-ambush rule was cancelled by its own guard.** A cooling-off check ran
-   unconditionally and vetoed the Throat-follows-Throat weight sitting three lines above it.
-4. **A crash from two jitters agreeing.** Both sides rolling wide on a Hall made the carve wider
-   than the corridor and inverted the centreline clamp. Sides were capped individually but never
-   as a sum.
+**The post-passes**, in order, once the walk and the spurs are down: **force-walk** — the whole
+centre line forced walkable only after every segment is carved, because a turning path crosses
+its own earlier ground and a later segment's pillars or water quietly severed it behind
+(398 floors in 400, while every per-step check stayed green); **TrimNubs** — shave single-cell
+pimples and one-wide tails that read as accidents rather than erosion; **CullIslands** — flood
+from the entry 8-way *through any material* (so a pond's far bank survives) and void whatever
+floats free; **EnforceWidthAndMeasure** — the last word on width, spoken over the finished floor:
+a width floor re-carves any non-Throat step narrower than 3 across (and any step at all below 2),
+with a doorway exception at room seals — a doorway may widen *parallel* to the wall but never
+into the chamber, because refusing entirely defeated the width floor at exactly the one place
+every run is funnelled through — and then **Constriction is re-measured from the finished
+tiles**, because the carve-time number went stale on a quarter of steps once later passes started
+editing ground; **WearTrail** — worn tiles scattered along the walked centre, a broken trail
+rather than painted stripes, which doubles as a subtle guide.
 
-And one the harness got wrong about itself: back-to-back Throats reported 0 for a while because
-the stats detected segment boundaries by *kind change*, which merges two consecutive Throats into
-one. Rows now carry a `SegmentIndex`. **A metric that cannot observe the thing it counts reads
-exactly like a feature that is not working.**
+**Fog** is a separate mask over the one truth, and its reveal **spreads along the ground** rather
+than stamping a box: an 8-way flood through walkable cells from the torch point, where a diagonal
+spread requires an open orthogonal intermediate (no corner-cutting), and each flooded cell also
+reveals its immediate rim of rock, water and void — you see the wall you stand against, not the
+room behind it. A plain Chebyshev box handed the player a map of a parallel corridor across a
+chasm their torch could never reach.
 
-Known and deliberate: width is constant within a segment (the ease completes in 1-2 rows), so a
-long Corridor is a uniform 2-wide stretch. That is legible — you can read "this is a two-wide
-run" at a glance — but it is not organic. Whether to add intra-segment variation is a
-legibility-versus-texture call worth making deliberately rather than drifting into.
+**Proven** (`warren verify`, 400 seeds, floors 1–10, fresh run): orthogonally passable entry to
+exit; exit inside the Warden rect; Warden ring at most 3 walkable doorway cells; no single-file
+step outside Throats and chambers; every Shrine and Vault reachable; no orphan cells adrift; the
+fog reveals no walkable cell the player cannot reach; every step one orthogonal cell; and
+byte-identical regeneration per seed — over the whole artefact, tiles, rooms and path, not just
+the path length, which two different floors can share by coincidence. Output:
+`400 floors — passable, contiguous, deterministic, Warden-terminated.`
 
----
+**Measured** (`warren stats`, 80 floors, target 200 steps, fresh run): mean path **210.4** steps;
+**73.2 turns per floor** with headings split 25/25/25/25 — a warren, not a strip; **chained
+Throats 0.35 per floor**, so the double ambush is a live threat rather than a pattern; rooms per
+floor **Shrine 0.62 / Vault 0.38 / Warden 1.00**. The expressive-range plot (`warren era`,
+600 floors) covers **30.8%** of the tightness×windiness plane — 27.8 points of constriction
+spread, 34.4 turns per 100 steps of windiness spread — so floors differ structurally, not just
+cosmetically.
+
+**The honest number: tight ground is below its band.** Constriction-60+ ground measures **4.2%**
+overall — 3.0% on floors 1–3, 4.7% on floors 4–10 — against a **10–30% design band**, and
+`warren stats` prints `OUT OF BAND` to say so. The depth ramp is real but the level is low: the
+budget is a ceiling rather than a target, and the post-pass re-measure is stricter than the plan
+it audits — a Throat whose neighbours' carved ground presses against it is not tight on the
+finished floor, whatever the plan called it. This is known and deliberately not yet retuned:
+tightness is the number the whole Brace/Push/Charge tension is priced against, so it gets tuned
+once, against the game loop, rather than repeatedly against taste.
+
+The harness has now been blind to its own subject three times — segment boundaries detected by
+*kind change* merged consecutive Throats and reported the chaining rule dead; room counts read
+from path tags reported zero rooms the moment rooms moved onto spurs; and "every row has a
+walkable cell" reported clean while 24 floors in 400 were unwinnable, because movement is
+orthogonal and two diagonally-adjacent cells are mutually unreachable. **A metric that cannot
+observe the thing it counts reads exactly like a feature that is not working** — which is why the
+checks above are geometric (flood fills, ring counts, whole-artefact equality) rather than
+nominal.
 
 ---
 

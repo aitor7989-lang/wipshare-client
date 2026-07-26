@@ -15,6 +15,7 @@ if (args.Length > 0 && args[0] == "warren")
     int wseed = args.Select(a => int.TryParse(a, out int v) ? v : (int?)null).FirstOrDefault(v => v != null) ?? 1;
     if (args.Contains("stats")) return WarrenSim.Stats(80, 200);
     if (args.Contains("verify")) return WarrenSim.Verify(400, 200);
+    if (args.Contains("era")) return WarrenSim.Era(600, 200);
     int sight = args.Contains("fog") ? 4 : 0;
     return WarrenSim.Dump(wseed, 80, sight);
 }

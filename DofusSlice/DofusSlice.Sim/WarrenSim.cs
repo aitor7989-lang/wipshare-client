@@ -184,6 +184,86 @@ public static class WarrenSim
     }
 
     /// <summary>
+    /// EXPRESSIVE RANGE ANALYSIS (Smith &amp; Whitehead, 2010).
+    ///
+    /// Every other number this harness prints is a MEAN, and a mean cannot tell the difference
+    /// between a generator that explores its space and one that makes the same floor four hundred
+    /// times. ERA plots each floor as a point on two metric axes and looks at the DENSITY of the
+    /// cloud: a tight blob means one floor with cosmetic variation, a spread cloud means genuine
+    /// range, and an empty region means content the generator can never produce.
+    ///
+    /// The literature's main complaint about ERA is that the choice of axes is usually left
+    /// unjustified, so: TIGHTNESS (mean constriction) against WINDINESS (turns per 100 steps).
+    /// Those are the two the design's tension actually rests on — how often the ground pins you,
+    /// and how much of the floor you cannot see coming.
+    /// </summary>
+    public static int Era(int floors, int steps)
+    {
+        const int CW = 46, CH = 18;      // plot cells
+        var grid = new int[CH, CW];
+        float xMin = 100, xMax = 0, yMin = 999, yMax = 0;
+        var pts = new List<(float X, float Y)>();
+
+        for (int s = 0; s < floors; s++)
+        {
+            var f = new Warren(s).Generate(steps, 1 + s % 10);
+            float tight = (float)f.Path.Average(p => p.Constriction);
+            int turns = 0;
+            for (int i = 1; i < f.Path.Count; i++) if (f.Path[i].Dir != f.Path[i - 1].Dir) turns++;
+            float wind = turns * 100f / f.Path.Count;
+            pts.Add((tight, wind));
+            xMin = Math.Min(xMin, tight); xMax = Math.Max(xMax, tight);
+            yMin = Math.Min(yMin, wind); yMax = Math.Max(yMax, wind);
+        }
+
+        // Pad the axes so points never land exactly on the frame.
+        float xs = Math.Max(1f, xMax - xMin), ys = Math.Max(1f, yMax - yMin);
+        xMin -= xs * 0.06f; xMax += xs * 0.06f; yMin -= ys * 0.06f; yMax += ys * 0.06f;
+
+        foreach (var (x, y) in pts)
+        {
+            int cx = (int)((x - xMin) / (xMax - xMin) * (CW - 1));
+            int cy = (int)((1 - (y - yMin) / (yMax - yMin)) * (CH - 1));
+            grid[Math.Clamp(cy, 0, CH - 1), Math.Clamp(cx, 0, CW - 1)]++;
+        }
+
+        int peak = 0, filled = 0;
+        for (int y = 0; y < CH; y++)
+            for (int x = 0; x < CW; x++)
+            { peak = Math.Max(peak, grid[y, x]); if (grid[y, x] > 0) filled++; }
+
+        const string RAMP = " .:-=+*#%@";
+        Console.WriteLine($"EXPRESSIVE RANGE  {floors} floors, {steps} steps, floors 1-10\n");
+        Console.WriteLine($"  y = windiness (turns per 100 steps)   {yMax:F1} at top, {yMin:F1} at bottom");
+        Console.WriteLine($"  x = tightness (mean constriction)     {xMin:F1} at left, {xMax:F1} at right");
+        Console.WriteLine($"  density ramp: '{RAMP.Trim()}'  (peak {peak} floors in one cell)\n");
+
+        for (int y = 0; y < CH; y++)
+        {
+            var sb = new System.Text.StringBuilder("  |");
+            for (int x = 0; x < CW; x++)
+            {
+                int n = grid[y, x];
+                sb.Append(n == 0 ? ' ' : RAMP[Math.Min(RAMP.Length - 1, 1 + n * (RAMP.Length - 2) / Math.Max(1, peak))]);
+            }
+            Console.WriteLine(sb.Append('|').ToString());
+        }
+        Console.WriteLine("  +" + new string('-', CW) + "+\n");
+
+        float coverage = filled * 100f / (CW * CH);
+        Console.WriteLine($"  cells occupied      {filled}/{CW * CH}  ({coverage:F1}% of the plot)");
+        Console.WriteLine($"  tightness spread    {xMax - xMin:F1} points of constriction");
+        Console.WriteLine($"  windiness spread    {yMax - yMin:F1} turns per 100 steps");
+        // A blob in one corner is the failure this plot exists to expose: it means the knobs move
+        // numbers without moving the floors.
+        Console.WriteLine(coverage >= 12f
+            ? "  -> the cloud has real spread: floors differ structurally, not just cosmetically."
+            : "  -> CLUSTERED. The generator is making one floor with variations. Widen the grammar,\n" +
+              "     not the tuning: more archetypes or more varied segment lengths.");
+        return 0;
+    }
+
+    /// <summary>
     /// Prove every floor can be walked, entry to Warden.
     ///
     /// This replaced a check that every row had SOME walkable cell — necessary and nowhere near

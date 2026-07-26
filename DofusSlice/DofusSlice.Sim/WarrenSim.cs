@@ -282,8 +282,18 @@ public static class WarrenSim
                 Console.WriteLine($"  seed {s}: IMPASSABLE — reached step {reached} of {floor.Path.Count}");
                 fails++;
             }
-            if (floor.Path[^1].Room != RoomKind.Warden)
-            { Console.WriteLine($"  seed {s}: does not end in the Warden's chamber"); fails++; }
+            // GEOMETRIC, not nominal: the old check asked whether the last step was TAGGED
+            // Warden, which the plan guarantees — a tautology that stayed green while the walk
+            // marched out the far wall and the exit sat outside the chamber on 19 floors in 20.
+            var warden = floor.Rooms.FirstOrDefault(r => r.Kind == RoomKind.Warden);
+            if (warden.W == 0)
+            { Console.WriteLine($"  seed {s}: no Warden chamber on the floor"); fails++; }
+            else if (!warden.Contains(floor.Exit.X, floor.Exit.Y))
+            {
+                Console.WriteLine($"  seed {s}: exit ({floor.Exit.X},{floor.Exit.Y}) outside the " +
+                                  $"Warden chamber at ({warden.X},{warden.Y}) {warden.W}x{warden.H}");
+                fails++;
+            }
 
             // Every special room must be REACHABLE from the entry — passability alone only proves
             // the Warden. Room isolation shaves cells around chambers, and a shave that severed a
@@ -378,8 +388,16 @@ public static class WarrenSim
                 { Console.WriteLine($"  seed {s} step {i}: path jumped {d} cells"); fails++; break; }
             }
 
+            // Determinism over the WHOLE artefact — tiles, rooms and path — not just the path
+            // length, which two different floors can share by coincidence.
             var b = new Warren(s).Generate(steps, 1 + s % 10);
-            if (b.Path.Count != floor.Path.Count)
+            bool same = b.Path.Count == floor.Path.Count && b.Rooms.Count == floor.Rooms.Count;
+            for (int y5 = 0; y5 < floor.Height && same; y5++)
+                for (int x5 = 0; x5 < floor.Width && same; x5++)
+                    if (b.Tiles[x5, y5] != floor.Tiles[x5, y5]) same = false;
+            for (int r5 = 0; r5 < floor.Rooms.Count && same; r5++)
+                if (!b.Rooms[r5].Equals(floor.Rooms[r5])) same = false;
+            if (!same)
             { Console.WriteLine($"  seed {s}: NOT DETERMINISTIC"); fails++; }
         }
 

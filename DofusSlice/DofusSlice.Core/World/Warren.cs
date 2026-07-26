@@ -129,6 +129,7 @@ public sealed class Warren
                 tiles[st.X, st.Y] = TileKind.Dirt;
 
         CullIslands(tiles, path[0]);
+        EnforceWidthAndMeasure(tiles, path, rooms);
 
         return new Floor(GridW, GridH, path, tiles, floorNumber, rooms);
     }
@@ -317,6 +318,81 @@ public sealed class Warren
                 if (!keep[x, y]) tiles[x, y] = TileKind.Void;
     }
 
+    /// <summary>
+    /// The LAST word on width and tightness, spoken over the FINISHED floor.
+    ///
+    /// Constriction was measured at carve time and went stale: later segments, spur mouths,
+    /// isolation shaves and the island cull all edit ground after a step is recorded, so the
+    /// number "every other system reads" was wrong on a quarter of steps — and one step in ten
+    /// ended up single-file despite the MinWidth invariant. Two duties here:
+    ///
+    ///   WIDTH FLOOR — a non-Throat step narrower than 3 across (or ANY step narrower than
+    ///   MinWidth) gets ground carved back, so tight ground exists only where a Throat put it
+    ///   and the plan-level TightBudget prices what the floor actually contains. Cells beside
+    ///   special rooms are never touched: widening through a seal would breach the chamber.
+    ///
+    ///   RE-MEASURE — every step's Constriction is recomputed from the finished tiles as the
+    ///   contiguous walkable run across the heading through the centre.
+    /// </summary>
+    private static void EnforceWidthAndMeasure(TileKind[,] tiles, List<PathStep> path,
+                                               List<RoomRect> rooms)
+    {
+        bool NearRoom(int x, int y) =>
+            rooms.Any(r => x >= r.X - 1 && x < r.X + r.W + 1 && y >= r.Y - 1 && y < r.Y + r.H + 1);
+        bool Walk(int x, int y) =>
+            x >= 1 && x < GridW - 1 && y >= 1 && y < GridH - 1 &&
+            tiles[x, y] is not (TileKind.Void or TileKind.Rock or TileKind.Water);
+
+        int Measure(PathStep st, (int, int) across)
+        {
+            var (ax, ay) = across;
+            int walk = 1;
+            for (int t = 1; t <= MaxHalf + 1 && Walk(st.X + ax * t, st.Y + ay * t); t++) walk++;
+            for (int t = 1; t <= MaxHalf + 1 && Walk(st.X - ax * t, st.Y - ay * t); t++) walk++;
+            return walk;
+        }
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            var st = path[i];
+            var across = Across(st.Dir);
+            var (ax, ay) = across;
+
+            int want = st.Kind == SegmentKind.Throat || st.Room != RoomKind.None ? MinWidth : 3;
+            int walk = Measure(st, across);
+            bool grew = true;
+            while (walk < want && grew)
+            {
+                grew = false;
+                foreach (int sign in new[] { 1, -1 })
+                {
+                    if (walk >= want) break;
+                    // Extend the CONTIGUOUS run: carve exactly the first blocked cell past the
+                    // walkable ground on this side. Skipping a guarded cell and carving beyond
+                    // it plants ground with no connection to anything — an orphan island made
+                    // by the very pass that runs after the island cull.
+                    int t = 1;
+                    while (t <= MaxHalf && Walk(st.X + ax * sign * t, st.Y + ay * sign * t)) t++;
+                    int x = st.X + ax * sign * t, y = st.Y + ay * sign * t;
+                    if (t > MaxHalf || x < 1 || y < 1 || x >= GridW - 1 || y >= GridH - 1 ||
+                        NearRoom(x, y)) continue;
+                    if (tiles[x, y] is TileKind.Void or TileKind.Rock or TileKind.Water)
+                    {
+                        tiles[x, y] = TileKind.Dirt;
+                        grew = true;
+                        walk = Measure(st, across);
+                    }
+                }
+            }
+
+            path[i] = new PathStep
+            {
+                X = st.X, Y = st.Y, Dir = st.Dir, Kind = st.Kind, Room = st.Room,
+                Segment = st.Segment, Constriction = Constrict(Measure(st, across)),
+            };
+        }
+    }
+
     private void TrySpur(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,
                          RoomKind kind, int percent, HashSet<(int, int)> spurCells)
     {
@@ -333,14 +409,30 @@ public sealed class Warren
             foreach (var side in new[] { Left(st.Dir), Right(st.Dir) })
             {
                 var (dx, dy) = Delta(side);
+
+                // Cross the corridor's own band FIRST. The old scan demanded Void from k=1,
+                // which fails whenever the corridor is wider than nothing — so placement died
+                // about four times in five and the rarity ROLL above quietly stopped being
+                // what sets shrine/vault frequency (measured: shrines at 46% of intent).
+                int k0 = 1;
+                while (k0 <= MaxHalf + 1)
+                {
+                    int bx = st.X + dx * k0, by = st.Y + dy * k0;
+                    if (bx < 1 || by < 1 || bx >= GridW - 1 || by >= GridH - 1) { k0 = int.MaxValue; break; }
+                    if (tiles[bx, by] == TileKind.Void) break;
+                    k0++;
+                }
+                if (k0 > MaxHalf + 1) continue;
+
                 for (int len = 3; len <= 7; len++)
                 {
-                    int rcx = st.X + dx * (len + size / 2), rcy = st.Y + dy * (len + size / 2);
+                    int reach = k0 - 1 + len;
+                    int rcx = st.X + dx * (reach + size / 2), rcy = st.Y + dy * (reach + size / 2);
                     if (!AreaVoid(tiles, rcx - size / 2 - 1, rcy - size / 2 - 1, size + 2, size + 2))
                         continue;
 
                     bool clear = true;
-                    for (int k = 1; k <= len && clear; k++)
+                    for (int k = k0; k <= reach && clear; k++)
                     {
                         int cx = st.X + dx * k, cy = st.Y + dy * k;
                         if (cx < 1 || cy < 1 || cx >= GridW - 1 || cy >= GridH - 1 ||
@@ -348,7 +440,8 @@ public sealed class Warren
                     }
                     if (!clear) continue;
 
-                    for (int k = 1; k <= len; k++)
+                    // Band cells join spurCells too, or IsolateRooms could shave the mouth.
+                    for (int k = 1; k <= reach; k++)
                     {
                         tiles[st.X + dx * k, st.Y + dy * k] = TileKind.Dirt;
                         spurCells.Add((st.X + dx * k, st.Y + dy * k));
@@ -404,13 +497,16 @@ public sealed class Warren
             if (seg > 0) dir = Turn(dir, cx, cy, p.Steps);
 
             // A special room is carved whole, centred far enough along the heading that the path
-            // enters one side and leaves the other rather than clipping a corner.
+            // enters one side and crosses to the far interior column. Steps = size, NOT size + 2:
+            // the extra two steps marched the walk straight out the far wall, which put the floor
+            // EXIT outside the Warden's chamber on 19 floors in 20 — "the boss is always the way
+            // out" was true in the plan and false on the ground.
             if (p.Room != RoomKind.None)
             {
                 int size = RoomSize(p.Room, _rng);
                 var (rdx, rdy) = Delta(dir);
                 rooms.Add(CarveRoom(tiles, cx + rdx * (size / 2), cy + rdy * (size / 2), size, p.Room));
-                p.Steps = size + 2;
+                p.Steps = size;
             }
 
             int baseHalf = TargetHalf(p);
@@ -643,8 +739,16 @@ public sealed class Warren
             }
 
             case SegmentKind.Fork:
-                // A spine you can see and shoot across but not walk, offset off the centre line.
-                if (hi - lo >= 2) Put(lo + 1 == 0 ? lo + 2 : lo + 1, TileKind.Rock);
+                // A spine you can SEE AND SHOOT ACROSS but not walk — WATER, not rock: rock
+                // blocks line of sight, which contradicted the archetype's entire identity.
+                // One cell off the centre line, strictly interior, so both branches walk.
+                if (hi - lo >= 2)
+                {
+                    int s = p.Pattern % 2 == 0 ? -1 : 1;
+                    if (s <= lo) s = lo + 1;
+                    if (s >= hi) s = hi - 1;
+                    if (s != 0) Put(s, TileKind.Water);
+                }
                 break;
 
             case SegmentKind.Hall:

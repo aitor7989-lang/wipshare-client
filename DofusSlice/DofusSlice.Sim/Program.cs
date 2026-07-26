@@ -16,8 +16,10 @@ if (args.Length > 0 && args[0] == "warren")
     if (args.Contains("stats")) return WarrenSim.Stats(80, 200);
     if (args.Contains("verify")) return WarrenSim.Verify(400, 200);
     if (args.Contains("era")) return WarrenSim.Era(600, 200);
+    // Dump at the SAME length the verifier and stats run: what humans look at should be what
+    // the harness proves things about.
     int sight = args.Contains("fog") ? 4 : 0;
-    return WarrenSim.Dump(wseed, 80, sight);
+    return WarrenSim.Dump(wseed, 200, sight);
 }
 
 if (args.Length > 0 && args[0] == "campaign")

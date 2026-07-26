@@ -81,10 +81,6 @@ public sealed class Warren
         /// gallery striped diagonally and every cistern's bank zigzagged, one pattern everywhere,
         /// dressed up as variety.</summary>
         public int Pattern;
-        /// <summary>Does this segment raise a parapet along its flanks? Rolled per segment so
-        /// walls come and go along the descent — everywhere reads as a fortress, nowhere reads
-        /// as a cave, and neither is a warren.</summary>
-        public bool Walled;
     }
 
     private static (int dx, int dy) Delta(Heading h) => h switch
@@ -119,7 +115,6 @@ public sealed class Warren
         var path = Walk(tiles, plan, rooms);
         AddSpurRooms(tiles, path, rooms, spurCells);
         IsolateRooms(tiles, path, rooms, spurCells);
-        WallRooms(tiles, rooms);
 
         // FINAL PASS: force the whole centre line walkable, after every segment has been carved.
         //
@@ -328,25 +323,6 @@ public sealed class Warren
         }
     }
 
-    /// <summary>Raise a parapet on the void ring around a chamber — after isolation, so the
-    /// shave cannot delete it. The Warden and every Vault are always walled (an arena and a
-    /// treasury read as built places); a Shrine only sometimes, so some stand open to the dark.
-    /// Only void becomes rock: the doorway is Dirt and survives untouched.</summary>
-    private void WallRooms(TileKind[,] tiles, List<RoomRect> rooms)
-    {
-        foreach (var r in rooms)
-        {
-            if (r.Kind == RoomKind.Shrine && _rng.Roll(0, 99) < 40) continue;
-            for (int y = r.Y - 1; y <= r.Y + r.H; y++)
-                for (int x = r.X - 1; x <= r.X + r.W; x++)
-                {
-                    bool ring = x == r.X - 1 || x == r.X + r.W || y == r.Y - 1 || y == r.Y + r.H;
-                    if (!ring || x < 1 || y < 1 || x >= GridW - 1 || y >= GridH - 1) continue;
-                    if (tiles[x, y] == TileKind.Void) tiles[x, y] = TileKind.Rock;
-                }
-        }
-    }
-
     private static bool AreaVoid(TileKind[,] tiles, int x0, int y0, int w, int h)
     {
         if (x0 < 1 || y0 < 1 || x0 + w >= GridW - 1 || y0 + h >= GridH - 1) return false;
@@ -388,17 +364,6 @@ public sealed class Warren
         {
             seg++;
             p.Pattern = _rng.Roll(0, 2);
-            // Wide, roomy archetypes carry walls most often — a parapet on a Throat would just
-            // deepen a slot that is already the tightest thing in the game, so never there.
-            p.Walled = p.Kind switch
-            {
-                SegmentKind.Hall => _rng.Roll(0, 99) < 55,
-                SegmentKind.Cistern => _rng.Roll(0, 99) < 45,
-                SegmentKind.Gallery => _rng.Roll(0, 99) < 30,
-                SegmentKind.Cairn => _rng.Roll(0, 99) < 20,
-                SegmentKind.Corridor => _rng.Roll(0, 99) < 12,
-                _ => false,
-            };
             if (seg > 0) dir = Turn(dir, cx, cy, p.Steps);
 
             // A special room is carved whole, centred far enough along the heading that the path
@@ -503,20 +468,6 @@ public sealed class Warren
         }
 
         Decorate(tiles, cx, cy, dir, lo, hi, p, step);
-
-        // The parapet: one cell of rock just outside each flank, raised only where the band
-        // meets untouched void — an existing corridor is never bricked over, so walls cannot
-        // change what is reachable, only what is visible and what light can cross.
-        if (p.Walled)
-        {
-            foreach (var t in new[] { lo - 1, hi + 1 })
-            {
-                int x = cx + ax * t, y = cy + ay * t;
-                if (x > 0 && x < GridW - 1 && y > 0 && y < GridH - 1 &&
-                    tiles[x, y] == TileKind.Void)
-                    tiles[x, y] = TileKind.Rock;
-            }
-        }
 
         // The centre is always walkable, after decoration — a pillar or a spine landing on it would
         // otherwise sever the only guaranteed route.

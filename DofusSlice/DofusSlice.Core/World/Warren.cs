@@ -105,7 +105,8 @@ public sealed class Warren
             for (int x = 0; x < GridW; x++)
                 tiles[x, y] = TileKind.Void;
 
-        var path = Walk(tiles, plan);
+        var rooms = new List<RoomRect>();
+        var path = Walk(tiles, plan, rooms);
 
         // FINAL PASS: force the whole centre line walkable, after every segment has been carved.
         //
@@ -119,7 +120,7 @@ public sealed class Warren
             if (tiles[st.X, st.Y] is TileKind.Void or TileKind.Rock or TileKind.Water)
                 tiles[st.X, st.Y] = TileKind.Dirt;
 
-        return new Floor(GridW, GridH, path, tiles, floorNumber);
+        return new Floor(GridW, GridH, path, tiles, floorNumber, rooms);
     }
 
     // ---- Macro: the plan --------------------------------------------------------------
@@ -250,7 +251,27 @@ public sealed class Warren
 
     // ---- Micro: the walk -------------------------------------------------------------
 
-    private List<PathStep> Walk(TileKind[,] tiles, List<Plan> plan)
+    /// <summary>Special rooms are SQUARE CHAMBERS — 4x4, 6x6 or 8x8 — carved as a block, not a
+    /// widened stretch of corridor. A room the corridor merely swells into is not a room; it reads
+    /// as a bulge, and a boss arena needs to be a place you arrive in.</summary>
+    private static int RoomSize(RoomKind kind, IRng rng) => kind switch
+    {
+        RoomKind.Warden => 8,
+        RoomKind.Vault => 6,
+        _ => rng.Roll(0, 1) == 0 ? 4 : 6,
+    };
+
+    private static RoomRect CarveRoom(TileKind[,] tiles, int cx, int cy, int size, RoomKind kind)
+    {
+        int x0 = Math.Clamp(cx - size / 2, 1, GridW - size - 1);
+        int y0 = Math.Clamp(cy - size / 2, 1, GridH - size - 1);
+        for (int y = y0; y < y0 + size; y++)
+            for (int x = x0; x < x0 + size; x++)
+                tiles[x, y] = TileKind.Dirt;
+        return new RoomRect(x0, y0, size, size, kind);
+    }
+
+    private List<PathStep> Walk(TileKind[,] tiles, List<Plan> plan, List<RoomRect> rooms)
     {
         var path = new List<PathStep>();
         int cx = GridW / 2, cy = GridH / 2;
@@ -262,6 +283,16 @@ public sealed class Warren
         {
             seg++;
             if (seg > 0) dir = Turn(dir, cx, cy, p.Steps);
+
+            // A special room is carved whole, centred far enough along the heading that the path
+            // enters one side and leaves the other rather than clipping a corner.
+            if (p.Room != RoomKind.None)
+            {
+                int size = RoomSize(p.Room, _rng);
+                var (rdx, rdy) = Delta(dir);
+                rooms.Add(CarveRoom(tiles, cx + rdx * (size / 2), cy + rdy * (size / 2), size, p.Room));
+                p.Steps = size + 2;
+            }
 
             int baseHalf = TargetHalf(p);
             int targetL, targetR;

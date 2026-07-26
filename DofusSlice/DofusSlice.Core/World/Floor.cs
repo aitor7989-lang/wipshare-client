@@ -16,6 +16,15 @@ public enum RoomKind
     Warden,
 }
 
+/// <summary>A special room's footprint on the grid. Recorded as a RECTANGLE, not inferred from
+/// which path cells happen to be tagged: a room is a place with an area, and a consumer that only
+/// knows "these path steps were in a shrine" cannot draw the shrine — it can only draw the walk
+/// through it.</summary>
+public readonly record struct RoomRect(int X, int Y, int W, int H, RoomKind Kind)
+{
+    public bool Contains(int x, int y) => x >= X && x < X + W && y >= Y && y < Y + H;
+}
+
 /// <summary>The four headings a corridor can run. The path turns between segments, so a floor is a
 /// wandering network rather than a strip — an earlier version hardcoded depth to the Y axis, which
 /// meant the corridor could only ever run one direction.</summary>
@@ -55,13 +64,17 @@ public sealed class Floor
     /// path rather than a Y coordinate. Light radius, telegraphs and fog all key off it.</summary>
     public IReadOnlyList<PathStep> Path { get; }
 
+    /// <summary>Every special room's footprint, so rooms can be drawn as rooms.</summary>
+    public IReadOnlyList<RoomRect> Rooms { get; }
+
     public int Number { get; }
     public (int X, int Y) Entry => (Path[0].X, Path[0].Y);
     public (int X, int Y) Exit => (Path[^1].X, Path[^1].Y);
 
-    public Floor(int width, int height, IReadOnlyList<PathStep> path, TileKind[,] tiles, int number)
+    public Floor(int width, int height, IReadOnlyList<PathStep> path, TileKind[,] tiles, int number,
+                 IReadOnlyList<RoomRect> rooms)
     {
-        Width = width; Height = height; Path = path; Tiles = tiles; Number = number;
+        Width = width; Height = height; Path = path; Tiles = tiles; Number = number; Rooms = rooms;
     }
 
     /// <summary>Water is NOT walkable — you see and shoot across it, you do not wade it. It was

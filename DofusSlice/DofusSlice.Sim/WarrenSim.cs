@@ -31,14 +31,18 @@ public static class WarrenSim
         // — you cannot tell a shrine's floor from its walls — and leaves any consumer unable to
         // render the room as a room rather than as a letter.
         var marks = new Dictionary<(int, int), char>();
+        // Path first, then room FOOTPRINTS over the top: a room is an area, and marking only the
+        // path cells inside it describes the walk through the room rather than the room.
         foreach (var st in floor.Path)
-            marks[(st.X, st.Y)] = st.Room switch
-            {
-                RoomKind.Warden => 'W',
-                RoomKind.Vault => 'V',
-                RoomKind.Shrine => 'S',
-                _ => st.Constriction >= 60 ? 't' : '+',
-            };
+            if (st.Constriction >= 60) marks[(st.X, st.Y)] = 't';
+            else marks[(st.X, st.Y)] = '+';
+        foreach (var r in floor.Rooms)
+        {
+            char c = r.Kind switch { RoomKind.Warden => 'W', RoomKind.Vault => 'V', _ => 'S' };
+            for (int y = r.Y; y < r.Y + r.H; y++)
+                for (int x = r.X; x < r.X + r.W; x++)
+                    if (floor.Tiles[x, y] != TileKind.Void) marks[(x, y)] = c;
+        }
         var (ex, ey) = floor.Entry;
         marks[(ex, ey)] = 'A';
 
@@ -90,6 +94,7 @@ public static class WarrenSim
         var tiles = new Dictionary<TileKind, int>();
         var headings = new Dictionary<Heading, int>();
         var buckets = new int[5];
+        var roomSizes = new List<RoomRect>();
         int totalSteps = 0, throatRuns = 0, turns = 0;
         int shallowSteps = 0, shallowTight = 0, deepSteps = 0, deepTight = 0;
 
@@ -127,6 +132,7 @@ public static class WarrenSim
                     rooms[st.Room] = rooms.GetValueOrDefault(st.Room) + 1;
             }
 
+            roomSizes.AddRange(floor.Rooms);
             for (int y = 0; y < floor.Height; y++)
                 for (int x = 0; x < floor.Width; x++)
                     if (floor.Tiles[x, y] != TileKind.Void)
@@ -137,6 +143,9 @@ public static class WarrenSim
         Console.WriteLine($"  mean path length      {totalSteps / (float)floors:F1} steps");
         Console.WriteLine($"  turns per floor       {turns / (float)floors:F1}   <- 0 would mean a strip");
         Console.WriteLine($"  chained throats       {throatRuns / (float)floors:F2} per floor");
+        Console.WriteLine($"  room sizes            " + string.Join("  ",
+            new[] { RoomKind.Shrine, RoomKind.Vault, RoomKind.Warden }.Select(k =>
+                $"{k} {string.Join("/", roomSizes.Where(r => r.Kind == k).Select(r => r.W).Distinct().OrderBy(v => v))}")));
         Console.WriteLine($"  special rooms/floor   Vault {rooms.GetValueOrDefault(RoomKind.Vault) / (float)floors:F2}" +
                           $"   Shrine {rooms.GetValueOrDefault(RoomKind.Shrine) / (float)floors:F2}" +
                           $"   Warden {rooms.GetValueOrDefault(RoomKind.Warden) / (float)floors:F2}");

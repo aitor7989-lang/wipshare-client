@@ -26,15 +26,18 @@ public static class WarrenSim
         Fog? fog = null;
         if (sight > 0) { fog = new Fog(floor); fog.WalkWithTorch(sight); }
 
-        // Mark the path so turns and rooms are legible on the map itself.
+        // Terrain and annotation are printed as TWO layers, never merged. Painting 'S'/'V'/'W'
+        // over the tile destroys the terrain underneath, which makes the map unreadable as a place
+        // — you cannot tell a shrine's floor from its walls — and leaves any consumer unable to
+        // render the room as a room rather than as a letter.
         var marks = new Dictionary<(int, int), char>();
-        foreach (var s in floor.Path)
-            marks[(s.X, s.Y)] = s.Room switch
+        foreach (var st in floor.Path)
+            marks[(st.X, st.Y)] = st.Room switch
             {
                 RoomKind.Warden => 'W',
                 RoomKind.Vault => 'V',
                 RoomKind.Shrine => 'S',
-                _ => s.Constriction >= 60 ? 't' : '+',
+                _ => st.Constriction >= 60 ? 't' : '+',
             };
         var (ex, ey) = floor.Entry;
         marks[(ex, ey)] = 'A';
@@ -51,19 +54,30 @@ public static class WarrenSim
         Console.WriteLine($"FLOOR  seed={seed}  grid {floor.Width}x{floor.Height}  " +
                           $"path {floor.Path.Count} steps  bounds {maxX - minX + 1}x{maxY - minY + 1}" +
                           (sight > 0 ? $"  fog: sight {sight}" : ""));
-        Console.WriteLine("  '.' floor  ':' worn  '#' rock  '~' water  '\"' spikes");
-        Console.WriteLine("  path: 'A' entry  '+' walked  't' tight  'S' shrine  'V' vault  'W' warden\n");
+        Console.WriteLine("  TERRAIN  '.' floor  ':' worn  '#' rock  '~' water  '\"' spikes");
+        Console.WriteLine("  MARKS    'A' entry  '+' walked  't' tight  'S' shrine  'V' vault  'W' warden");
 
+        Console.WriteLine("\n[TERRAIN]");
+        for (int y = minY; y <= maxY; y++)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int x = minX; x <= maxX; x++)
+                sb.Append(fog is not null && !fog.Seen(x, y) ? ' ' : Glyph(floor.Tiles[x, y]));
+            Console.WriteLine($"  {sb}");
+        }
+
+        Console.WriteLine("\n[MARKS]");
         for (int y = minY; y <= maxY; y++)
         {
             var sb = new System.Text.StringBuilder();
             for (int x = minX; x <= maxX; x++)
             {
                 if (fog is not null && !fog.Seen(x, y)) { sb.Append(' '); continue; }
-                sb.Append(marks.TryGetValue((x, y), out char m) ? m : Glyph(floor.Tiles[x, y]));
+                sb.Append(marks.TryGetValue((x, y), out char m) ? m : ' ');
             }
             Console.WriteLine($"  {sb}");
         }
+
         return 0;
     }
 

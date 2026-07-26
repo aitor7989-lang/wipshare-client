@@ -128,6 +128,8 @@ public sealed class Warren
             if (tiles[st.X, st.Y] is TileKind.Void or TileKind.Rock or TileKind.Water)
                 tiles[st.X, st.Y] = TileKind.Dirt;
 
+        CullIslands(tiles, path[0]);
+
         return new Floor(GridW, GridH, path, tiles, floorNumber, rooms);
     }
 
@@ -278,6 +280,41 @@ public sealed class Warren
                     if (keep.Contains((x, y))) continue;
                     tiles[x, y] = TileKind.Void;
                 }
+    }
+
+    /// <summary>
+    /// Return every scrap of material not connected to the entry to the void.
+    ///
+    /// Sealing a room in rock shaves a ring of ground away, and the shave can sever a lobe of an
+    /// earlier segment entirely — a patch of floor adrift in the deeps that fog would reveal and
+    /// nobody could ever stand on. Connectivity is 8-way THROUGH ANY MATERIAL, not just walkable
+    /// ground: a pond's far bank or the inside of a rock heap is attached to the floor even though
+    /// you cannot walk it, and culling those would eat the scenery. Only what floats free goes.
+    /// </summary>
+    private static void CullIslands(TileKind[,] tiles, PathStep entry)
+    {
+        var keep = new bool[GridW, GridH];
+        var q = new Queue<(int, int)>();
+        keep[entry.X, entry.Y] = true;
+        q.Enqueue((entry.X, entry.Y));
+
+        while (q.Count > 0)
+        {
+            var (cx, cy) = q.Dequeue();
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = cx + dx, ny = cy + dy;
+                    if (nx < 0 || ny < 0 || nx >= GridW || ny >= GridH) continue;
+                    if (keep[nx, ny] || tiles[nx, ny] == TileKind.Void) continue;
+                    keep[nx, ny] = true;
+                    q.Enqueue((nx, ny));
+                }
+        }
+
+        for (int y = 0; y < GridH; y++)
+            for (int x = 0; x < GridW; x++)
+                if (!keep[x, y]) tiles[x, y] = TileKind.Void;
     }
 
     private void TrySpur(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,

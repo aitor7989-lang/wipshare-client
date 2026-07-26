@@ -137,13 +137,59 @@ public sealed class Fog
     public bool Seen(int x, int y) =>
         x >= 0 && x < _floor.Width && y >= 0 && y < _floor.Height && _seen[x, y];
 
-    /// <summary>Light a pool around a point, by Chebyshev distance so it reads as a lamp rather than
-    /// as a game rule — a diamond of torchlight announces itself as geometry.</summary>
+    /// <summary>
+    /// Light a pool around a point — but the pool SPREADS ALONG THE GROUND rather than stamping a
+    /// square. A plain Chebyshev box revealed everything in range including a parallel corridor on
+    /// the far side of a chasm, which handed the player a map of ground their torch could never
+    /// actually reach. Torchlight walks: 8-way flood through walkable cells (8-way so the pool
+    /// stays a lamp-shaped Chebyshev disc where the ground is open), and each flooded cell also
+    /// reveals its immediate rim of rock, water and void — you see the wall you stand against,
+    /// not the room behind it.
+    /// </summary>
     public void Reveal(int cx, int cy, int radius)
     {
-        for (int y = Math.Max(0, cy - radius); y <= Math.Min(_floor.Height - 1, cy + radius); y++)
-            for (int x = Math.Max(0, cx - radius); x <= Math.Min(_floor.Width - 1, cx + radius); x++)
-                _seen[x, y] = true;
+        if (cx < 0 || cy < 0 || cx >= _floor.Width || cy >= _floor.Height) return;
+        _seen[cx, cy] = true;
+        if (!_floor.Walkable(cx, cy)) return;
+
+        var depth = new int[_floor.Width, _floor.Height];
+        var q = new Queue<(int X, int Y)>();
+        depth[cx, cy] = 1; // 1-based so 0 doubles as "not visited"
+        q.Enqueue((cx, cy));
+
+        while (q.Count > 0)
+        {
+            var (x, y) = q.Dequeue();
+            RevealRim(x, y);
+            if (depth[x, y] > radius) continue;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx < 0 || ny < 0 || nx >= _floor.Width || ny >= _floor.Height) continue;
+                    if (depth[nx, ny] != 0 || !_floor.Walkable(nx, ny)) continue;
+                    // No corner-cutting: a diagonal spread needs one of its two orthogonal
+                    // intermediates open. With that rule every fog step decomposes into legal
+                    // orthogonal moves, so the flood can only ever reveal ground the player can
+                    // actually walk to — the verifier proves the subset over 400 floors.
+                    if (dx != 0 && dy != 0 && !_floor.Walkable(x + dx, y) && !_floor.Walkable(x, y + dy))
+                        continue;
+                    depth[nx, ny] = depth[x, y] + 1;
+                    q.Enqueue((nx, ny));
+                }
+        }
+    }
+
+    /// <summary>A flooded cell and its bordering unwalkable cells become seen.</summary>
+    private void RevealRim(int x, int y)
+    {
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                int nx = x + dx, ny = y + dy;
+                if (nx < 0 || ny < 0 || nx >= _floor.Width || ny >= _floor.Height) continue;
+                if (dx == 0 && dy == 0 || !_floor.Walkable(nx, ny)) _seen[nx, ny] = true;
+            }
     }
 
     /// <summary>Walk the whole path with a torch — the reveal a player would have earned.</summary>

@@ -312,6 +312,62 @@ public static class WarrenSim
                 { Console.WriteLine($"  seed {s}: {room.Kind} at ({room.X},{room.Y}) UNREACHABLE"); fails++; }
             }
 
+            // No orphan islands: every scrap of material must be 8-way connected to the entry
+            // through other material. Room isolation shaves ground back to void, and a shave can
+            // set a lobe of floor adrift — ground the fog would reveal and no one could reach.
+            {
+                var keep = new bool[floor.Width, floor.Height];
+                var qi = new Queue<(int X, int Y)>();
+                var (ix, iy) = floor.Entry;
+                keep[ix, iy] = true; qi.Enqueue((ix, iy));
+                while (qi.Count > 0)
+                {
+                    var (cx3, cy3) = qi.Dequeue();
+                    for (int dy3 = -1; dy3 <= 1; dy3++)
+                        for (int dx3 = -1; dx3 <= 1; dx3++)
+                        {
+                            int nx3 = cx3 + dx3, ny3 = cy3 + dy3;
+                            if (nx3 < 0 || ny3 < 0 || nx3 >= floor.Width || ny3 >= floor.Height) continue;
+                            if (keep[nx3, ny3] || floor.Tiles[nx3, ny3] == TileKind.Void) continue;
+                            keep[nx3, ny3] = true; qi.Enqueue((nx3, ny3));
+                        }
+                }
+                int orphans = 0;
+                for (int y3 = 0; y3 < floor.Height; y3++)
+                    for (int x3 = 0; x3 < floor.Width; x3++)
+                        if (floor.Tiles[x3, y3] != TileKind.Void && !keep[x3, y3]) orphans++;
+                if (orphans > 0)
+                { Console.WriteLine($"  seed {s}: {orphans} orphan island cells adrift in the void"); fails++; }
+            }
+
+            // The fog's promise: a full walk with the torch reveals no walkable cell the player
+            // could not orthogonally reach. If this fires, Reveal is leaking across the void again.
+            {
+                var fog = new Fog(floor);
+                fog.WalkWithTorch(4);
+                var reach = new bool[floor.Width, floor.Height];
+                var qf = new Queue<(int X, int Y)>();
+                var (fx, fy) = floor.Entry;
+                reach[fx, fy] = true; qf.Enqueue((fx, fy));
+                while (qf.Count > 0)
+                {
+                    var (cx4, cy4) = qf.Dequeue();
+                    foreach (var (dx4, dy4) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                    {
+                        int nx4 = cx4 + dx4, ny4 = cy4 + dy4;
+                        if (nx4 < 0 || ny4 < 0 || nx4 >= floor.Width || ny4 >= floor.Height) continue;
+                        if (reach[nx4, ny4] || !floor.Walkable(nx4, ny4)) continue;
+                        reach[nx4, ny4] = true; qf.Enqueue((nx4, ny4));
+                    }
+                }
+                int leaks = 0;
+                for (int y4 = 0; y4 < floor.Height; y4++)
+                    for (int x4 = 0; x4 < floor.Width; x4++)
+                        if (floor.Walkable(x4, y4) && fog.Seen(x4, y4) && !reach[x4, y4]) leaks++;
+                if (leaks > 0)
+                { Console.WriteLine($"  seed {s}: fog revealed {leaks} walkable cells the player cannot reach"); fails++; }
+            }
+
             // Every step adjacent to the last, or "one orthogonal cell per step" is a comment rather
             // than a property — and the structural passability argument rests entirely on it.
             for (int i = 1; i < floor.Path.Count; i++)

@@ -81,6 +81,12 @@ public sealed class Warren
         /// gallery striped diagonally and every cistern's bank zigzagged, one pattern everywhere,
         /// dressed up as variety.</summary>
         public int Pattern;
+
+        /// <summary>Rubble vein state for Cairns: where the current vein sits across the band and
+        /// how many more steps it runs. Per-cell rolls put rubble down as salt-and-pepper singles;
+        /// a vein that wanders a few steps reads as a formation instead of static.</summary>
+        public int VeinT;
+        public int VeinLeft;
     }
 
     private static (int dx, int dy) Delta(Heading h) => h switch
@@ -128,10 +134,56 @@ public sealed class Warren
             if (tiles[st.X, st.Y] is TileKind.Void or TileKind.Rock or TileKind.Water)
                 tiles[st.X, st.Y] = TileKind.Dirt;
 
+        TrimNubs(tiles, path, rooms, spurCells);
         CullIslands(tiles, path[0]);
         EnforceWidthAndMeasure(tiles, path, rooms);
+        WearTrail(tiles, path);
 
         return new Floor(GridW, GridH, path, tiles, floorNumber, rooms);
+    }
+
+    /// <summary>
+    /// Shave the pimples: cells hanging off the mass by at most one orthogonal neighbour.
+    /// Bank jitter and band overlaps leave single-cell nubs and one-wide tails along region
+    /// edges, and they read as accidents rather than erosion. Two passes so a two-cell tail
+    /// goes too. Path, spur and room cells are never touched, and the pass runs BEFORE the
+    /// width floor, so anything it narrows is re-carved by the same authority that owns width.
+    /// </summary>
+    private static void TrimNubs(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,
+                                 HashSet<(int, int)> spurCells)
+    {
+        var keep = new HashSet<(int, int)>(spurCells);
+        foreach (var st in path) keep.Add((st.X, st.Y));
+
+        for (int pass = 0; pass < 2; pass++)
+        {
+            var cut = new List<(int, int)>();
+            for (int y = 1; y < GridH - 1; y++)
+                for (int x = 1; x < GridW - 1; x++)
+                {
+                    if (tiles[x, y] == TileKind.Void || keep.Contains((x, y))) continue;
+                    if (rooms.Any(r => r.Contains(x, y))) continue;
+                    int n = 0;
+                    if (tiles[x - 1, y] != TileKind.Void) n++;
+                    if (tiles[x + 1, y] != TileKind.Void) n++;
+                    if (tiles[x, y - 1] != TileKind.Void) n++;
+                    if (tiles[x, y + 1] != TileKind.Void) n++;
+                    if (n <= 1) cut.Add((x, y));
+                }
+            foreach (var (x, y) in cut) tiles[x, y] = TileKind.Void;
+            if (cut.Count == 0) break;
+        }
+    }
+
+    /// <summary>The trodden line: worn ground scattered along the walked centre, broken like a
+    /// real trail rather than painted solid. Replaces the halls' diagonal stripes — the wear
+    /// belongs to the route, and as a side effect it reads as a subtle guide through the floor.</summary>
+    private void WearTrail(TileKind[,] tiles, List<PathStep> path)
+    {
+        foreach (var st in path)
+            if (st.Room == RoomKind.None && tiles[st.X, st.Y] == TileKind.Dirt &&
+                _rng.Roll(0, 99) < 35)
+                tiles[st.X, st.Y] = TileKind.Path;
     }
 
     // ---- Macro: the plan --------------------------------------------------------------
@@ -479,6 +531,32 @@ public sealed class Warren
         for (int y = y0; y < y0 + size; y++)
             for (int x = x0; x < x0 + size; x++)
                 tiles[x, y] = TileKind.Dirt;
+
+        // CHAMFER: cut the corners back to void, one cell on small chambers, a three-cell
+        // triangle on the Warden's. A perfect square reads as a stamp; an octagon reads as a
+        // dug place. The RoomRect stays the full rectangle — seals, margins and the geometric
+        // Warden check all reason about the footprint, not the silhouette.
+        int ch = size >= 8 ? 2 : 1;
+        for (int i = 0; i < ch; i++)
+            for (int j = 0; j < ch - i; j++)
+            {
+                tiles[x0 + i, y0 + j] = TileKind.Void;
+                tiles[x0 + size - 1 - i, y0 + j] = TileKind.Void;
+                tiles[x0 + i, y0 + size - 1 - j] = TileKind.Void;
+                tiles[x0 + size - 1 - i, y0 + size - 1 - j] = TileKind.Void;
+            }
+
+        // DRESSING, by what the room is for. The Warden arena gets four pillar stubs clear of
+        // the centre lanes — cover to fight around, not an empty box. The path's final force-
+        // walk pass runs after all carving, so a pillar can never sever the way through.
+        if (kind == RoomKind.Warden && size >= 8)
+        {
+            tiles[x0 + 2, y0 + 2] = TileKind.Rock;
+            tiles[x0 + size - 3, y0 + 2] = TileKind.Rock;
+            tiles[x0 + 2, y0 + size - 3] = TileKind.Rock;
+            tiles[x0 + size - 3, y0 + size - 3] = TileKind.Rock;
+        }
+
         return new RoomRect(x0, y0, size, size, kind);
     }
 
@@ -490,11 +568,32 @@ public sealed class Warren
         int halfL = 1, halfR = 1;
         int seg = -1;
 
+        // Bank jitter: each side carries a lazy ±1 random walk on top of the eased half-width.
+        // Width targets are the DESIGN (a hall is wide, a throat is tight); the jitter is the
+        // EROSION — without it every segment carves a ruler-edged rectangle band.
+        int jL = 0, jR = 0;
+        // Staircase turns: when the heading changes, the first few steps alternate old and new
+        // heading, so a corner is a diagonal shoulder rather than a drafted right angle.
+        var oldDir = dir;
+        int blend = 0;
+        // How long the walk has held one heading, ACROSS segments. Straight is favoured per
+        // roll, so two straight segments could chain into a 25-cell ruler run — the cap is here.
+        int held = 0;
+        var lastStep = dir;
+
         foreach (var p in plan)
         {
             seg++;
             p.Pattern = _rng.Roll(0, 2);
-            if (seg > 0) dir = Turn(dir, cx, cy, p.Steps);
+            if (seg > 0)
+            {
+                var nd = Turn(dir, cx, cy, p.Steps, held);
+                // No stair into a special room: it is carved whole along the heading, and the
+                // path must cross it straight or the exit lands outside the chamber.
+                blend = nd != dir && p.Room == RoomKind.None ? _rng.Roll(3, 6) : 0;
+                oldDir = dir;
+                dir = nd;
+            }
 
             // A special room is carved whole, centred far enough along the heading that the path
             // enters one side and crosses to the far interior column. Steps = size, NOT size + 2:
@@ -530,26 +629,48 @@ public sealed class Warren
                 halfL = Ease(halfL, targetL);
                 halfR = Ease(halfR, targetR);
 
-                // Steer off the rim rather than clipping into it, or a floor runs off the grid and
-                // gets silently truncated against the boundary.
-                if (!Room(cx, cy, dir, 3))
+                // The stair: odd steps of the blend run on the OLD heading. Still one orthogonal
+                // cell per step, so connectivity-by-construction holds through the shoulder.
+                var stepDir = dir;
+                if (blend > 0)
                 {
-                    var alt = _rng.Roll(0, 1) == 0 ? Left(dir) : Right(dir);
-                    dir = Room(cx, cy, alt, 3) ? alt
-                        : Room(cx, cy, Left(Left(alt)), 3) ? Left(Left(alt)) : alt;
+                    if ((i & 1) == 1) stepDir = oldDir;
+                    blend--;
                 }
 
-                CarveAcross(tiles, cx, cy, dir, halfL, halfR, p, i, out int walk);
+                // Steer off the rim rather than clipping into it, or a floor runs off the grid and
+                // gets silently truncated against the boundary.
+                if (!Room(cx, cy, stepDir, 3))
+                {
+                    var alt = _rng.Roll(0, 1) == 0 ? Left(stepDir) : Right(stepDir);
+                    stepDir = Room(cx, cy, alt, 3) ? alt
+                        : Room(cx, cy, Left(Left(alt)), 3) ? Left(Left(alt)) : alt;
+                    dir = stepDir;
+                    blend = 0;
+                }
+
+                // Ragged banks: lazy ±1 random walk per side. Not in a Throat (its exact width IS
+                // the archetype) and not in a chamber (a room's wall is a wall, not a coastline).
+                bool exact = p.Kind == SegmentKind.Throat || p.Room != RoomKind.None;
+                if (!exact && _rng.Roll(0, 99) < 30) jL = Math.Clamp(jL + _rng.Roll(-1, 1), -1, 1);
+                if (!exact && _rng.Roll(0, 99) < 30) jR = Math.Clamp(jR + _rng.Roll(-1, 1), -1, 1);
+                int effL = exact ? halfL : Math.Max(0, halfL + jL);
+                int effR = exact ? halfR : Math.Max(0, halfR + jR);
+
+                CarveAcross(tiles, cx, cy, stepDir, effL, effR, p, i, out int walk);
 
                 path.Add(new PathStep
                 {
-                    X = cx, Y = cy, Dir = dir, Kind = p.Kind, Room = p.Room,
+                    X = cx, Y = cy, Dir = stepDir, Kind = p.Kind, Room = p.Room,
                     Segment = seg, Constriction = Constrict(walk),
                 });
 
+                held = stepDir == lastStep ? held + 1 : 1;
+                lastStep = stepDir;
+
                 // Advance one orthogonal cell — this is what makes the centre line connected by
                 // construction, turns included.
-                var (dx, dy) = Delta(dir);
+                var (dx, dy) = Delta(stepDir);
                 cx = Math.Clamp(cx + dx, 1, GridW - 2);
                 cy = Math.Clamp(cy + dy, 1, GridH - 2);
             }
@@ -567,11 +688,13 @@ public sealed class Warren
 
     /// <summary>Pick the next heading. Straight is favoured so the warren has runs rather than a
     /// constant zigzag; reversal is never offered, because doubling back over ground just walked
-    /// makes a floor read as a scribble.</summary>
-    private Heading Turn(Heading dir, int cx, int cy, int steps)
+    /// makes a floor read as a scribble. A heading HELD too long stops being offered at all —
+    /// straight-favouring rolls chained across segments into 25-cell ruler runs otherwise.</summary>
+    private Heading Turn(Heading dir, int cx, int cy, int steps, int held)
     {
         int roll = _rng.Roll(0, 99);
-        var next = roll < 46 ? dir : roll < 73 ? Left(dir) : Right(dir);
+        var next = held > 12 ? (_rng.Roll(0, 1) == 0 ? Left(dir) : Right(dir))
+                 : roll < 46 ? dir : roll < 73 ? Left(dir) : Right(dir);
         int reach = Math.Min(steps, 8);
         if (!Room(cx, cy, next, reach))
         {
@@ -689,14 +812,25 @@ public sealed class Warren
             case SegmentKind.Cairn:
                 switch (p.Pattern)
                 {
-                    case 0: // scattered rubble and bone
-                        for (int t = lo; t <= hi; t++)
+                    case 0: // a rubble VEIN that wanders, plus sparse bone. Per-cell rolls put
+                            // rubble down as confetti — one cell here, one there, no mass. A vein
+                            // holds a position across steps and drifts, so the rubble reads as a
+                            // collapsed seam running through the chamber.
+                        if (p.VeinLeft > 0)
                         {
-                            if (t == 0) continue;
-                            int roll = _rng.Roll(0, 100);
-                            if (roll < 13) Put(t, TileKind.Rock);
-                            else if (roll < 20) Put(t, TileKind.Spikes);
+                            p.VeinT = Math.Clamp(p.VeinT + _rng.Roll(-1, 1), lo + 1, hi - 1);
+                            if (p.VeinT != 0) Put(p.VeinT, TileKind.Rock);
+                            if (_rng.Roll(0, 99) < 40 && p.VeinT + 1 != 0 && p.VeinT + 1 < hi)
+                                Put(p.VeinT + 1, TileKind.Rock);
+                            p.VeinLeft--;
                         }
+                        else if (_rng.Roll(0, 99) < 30 && hi - lo >= 2)
+                        {
+                            p.VeinT = _rng.Roll(lo + 1, hi - 1);
+                            p.VeinLeft = _rng.Roll(2, 5);
+                        }
+                        for (int t = lo; t <= hi; t++)
+                            if (t != 0 && _rng.Roll(0, 100) < 6) Put(t, TileKind.Spikes);
                         break;
                     case 1: // a collapsed heap against one wall, thinning toward the middle
                         for (int t = lo; t <= hi; t++)
@@ -752,8 +886,8 @@ public sealed class Warren
                 break;
 
             case SegmentKind.Hall:
-                for (int t = lo; t <= hi; t++)
-                    if (t != 0 && (t - lo + step) % 5 == 0) Put(t, TileKind.Path);
+                // (The old worn-tile stripes are gone: keyed on step they striped every hall
+                // diagonally. Worn ground now traces the walked centre line — see WearTrail.)
 
                 // CHASM, strictly inside with floor on both sides. Placed at the edge it is not a
                 // chasm at all — indistinguishable from the wall being one cell nearer, with nothing

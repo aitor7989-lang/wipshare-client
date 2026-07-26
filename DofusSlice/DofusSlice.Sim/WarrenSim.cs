@@ -128,11 +128,15 @@ public static class WarrenSim
                     prevSegThroat = st.Kind == SegmentKind.Throat;
                     lastSeg = st.Segment;
                 }
-                if (i == 0 || st.Room != floor.Path[i - 1].Room)
-                    rooms[st.Room] = rooms.GetValueOrDefault(st.Room) + 1;
+
             }
 
+            // Counted from the ROOM LIST, not from path steps. Shrines and vaults hang off spurs
+            // now, so no path step is ever tagged with them — reading the path reported zero rooms
+            // for a feature that was working, which is the third time this harness has managed to
+            // be blind to the thing it was measuring.
             roomSizes.AddRange(floor.Rooms);
+            foreach (var r in floor.Rooms) rooms[r.Kind] = rooms.GetValueOrDefault(r.Kind) + 1;
             for (int y = 0; y < floor.Height; y++)
                 for (int x = 0; x < floor.Width; x++)
                     if (floor.Tiles[x, y] != TileKind.Void)

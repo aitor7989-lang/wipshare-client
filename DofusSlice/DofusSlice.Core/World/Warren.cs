@@ -107,6 +107,7 @@ public sealed class Warren
 
         var rooms = new List<RoomRect>();
         var path = Walk(tiles, plan, rooms);
+        AddSpurRooms(tiles, path, rooms);
 
         // FINAL PASS: force the whole centre line walkable, after every segment has been carved.
         //
@@ -144,7 +145,6 @@ public sealed class Warren
 
         plan.Add(new Plan { Kind = SegmentKind.Hall, Steps = WardenSteps, Room = RoomKind.Warden });
         CapTightGround(plan, floorNumber);
-        PlaceRooms(plan);
         return plan;
     }
 
@@ -174,33 +174,6 @@ public sealed class Warren
             tight -= plan[idx].Steps;
             plan[idx].Kind = SegmentKind.Corridor;
         }
-    }
-
-    private void PlaceRooms(List<Plan> plan)
-    {
-        var eligible = new List<int>();
-        for (int i = 2; i < plan.Count - 2; i++)
-            if (plan[i].Room == RoomKind.None &&
-                plan[i].Kind is SegmentKind.Cairn or SegmentKind.Hall or SegmentKind.Gallery)
-                eligible.Add(i);
-
-        for (int i = eligible.Count - 1; i > 0; i--)
-        {
-            int j = _rng.Roll(0, i);
-            (eligible[i], eligible[j]) = (eligible[j], eligible[i]);
-        }
-
-        // Spacing: two special rooms never abut, because back-to-back rewards read as one lucky room
-        // rather than two decisions.
-        var taken = new List<int>();
-        foreach (var idx in eligible)
-        {
-            if (taken.Count >= 3) break;
-            if (taken.Any(t => Math.Abs(t - idx) < 3)) continue;
-            taken.Add(idx);
-        }
-        for (int i = 0; i < taken.Count; i++)
-            plan[taken[i]].Room = i == 0 ? RoomKind.Vault : RoomKind.Shrine;
     }
 
     private int SegmentSteps(SegmentKind k) => k switch
@@ -250,6 +223,75 @@ public sealed class Warren
     }
 
     // ---- Micro: the walk -------------------------------------------------------------
+
+    /// <summary>
+    /// Shrines and vaults hang off the main path on a dead-end SPUR, and are RARE.
+    ///
+    /// They used to be promoted segments, which meant the main walk was carved straight through
+    /// them: every floor had one vault and two shrines, and you could not miss them because they
+    /// were the corridor. A reward you cannot avoid is not a reward, it is a checkpoint. As a spur
+    /// they cost a detour, which makes taking one a decision — and on a clock, a real one.
+    ///
+    /// The footprint plus a one-cell margin must be untouched rock before it is carved, so the
+    /// chamber touches nothing except its own corridor. That is what makes it feel sealed rather
+    /// than like a bulge in the warren.
+    /// </summary>
+    private void AddSpurRooms(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms)
+    {
+        // Rare, but not so rare the median run never sees one: the Shrine is the only source of
+        // abilities in the design, and an identity-defining room that shows up on 6% of floors is
+        // the Diablo 3 launch failure rather than scarcity.
+        TrySpur(tiles, path, rooms, RoomKind.Shrine, 55);
+        TrySpur(tiles, path, rooms, RoomKind.Vault, 34);
+    }
+
+    private void TrySpur(TileKind[,] tiles, List<PathStep> path, List<RoomRect> rooms,
+                         RoomKind kind, int percent)
+    {
+        if (_rng.Roll(0, 99) >= percent) return;
+        int size = RoomSize(kind, _rng);
+
+        // The sealed-margin test is strict by design, so a lazy search finds a home about one time
+        // in five and the room becomes accidentally near-impossible rather than deliberately rare.
+        // Search properly instead — both sides of the path, several spur lengths — and let the ROLL
+        // above set the frequency, which is the only place it should be set.
+        for (int attempt = 0; attempt < 30; attempt++)
+        {
+            var st = path[_rng.Roll(path.Count / 6, path.Count * 5 / 6)];
+            foreach (var side in new[] { Left(st.Dir), Right(st.Dir) })
+            {
+                var (dx, dy) = Delta(side);
+                for (int len = 3; len <= 7; len++)
+                {
+                    int rcx = st.X + dx * (len + size / 2), rcy = st.Y + dy * (len + size / 2);
+                    if (!AreaVoid(tiles, rcx - size / 2 - 1, rcy - size / 2 - 1, size + 2, size + 2))
+                        continue;
+
+                    bool clear = true;
+                    for (int k = 1; k <= len && clear; k++)
+                    {
+                        int cx = st.X + dx * k, cy = st.Y + dy * k;
+                        if (cx < 1 || cy < 1 || cx >= GridW - 1 || cy >= GridH - 1 ||
+                            tiles[cx, cy] != TileKind.Void) clear = false;
+                    }
+                    if (!clear) continue;
+
+                    for (int k = 1; k <= len; k++) tiles[st.X + dx * k, st.Y + dy * k] = TileKind.Dirt;
+                    rooms.Add(CarveRoom(tiles, rcx, rcy, size, kind));
+                    return;
+                }
+            }
+        }
+    }
+
+    private static bool AreaVoid(TileKind[,] tiles, int x0, int y0, int w, int h)
+    {
+        if (x0 < 1 || y0 < 1 || x0 + w >= GridW - 1 || y0 + h >= GridH - 1) return false;
+        for (int y = y0; y < y0 + h; y++)
+            for (int x = x0; x < x0 + w; x++)
+                if (tiles[x, y] != TileKind.Void) return false;
+        return true;
+    }
 
     /// <summary>Special rooms are SQUARE CHAMBERS — 4x4, 6x6 or 8x8 — carved as a block, not a
     /// widened stretch of corridor. A room the corridor merely swells into is not a room; it reads

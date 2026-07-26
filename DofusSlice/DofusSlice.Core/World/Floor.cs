@@ -63,9 +63,12 @@ public sealed class Floor
         Constriction = new int[length];
     }
 
+    /// <summary>Water is NOT walkable — you see and shoot across it, you do not wade it. It was
+    /// missing from this test, which would have counted a flooded cistern as open floor and let the
+    /// passability proof pass through water.</summary>
     public bool Walkable(int x, int y) =>
         x >= 0 && x < Width && y >= 0 && y < Length &&
-        Tiles[x, y] is not (TileKind.Void or TileKind.Rock);
+        Tiles[x, y] is not (TileKind.Void or TileKind.Rock or TileKind.Water);
 
     /// <summary>First walkable column on a row, or -1.</summary>
     public int FirstWalkable(int y)

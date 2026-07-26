@@ -19,6 +19,9 @@ public enum SegmentKind
     Fork,
     /// <summary>A rubble-choked chamber. Open floor broken by scattered blockers.</summary>
     Cairn,
+    /// <summary>Flooded. Wide, but half of it is standing water you can see and shoot across and
+    /// cannot walk — a shooting gallery where the geometry favours whoever has range.</summary>
+    Cistern,
 }
 
 /// <summary>
@@ -52,6 +55,23 @@ public sealed class Warren
     /// Uncapped, two sides that both jitter wide make the carve wider than the corridor and the
     /// centreline's own clamp inverts.</summary>
     private const int MaxHalf = (Width - 3) / 2;
+
+    /// <summary>No row is ever narrower than this. Single-file ground made the descent feel like a
+    /// pipe, and it is where every passability failure came from — two cells still cannot be walked
+    /// abreast comfortably, so a Throat is still a chokepoint, just not a straw.</summary>
+    private const int MinWidth = 2;
+
+    /// <summary>Ceiling on the share of rows that may be tight (constriction 60+, i.e. two cells
+    /// wide), as a BUDGET against the finished plan rather than something left to emerge from the
+    /// weights — weights drift with every other tuning change, and this is the number the whole
+    /// Brace/Push/Charge tension is priced against, so it should not move by accident.
+    ///
+    /// It RAMPS with depth. A flat cap silently cancelled the per-floor difficulty ramp: the
+    /// weights dutifully produced more chokepoints deeper down and the budget deleted exactly the
+    /// surplus, leaving floor 10 (17.3% tight) indistinguishable from floor 1 (16.8%). A cap and a
+    /// curve are not in conflict as long as the cap is the curve.</summary>
+    private static float TightBudget(int floorNumber) =>
+        0.11f + 0.09f * Math.Clamp((floorNumber - 1) / 7f, 0f, 1f);
 
     private readonly IRng _rng;
 
@@ -102,8 +122,40 @@ public sealed class Warren
         // the generator produces a floor instead of a stream.
         plan.Add(new Plan { Kind = SegmentKind.Hall, Rows = WardenRows, Room = RoomKind.Warden });
 
+        CapTightGround(plan, floorNumber);
         PlaceRooms(plan);
         return plan;
+    }
+
+    /// <summary>Demote Throat segments until they are inside <see cref="TightBudget"/>. Demoting
+    /// (rather than shortening) keeps every Throat that survives at full length: a budget spent on
+    /// many stubby chokepoints buys tension nowhere, and one spent on a few real ones buys it
+    /// somewhere.</summary>
+    private void CapTightGround(List<Plan> plan, int floorNumber)
+    {
+        int total = plan.Sum(p => p.Rows);
+        int allowed = (int)(total * TightBudget(floorNumber));
+
+        var throats = new List<int>();
+        for (int i = 0; i < plan.Count; i++)
+            if (plan[i].Kind == SegmentKind.Throat) throats.Add(i);
+
+        int tight = throats.Sum(i => plan[i].Rows);
+        if (tight <= allowed) return;
+
+        // Shuffle so the survivors are spread down the floor instead of all being the early ones.
+        for (int i = throats.Count - 1; i > 0; i--)
+        {
+            int j = _rng.Roll(0, i);
+            (throats[i], throats[j]) = (throats[j], throats[i]);
+        }
+
+        foreach (var idx in throats)
+        {
+            if (tight <= allowed) break;
+            tight -= plan[idx].Rows;
+            plan[idx].Kind = SegmentKind.Corridor;
+        }
     }
 
     /// <summary>Promote wide interior segments to special rooms, spaced apart. Wide on purpose: a
@@ -146,18 +198,20 @@ public sealed class Warren
         SegmentKind.Gallery => _rng.Roll(8, 14),
         SegmentKind.Hall => _rng.Roll(6, 10),
         SegmentKind.Fork => _rng.Roll(5, 9),
+        SegmentKind.Cistern => _rng.Roll(7, 11),
         _ => _rng.Roll(5, 8),
     };
 
     private SegmentKind PickKind(SegmentKind prev, int sinceThroat, float d)
     {
-        Span<int> w = stackalloc int[6];
+        Span<int> w = stackalloc int[7];
         w[(int)SegmentKind.Throat] = 10 + (int)(30 * d);
         w[(int)SegmentKind.Corridor] = 30;
         w[(int)SegmentKind.Gallery] = 20 + (int)(10 * d);
         w[(int)SegmentKind.Hall] = 25 - (int)(15 * d);
         w[(int)SegmentKind.Fork] = 12;
         w[(int)SegmentKind.Cairn] = 15;
+        w[(int)SegmentKind.Cistern] = 10 + (int)(8 * d);
 
         // Never the same archetype twice running — repetition is what makes a generated run feel
         // generated. The exception is Throat: back-to-back chokepoints are exactly the chained
@@ -198,7 +252,11 @@ public sealed class Warren
             int targetL, targetR;
             if (seg.Kind == SegmentKind.Throat && seg.Room == RoomKind.None)
             {
-                targetL = targetR = 0;
+                // Two cells, not one: asymmetric halves so the pair is 0+1 rather than 0+0. Which
+                // side is the wide one is rolled per segment, so throats do not all hug one wall.
+                bool leftWide = _rng.Roll(0, 1) == 0;
+                targetL = leftWide ? 1 : 0;
+                targetR = leftWide ? 0 : 1;
             }
             else
             {
@@ -215,6 +273,16 @@ public sealed class Warren
 
                 int lo = Math.Max(0, centre - halfL);
                 int hi = Math.Min(Width - 1, centre + halfR);
+
+                // The width floor. Single-file ground read as a pipe rather than a dungeon, and it
+                // was the source of every passability failure — a one-cell row cannot tolerate the
+                // centreline drifting at all.
+                while (hi - lo + 1 < MinWidth)
+                {
+                    if (lo > 0 && (hi >= Width - 1 || _rng.Roll(0, 1) == 0)) lo--;
+                    else if (hi < Width - 1) hi++;
+                    else break;
+                }
 
                 // PASSABILITY, guaranteed here rather than checked afterwards. If this row's band
                 // does not overlap the row above, stretch it until it does. Without this, a width-1
@@ -290,6 +358,7 @@ public sealed class Warren
             SegmentKind.Gallery => 3,
             SegmentKind.Hall => 5,
             SegmentKind.Fork => 2,
+            SegmentKind.Cistern => 5,
             _ => 4,
         },
     };
@@ -320,6 +389,15 @@ public sealed class Warren
         // encounter.
         if (seg.Room != RoomKind.None) return;
 
+        // ALCOVES — a shallow dead-end pocket off one wall, in narrow ground only. Somewhere to be
+        // that is not "forward", which is the one thing a corridor otherwise never offers: a cell
+        // out of a firing line, or a place a pursuer has to commit to entering.
+        if (seg.Kind is SegmentKind.Corridor or SegmentKind.Throat && _rng.Roll(0, 100) < 9)
+        {
+            if (lo > 1 && _rng.Roll(0, 1) == 0) floor.Tiles[lo - 1, y] = TileKind.Dirt;
+            else if (hi < Width - 2) floor.Tiles[hi + 1, y] = TileKind.Dirt;
+        }
+
         switch (seg.Kind)
         {
             case SegmentKind.Gallery:
@@ -331,7 +409,23 @@ public sealed class Warren
 
             case SegmentKind.Cairn:
                 for (int x = lo; x <= hi; x++)
-                    if (_rng.Roll(0, 100) < 18) floor.Tiles[x, y] = TileKind.Rock;
+                {
+                    int roll = _rng.Roll(0, 100);
+                    // Bone spikes are WALKABLE damage, so unlike rubble they do not shrink the room
+                    // — they price a route instead of closing it, which is a different decision.
+                    if (roll < 14) floor.Tiles[x, y] = TileKind.Rock;
+                    else if (roll < 21) floor.Tiles[x, y] = TileKind.Spikes;
+                }
+                break;
+
+            case SegmentKind.Cistern:
+                // Standing water down one side: see across it, shoot across it, never walk it. The
+                // wide room stops being wide for the purposes of closing distance, which is what
+                // makes it a gallery rather than just another Hall.
+                bool leftBank = (y / 3) % 2 == 0;
+                int edge = leftBank ? lo + (hi - lo) / 2 : hi - (hi - lo) / 2;
+                for (int x = lo; x <= hi; x++)
+                    if (leftBank ? x <= edge : x >= edge) floor.Tiles[x, y] = TileKind.Water;
                 break;
 
             case SegmentKind.Hall:
@@ -339,6 +433,21 @@ public sealed class Warren
                 // distance against, which matters when the game is judging whether a ring reaches.
                 for (int x = lo; x <= hi; x++)
                     if ((x + y) % 5 == 0) floor.Tiles[x, y] = TileKind.Path;
+
+                // CHASM. A hall wide enough to be safe is a hall with no opinion, and this
+                // project already has void-death and a mob that shoves — so a hole here makes
+                // pushback lethal in halls and nowhere else.
+                //
+                // It must sit STRICTLY INSIDE the band with floor on both sides. Voiding an edge
+                // cell, which is what this did first, is not a chasm at all: it is indistinguishable
+                // from the wall being one cell nearer, and there is nothing to be shoved across. It
+                // fired on 22% of wide hall rows and produced exactly zero holes.
+                if (hi - lo >= 6 && _rng.Roll(0, 100) < 26)
+                {
+                    int gx = _rng.Roll(lo + 2, hi - 2);
+                    floor.Tiles[gx, y] = TileKind.Void;
+                    if (hi - lo >= 8 && gx + 1 <= hi - 2) floor.Tiles[gx + 1, y] = TileKind.Void;
+                }
                 break;
         }
     }

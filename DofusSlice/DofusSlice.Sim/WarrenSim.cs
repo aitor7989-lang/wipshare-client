@@ -14,6 +14,8 @@ public static class WarrenSim
         TileKind.Void => ' ',
         TileKind.Rock => '#',
         TileKind.Path => ':',
+        TileKind.Water => '~',
+        TileKind.Spikes => '"',
         _ => '.',
     };
 
@@ -24,6 +26,7 @@ public static class WarrenSim
         SegmentKind.Gallery => 'G',
         SegmentKind.Hall => 'H',
         SegmentKind.Fork => 'Y',
+        SegmentKind.Cistern => '~',
         _ => 'o',
     };
 
@@ -46,7 +49,7 @@ public static class WarrenSim
 
         Console.WriteLine($"FLOOR  seed={seed}  {floor.Width}x{floor.Length}" +
                           (sight > 0 ? $"  fog: sight {sight}" : ""));
-        Console.WriteLine("  '.' floor  ':' worn  '#' rock  ' ' unseen or the deeps\n");
+        Console.WriteLine("  '.' floor  ':' worn  '#' rock  '~' water  '\"' spikes  ' ' unseen / the deeps\n");
 
         var lastRoom = (RoomKind)(-1);
         var lastKind = (SegmentKind)(-1);
@@ -77,7 +80,12 @@ public static class WarrenSim
         var kinds = new Dictionary<SegmentKind, int>();
         var rooms = new Dictionary<RoomKind, int>();
         var buckets = new int[5];
+        var tiles = new Dictionary<TileKind, int>();
         int totalRows = 0, throatRuns = 0, shallowRows = 0, shallowTight = 0, deepRows = 0, deepTight = 0;
+        // Chasm = void INSIDE the carved band, i.e. a hole you could be shoved into, as opposed to
+        // the void beyond the walls. Counted rather than eyeballed, because a feature that fires
+        // rarely is indistinguishable from one that never fires when you are reading dumps.
+        int chasmRows = 0;
 
         for (int s = 0; s < floors; s++)
         {
@@ -103,6 +111,16 @@ public static class WarrenSim
                     prevSegThroat = floor.RowKind[y] == SegmentKind.Throat;
                     lastSeg = floor.RowSegment[y];
                 }
+                int firstX = floor.FirstWalkable(y), lastX = -1;
+                for (int x = floor.Width - 1; x >= 0; x--) if (floor.Walkable(x, y)) { lastX = x; break; }
+                bool chasm = false;
+                for (int x = 0; x < floor.Width; x++)
+                {
+                    tiles[floor.Tiles[x, y]] = tiles.GetValueOrDefault(floor.Tiles[x, y]) + 1;
+                    if (floor.Tiles[x, y] == TileKind.Void && x > firstX && x < lastX) chasm = true;
+                }
+                if (chasm) chasmRows++;
+
                 if (y == 0 || floor.RowRoom[y] != floor.RowRoom[y - 1])
                     rooms[floor.RowRoom[y]] = rooms.GetValueOrDefault(floor.RowRoom[y]) + 1;
             }
@@ -114,6 +132,13 @@ public static class WarrenSim
         Console.WriteLine($"  special rooms/floor   Vault {rooms.GetValueOrDefault(RoomKind.Vault) / (float)floors:F2}" +
                           $"   Shrine {rooms.GetValueOrDefault(RoomKind.Shrine) / (float)floors:F2}" +
                           $"   Warden {rooms.GetValueOrDefault(RoomKind.Warden) / (float)floors:F2}\n");
+
+        int floorCells = tiles.Values.Sum();
+        Console.WriteLine("  TILE COMPOSITION");
+        foreach (var (t, n) in tiles.OrderByDescending(kv => kv.Value))
+            Console.WriteLine($"    {t,-8} {n,7}  {n * 100f / floorCells,5:F2}%");
+        Console.WriteLine($"    chasm rows (void inside the band): {chasmRows}  " +
+                          $"({chasmRows * 100f / totalRows:F1}% of rows)\n");
 
         Console.WriteLine("  ROW SHARE BY ARCHETYPE");
         foreach (var (k, n) in kinds.OrderByDescending(kv => kv.Value))

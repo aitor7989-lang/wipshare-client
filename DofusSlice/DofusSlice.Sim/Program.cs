@@ -3,6 +3,12 @@ using DofusSlice.Core.Content;
 using DofusSlice.Core.Content.Tithe;
 using DofusSlice.Sim;
 
+if (args.Length > 0 && args[0] == "assets")
+{
+    Console.WriteLine("Asset format self-test:\n");
+    return AssetsTest.Run();
+}
+
 if (args.Length > 0 && args[0] == "effects")
 {
     Console.WriteLine("Combat effects self-test:\n");

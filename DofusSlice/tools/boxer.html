@@ -1943,7 +1943,8 @@
   } catch (e) {}
   if (!demoLoaded && chars.size) {
     const names = [...chars.keys()];
-    demo.units = names.slice(0, 3).map((name, i) => ({ name, rot: i % 4, x: 3 + i * 2, y: 4 + i * 2, phase: i }));
+    // spread across BOTH iso axes — equal x-y for all three reads as a single stacked column
+    demo.units = names.slice(0, 3).map((name, i) => ({ name, rot: i % 4, x: 3 + i * 3, y: 4 + i, phase: i }));
     demo.worn = ["5,5", "6,5", "6,6", "7,6", "7,7", "4,5"];
     demo.rocks = ["9,3", "9,4", "2,8"];
     demo.water = ["2,2", "3,2", "3,3"];

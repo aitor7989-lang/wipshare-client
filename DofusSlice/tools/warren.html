@@ -946,8 +946,12 @@
         const enc = (now, next, flag) =>
           `rgb(${Math.round(Math.max(0, Math.min(1, now)) * 255)},` +
           `${Math.round(Math.max(0, Math.min(1, next)) * 255)},${flag})`;
-        const lit = lampOn && lightMap[y] && lightMap[y][x];
-        const gbuf = kind => lit ? `rgb(${x},${y},${kind})` : "rgb(0,0,0)";
+        // Every visible cell goes into the G-buffer, SHADOWED OR NOT — the composite
+        // samples the shadow mask itself (bilinearly, in world space), so occlusion
+        // edges pass through the same band + dither pipeline as the falloff rings.
+        // Writing shadowed cells as flag 0 here was why cast shadows had hard,
+        // cell-aligned edges while every other light transition mosaicked.
+        const gbuf = kind => `rgb(${x},${y},${kind})`;
         // THE CHECKER marks playable ground and nothing else: walkable tops only. Z faces
         // stay flat (face shading already separates them), and rock crowns stay flat —
         // the pattern means "you can act here", so it must not appear where you cannot.
@@ -1071,6 +1075,18 @@
           // depth and stays there — a torch lights the room, not the abyss under its feet.
           // Applied BEFORE banding so the rings respect it.
           if (wz < lampWZ) v *= Math.max(DOWNF, 1 - (1 - DOWNF) * (lampWZ - wz));
+          // CAST SHADOWS join the dither. The LOS mask is per-cell and binary; sampled
+          // bilinearly at this pixel's WORLD position it becomes a fractional light
+          // value across the occlusion edge — and a fraction is exactly what the bands
+          // quantize and the Bayer seam mosaics. Shadow edges now dither like falloff
+          // rings instead of snapping to hard cell-aligned boundaries.
+          if (lightMap) {
+            const sx0 = Math.floor(wx), sy0 = Math.floor(wy);
+            const fx = wx - sx0, fy = wy - sy0;
+            const sm = (X, Y) => lightMap[Y] && lightMap[Y][X] ? 1 : 0;
+            v *= sm(sx0, sy0) * (1 - fx) * (1 - fy) + sm(sx0 + 1, sy0) * fx * (1 - fy) +
+                 sm(sx0, sy0 + 1) * (1 - fx) * fy + sm(sx0 + 1, sy0 + 1) * fx * fy;
+          }
           if (BANDS > 0) {
             const q = v * BANDS, b = Math.floor(q), frac = q - b;
             // The SEAM: remap the fractional remainder so only the middle SEAM-fraction of

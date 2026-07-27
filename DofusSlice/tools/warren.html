@@ -133,8 +133,8 @@
       <button class="btn seed" data-seed="5" aria-pressed="false">5</button>
     </div>
     <div class="grp"><span>view</span>
-      <button class="btn view" data-view="flat" aria-pressed="true">top-down</button>
-      <button class="btn view" data-view="iso" aria-pressed="false">isometric</button>
+      <button class="btn view" data-view="flat" aria-pressed="false">top-down</button>
+      <button class="btn view" data-view="iso" aria-pressed="true">isometric</button>
     </div>
     <div class="grp"><span>light</span>
       <button class="btn lit" data-lit="off" aria-pressed="false">off</button>
@@ -184,8 +184,8 @@
       <input type="range" data-k="DOWNF" min="0" max="100" step="5" value="30"></div>
     <div class="knob"><span>falloff power · %</span><b data-v="FPOW">200</b>
       <input type="range" data-k="FPOW" min="100" max="300" step="25" value="200"></div>
-    <div class="knob"><span>dither seam · %</span><b data-v="SEAM">60</b>
-      <input type="range" data-k="SEAM" min="0" max="100" step="10" value="60"></div>
+    <div class="knob"><span>dither seam · %</span><b data-v="SEAM">30</b>
+      <input type="range" data-k="SEAM" min="0" max="100" step="10" value="30"></div>
     <div class="knob"><span>bayer matrix</span><b data-v="MATN">2</b>
       <input type="range" data-k="MATN" min="2" max="4" step="2" value="2"></div>
     <div class="knob"><span>light colour</span><b></b>
@@ -320,7 +320,7 @@
 <script>
   const DATA = {"12":{"ter":["            ............                       ","            .........#..                       ","          ..............                       ","          :..:::...:.:..:..                    ","   ..    ...............:...      ...          ","  ....   ......       ...:...  ......          ","  ........:..           ..:\".........          ","   ..    .:.      .......\"...........          ","         ...    ..:....:::.. .........         ","        ~.:.   .::....::...:..:.::..:. ........","        ~~.........\"....\"...........:. ........","       .~~......##..\"................. ..#..#..","      ..~.......#\"....\"..............: ........","   ~~~.~::..~..:...::.:........................","   ~~:::...:::....:......................#..#..","   ~:....~~:..#.......    ...........: ........","   .:~~:...~..:.:.....    ............ ........","   :.~~..............     ..........::         ","  ...#.........::....              ::.         ","  #:................   .~~~~      ...          ","  .....#:.:.:...      .~~~~~..  .....          ","  ...#... ......      .~~~~~~. ::...           ","  #.............      .~~~~~~.::..             ","  ............        :.::::.....              ","  .::.........        ..........               ","   ..:.:.::..         ........                 ","   .~....~.           ........                 ","   .~~~~.~.                                    ","    ~~~~...                                    ","        .                                      ","        .                                      ","      ....                                     ","     ......                                    ","     ......                                    ","     ......                                    ","     ......                                    ","      ....                                     "],"mk":["                                               ","                                               ","                                               ","          +++++++++++++++                      ","   SS     +             ++                     ","  SSSS    +              ++                    ","  SSSS    +               ++                   ","   SS     +               ++                   ","          +      ++++++++++                    ","          +     ++   ++++++++++++++++  WWWWWWWW","          +    ++   ++              ++ WWWWWWWW","          +    +   ++                + WWWWWWWW","         ++    +   +                 + WWWWWWWW","        ++++  ++ +++++++++++++++++++++tWWWWWWWW","     ++++++++++ ++++                 + WWWWWWWW","    +t +   ++   +++                  + WWWWWWWW","   t+  +    ++++++                   + WWWWWWWW","   t   +    +   +                   ++         ","   +   +    +  ++                  ++          ","   +   ++   + ++                  ++           ","   +    +++++++                 +++            ","   +        +                  ++              ","   +        +                 ++               ","   +        +         A++++++++                ","   ++      ++                                  ","    ++++++++                                   ","                                               ","                                               ","                                               ","                                               ","                                               ","      VVVV                                     ","     VVVVVV                                    ","     VVVVVV                                    ","     VVVVVV                                    ","     VVVVVV                                    ","      VVVV                                     "]},"43":{"ter":["                        ..            ","                      ......          ","                     ...::..          ","                     ....:...         ","                     ..:......        ","                     .#....:....      ","                     ..:..... ..      ","                     ....... ...      ","                     ...........      ","                     .#:........      ","                    .......:....      ","                   ...~....:....      ","                  ....~:..~.....      ","               .......~......         ","         ~~~~~.#..#..#~...:.          ","        .~~~~~........~::..  ~~~~.    ","        ...~....:::::.::..  ~~~~~~    ","        .................   ~~~~~~    ","    ........::.:..:.:....  .~~~~~~    ","       ..  :............#  .~~~~~.    ","  ........ ....#..#..#.... ........   ","  ........ :.....:.:.::..:~::......   ","  ..#..... .............\"..:........  ","  ........ ......... .   ..:.   ....  ","  ........ :.. ....       .:... ..:.  ","  ..#..... :...~~~~       ...:....:.  ","  ........ ....~~~~~.     ..#.:..~... ","  ........ ....~~~~~.     .:.#.:..:.. ","           ...~~~~~~..    .:#.###.... ","        \".#....~~~~~.......:.#...:....","        .#...:.~~~~~.......:..#.:::...","         ....:.:....:..:.:.:.:.:......","             ....................#:...","              ........   .............","              ........   ....#....:.. ","              ...... .    .:....#.... ","                     .    ...  ...:.. ","                   ....   ....~~~~... ","                  ......  .:..~~~~... ","                  ......  ....~~.::.. ","                  ......   .:......   ","                  ......     ......   ","                   ....      ...~..   ","                             ......   ","                             .....    "],"mk":["                                      ","                        +             ","                       +++            ","                       + ++           ","                       +  ++          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +  ++          ","                       + ++           ","                       +++            ","            +++++++++++++             ","           +t        ++               ","       +++++++++++++++                ","       t   +                          ","  WWWWWWWW +                +++++++   ","  WWWWWWWW +   A++++++++++ ++     +   ","  WWWWWWWW +             +++      +   ","  WWWWWWWW +              ++      +   ","  WWWWWWWW +               ++     +   ","  WWWWWWWW +               +++    +   ","  WWWWWWWW +               t ++   +   ","  WWWWWWWW +               +  +++++   ","           +               t      +   ","           ++              +     ++   ","            ++             +    +++   ","             ++++++++++++++++++++ +   ","                           +      +   ","                           +      +   ","                           +      +   ","                           +      +   ","                           +      +   ","                   VVVV    +      +   ","                  VVVVVV   +      +   ","                  VVVVVV   ++    ++   ","                  VVVVVV    ++++++    ","                  VVVVVV              ","                   VVVV               ","                                      ","                                      "]},"5":{"ter":["                 ....               ","                ......              ","                ......              ","                ......              ","                ......              ","                 ....               ","                   .                ","               ~~. .                ","              ~~~. .                ","             .~~~. .                ","             .~~~...                ","             .~~~...                ","             .~.......              ","       \"..~~~~:....:...     ........","       ..~~~~......:....    ........","       ....#.:.....~....    ..#..#..","       \".\"##...#.##.:..  .. ........","      ....#...........   .:.........","   ......::.:.:.:....  ..::...#..#..","   .....:.\"...\"......  .:.. ........","  ....:.~...#\"..#.#..  ::.. ........","  ....:~~~.................         ","  .~~~...~..\".#......#............  ","   ~~~..:~..:.......#.:...:.. ..    ","    ~~..:.~.:..........#..:.....    ","    ....~......................     ","    .....:...::.:...........        ","    ......:.~..~~.:::.:....         ","    ..:::...~~~~~.~........         ","    ....:..:~~~~~~~.......          ","    ........~~~~~~...               ","     .:....:~~~~                    ","     .::...:...                     ","     .:.  ...                       ","     .:..  :.                       ","     .:.~  :.                       ","     ..... ..                       ","   ..~.::..:.                       ","   ~~~......                        ","       ~~ ..                        ","       ~~                           ","       ..                           ","       ..                           "],"mk":["                 SSSS               ","                SSSSSS              ","                SSSSSS              ","                SSSSSS              ","                SSSSSS              ","                 SSSS               ","                                    ","                                    ","                                    ","                                    ","                                    ","                                    ","               ++++                 ","              ++  ++        WWWWWWWW","             ++    ++       WWWWWWWW","             +      +       WWWWWWWW","             +     ++       WWWWWWWW","             +    ++      +tWWWWWWWW","      +++++++++++++      ++ WWWWWWWW","      +++    ++         ++A WWWWWWWW","      ++     +++       ++ + WWWWWWWW","      +      + +       +  +         ","      ++     + +       +  +         ","      +++   ++ +      ++  +         ","      + ++ ++  +     ++   +         ","      +  +++   ++   ++    +         ","      + +++++++++++++    ++         ","      ++++++     +++++++++          ","      ++++ +                        ","      +++  +                        ","      ++   +                        ","      ++   +                        ","      ++   +                        ","      ++   +                        ","      ++   t                        ","      ++   t                        ","      +++  t                        ","      ++++ +                        ","      ++++++                        ","                                    ","                                    ","                                    ","                                    "]}};
 
-  let seed = "12", view = "flat", light = "on", notes = "off";
+  let seed = "12", view = "iso", light = "on", notes = "off";
   let ditherOn = true, posterMode = "lut86";
   let checkerOn = true;
   let texOn = true;
@@ -482,7 +482,7 @@
   let BANDS = 6;           // quantize the falloff into N rings; 0 = fully smooth gradient
   let DOWNF = 0.3;         // energy kept when shining DOWNWARD: a torch barely feeds the abyss
   let FPOW = 2;            // attenuation exponent: 1 = linear cone, 2 = engine default, 3 = tight
-  let SEAM = 0.6;          // how much of each band boundary becomes mosaic: 0 hard, 1 fully blended
+  let SEAM = 0.3;          // how much of each band boundary becomes mosaic: 0 hard, 1 fully blended
   let MATN = 2;            // Bayer matrix size: 2x2 clean checker, 4x4 finer texture
   let LIGHTC = [255, 255, 255];  // the light's colour, godot-style
   let INKW = 1;            // the CONTOUR outline (drop edges), its own knob — 0 removes the ink
@@ -1118,11 +1118,13 @@
         }
         if (Lv <= 0) {
           // THE OUTER STEP: no band survived here, but the apron might. Flat outer-step
-          // grey; its rim (last 30% of reach) and its shadow edges dither out through
-          // the same Bayer row as the light bands. dither off = hard apron edge.
+          // grey; its rim and its shadow edges dither out through the same Bayer row as
+          // the light bands, and the SEAM knob owns the rim's width here too — half the
+          // seam fraction of the reach. SEAM 0 or dither off = hard apron edge.
           if (outer > 0) {
-            const f2 = Math.min(1, outer / 0.3) * Math.min(1, outerShad * 2);
-            const show = ditherOn ? f2 > brow[((x / DITHER) | 0) & MM] : f2 >= 0.5;
+            const f2 = Math.min(1, outer / Math.max(0.02, SEAM * 0.5)) * Math.min(1, outerShad * 2);
+            const show = ditherOn && SEAM > 0 ? f2 > brow[((x / DITHER) | 0) & MM]
+                                              : outer > 0 && outerShad >= 0.5;
             if (show) {
               lum[(y * W + x)] = 26;   // a whisper, so the contour ink survives out here
               a[i] = AMB[0]; a[i + 1] = AMB[1]; a[i + 2] = AMB[2];
@@ -1138,6 +1140,16 @@
         a[i] = (a[i] * Lv * LIGHTC[0] / 255 + SHADOW[0] * (1 - Lv) + 0.5) | 0;
         a[i + 1] = (a[i + 1] * Lv * LIGHTC[1] / 255 + SHADOW[1] * (1 - Lv) + 0.5) | 0;
         a[i + 2] = (a[i + 2] * Lv * LIGHTC[2] / 255 + SHADOW[2] * (1 - Lv) + 0.5) | 0;
+        // BANDS 0: the light is continuous, so there are no band seams for the dither
+        // to live in — the palette snap becomes the quantizer instead. Nudging the
+        // colour by the Bayer threshold before snapping is classic ordered dithering:
+        // every palette transition in the smooth gradient mosaics, nothing else changes.
+        if (BANDS === 0 && ditherOn && posterMode !== "off") {
+          const nudge = (brow[((x / DITHER) | 0) & MM] - 0.375) * 28;
+          a[i] = Math.max(0, Math.min(255, a[i] + nudge));
+          a[i + 1] = Math.max(0, Math.min(255, a[i + 1] + nudge));
+          a[i + 2] = Math.max(0, Math.min(255, a[i + 2] + nudge));
+        }
         if (posterMode === "exact") snap32(a, i);
         else if (lut) lutSnap(a, i, lut, lutN);
       }
@@ -1314,7 +1326,7 @@
     INKW:     { get: () => INKW,     set: v => { INKW = v; albDirty = true; } },
     DEEP:     { get: () => DEEP,     set: v => { DEEP = v; albDirty = true; } },
   };
-  const KNOB_DEFAULTS = { RADIUS: 8, OUTERR: 10, ENERGY: 140, BANDS: 6, DOWNF: 30, FPOW: 200, SEAM: 60, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
+  const KNOB_DEFAULTS = { RADIUS: 8, OUTERR: 10, ENERGY: 140, BANDS: 6, DOWNF: 30, FPOW: 200, SEAM: 30, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
 
   function setKnob(k, v) {
     // Clamp and snap to the slider's own min/max/step: the API accepts what the UI

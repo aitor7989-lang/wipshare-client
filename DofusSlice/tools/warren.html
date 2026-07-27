@@ -172,8 +172,8 @@
 
   <div class="knobs" id="knobs">
     <div class="knobhead" style="grid-column:1/-1"><span>tuning</span><button id="knobReset" type="button">reset</button></div>
-    <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">10</b>
-      <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="10"></div>
+    <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">8</b>
+      <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="8"></div>
     <div class="knob"><span>outer step · cells</span><b data-v="OUTERR">12</b>
       <input type="range" data-k="OUTERR" min="0" max="18" step="1" value="12"></div>
     <div class="knob"><span>light energy · %</span><b data-v="ENERGY">110</b>
@@ -474,7 +474,7 @@
   let DEEP = 6;            // cubes of rock under the floor
   let DITHER = 1;          // one Bayer cell in backing pixels — at SCALE 2 that is a fat 2x2 on screen
   let LINEW = 0;           // interior cube-edge stroke; 0 by default — the checker does its job
-  let RADIUS = 10;         // point-light radius, in cells
+  let RADIUS = 8;          // point-light radius, in cells
   let OUTERR = 12;         // the OUTER STEP: a wide apron of near-black grey past the pool.
                            // Ground still exists out there — barely. 0 disables it.
   const AMB = [11, 13, 12]; // db32+1: the outer-step grey, sampled from the reference swatch
@@ -1188,24 +1188,16 @@
             // floor that is the shadow navy, and the sqrt response keeps the line
             // readable there. On the OUTER STEP the rest is the apron's own grey (navy
             // is BRIGHTER than the apron — a "faded" line floated at constant glow),
-            // the response is LINEAR (sqrt overdrives whispers), and the ink takes the
-            // ordered-dither nudge before snapping: the dark palette has nothing
-            // between apron grey and valhalla, so an apron line is either invisible or
-            // a two-step glow unless the dither mediates the snap.
+            // the response is linear, and a FLOOR keeps the line CONTINUOUS: it may
+            // dim toward the rim, it may never break into dust. A contour is a
+            // statement about where the world ends — statements don't stipple.
             const isAmb = a[i] === AMB[0] && a[i + 1] === AMB[1] && a[i + 2] === AMB[2];
-            const Lv = isAmb ? Math.min(1, lum[p] / 255 * 2.2) : Math.sqrt(lum[p] / 255);
+            const Lv = isAmb ? Math.max(0.16, Math.min(1, lum[p] / 255 * 2.2))
+                             : Math.sqrt(lum[p] / 255);
             const rest = isAmb ? AMB : SHADOW;
             a[i] = (INKRGB[0] * Lv * LIGHTC[0] / 255 + rest[0] * (1 - Lv) + 0.5) | 0;
             a[i + 1] = (INKRGB[1] * Lv * LIGHTC[1] / 255 + rest[1] * (1 - Lv) + 0.5) | 0;
             a[i + 2] = (INKRGB[2] * Lv * LIGHTC[2] / 255 + rest[2] * (1 - Lv) + 0.5) | 0;
-            if (isAmb && ditherOn && SEAM > 0 && posterMode !== "off") {
-              const ax = p % W, ay = (p / W) | 0;
-              const thr = MAT[((ay / DITHER) | 0) & MM][((ax / DITHER) | 0) & MM];
-              const nudge = (thr - (0.5 - 1 / (2 * MATN * MATN))) * (40 + 80 * SEAM);
-              a[i] = Math.max(0, Math.min(255, a[i] + nudge));
-              a[i + 1] = Math.max(0, Math.min(255, a[i + 1] + nudge));
-              a[i + 2] = Math.max(0, Math.min(255, a[i + 2] + nudge));
-            }
             if (posterMode === "exact") snap32(a, i);
             else if (lut) lutSnap(a, i, lut, lutN);
             const px = p % W, py = (p / W) | 0;
@@ -1356,7 +1348,7 @@
     INKW:     { get: () => INKW,     set: v => { INKW = v; albDirty = true; } },
     DEEP:     { get: () => DEEP,     set: v => { DEEP = v; albDirty = true; } },
   };
-  const KNOB_DEFAULTS = { RADIUS: 10, OUTERR: 12, ENERGY: 110, BANDS: 5, DOWNF: 30, FPOW: 200, SEAM: 20, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
+  const KNOB_DEFAULTS = { RADIUS: 8, OUTERR: 12, ENERGY: 110, BANDS: 5, DOWNF: 30, FPOW: 200, SEAM: 20, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
 
   function setKnob(k, v) {
     // Clamp and snap to the slider's own min/max/step: the API accepts what the UI

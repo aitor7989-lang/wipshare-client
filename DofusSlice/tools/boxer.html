@@ -32,6 +32,7 @@
              border: 1px solid #2a2836; border-radius: 4px; font: 11px ui-monospace, monospace; }
   #lay { color: #fbf236; min-width: 46px; display: inline-block; text-align: center; }
   #frames button { min-width: 34px; }
+  #tileList > div:hover { border-color:#639bff !important; }
   .checker { background: repeating-conic-gradient(#141219 0% 25%, #0d0c12 0% 50%) 0 0 / 16px 16px;
              border: 1px solid #2a2836; border-radius: 6px; padding: 14px; display: inline-block; }
   .page { display: none; }
@@ -159,6 +160,7 @@
         <button id="tDup">duplicate</button>
         <button id="tDel">delete</button>
       </div>
+      <div class="hint" style="margin-top:8px">click any tile to edit it — its face opens in the editor, its rules below</div>
     </div>
     <div class="panel">
       <b class="t">RULES — when this tile is used</b>
@@ -197,7 +199,7 @@
   </div>
   <div class="col">
     <div class="panel">
-      <b class="t">FACE — 16×8 diamond</b>
+      <b class="t" id="faceTitle">FACE</b>
       <div class="row" style="margin-bottom:8px">
         <button id="sh1" class="on">dark</button>
         <button id="sh2">darker</button>
@@ -1101,6 +1103,11 @@
   }
   function tRulesUi() {
     const t = curTile();
+    // The face panel names what it is editing — "am I editing the library tile I
+    // clicked?" should never be a question.
+    el("faceTitle").textContent = t
+      ? `FACE — editing “${t.name}” · ${t.role} · 16×8`
+      : "FACE — no tile selected (create one in the library)";
     for (const id of ["tileName", "tileRole", "tileWeight", "tileMirror", "tDup", "tDel"])
       el(id).disabled = !t;
     el("plainPct").value = tlib.plain; el("plainPctV").textContent = tlib.plain;

@@ -1142,10 +1142,16 @@
         a[i + 2] = (a[i + 2] * Lv * LIGHTC[2] / 255 + SHADOW[2] * (1 - Lv) + 0.5) | 0;
         // BANDS 0: the light is continuous, so there are no band seams for the dither
         // to live in — the palette snap becomes the quantizer instead. Nudging the
-        // colour by the Bayer threshold before snapping is classic ordered dithering:
-        // every palette transition in the smooth gradient mosaics, nothing else changes.
-        if (BANDS === 0 && ditherOn && posterMode !== "off") {
-          const nudge = (brow[((x / DITHER) | 0) & MM] - 0.375) * 28;
+        // colour by the Bayer threshold before snapping is classic ordered dithering.
+        // The AMPLITUDE is the whole trick: the dark half of DB32 spaces its colours
+        // 20-40 RGB units apart, so a timid nudge only flips a sliver at each snap
+        // boundary and the bands stay visible. It has to approach the palette spacing —
+        // and SEAM scales it, same as every other dither transition on this page
+        // (SEAM 30 dithers the transitions, SEAM 100 mosaics whole bands into
+        // each other, SEAM 0 = hard palette bands).
+        if (BANDS === 0 && ditherOn && posterMode !== "off" && SEAM > 0) {
+          const centre = 0.5 - 1 / (2 * MATN * MATN);   // the matrix's own mean, so no brightness drift
+          const nudge = (brow[((x / DITHER) | 0) & MM] - centre) * (40 + 80 * SEAM);
           a[i] = Math.max(0, Math.min(255, a[i] + nudge));
           a[i + 1] = Math.max(0, Math.min(255, a[i + 1] + nudge));
           a[i + 2] = Math.max(0, Math.min(255, a[i + 2] + nudge));

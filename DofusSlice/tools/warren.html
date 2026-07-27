@@ -174,6 +174,8 @@
     <div class="knobhead" style="grid-column:1/-1"><span>tuning</span><button id="knobReset" type="button">reset</button></div>
     <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">8</b>
       <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="8"></div>
+    <div class="knob"><span>outer step · cells</span><b data-v="OUTERR">10</b>
+      <input type="range" data-k="OUTERR" min="0" max="18" step="1" value="10"></div>
     <div class="knob"><span>light energy · %</span><b data-v="ENERGY">140</b>
       <input type="range" data-k="ENERGY" min="20" max="300" step="10" value="140"></div>
     <div class="knob"><span>light bands</span><b data-v="BANDS">6</b>
@@ -473,6 +475,9 @@
   let DITHER = 1;          // one Bayer cell in backing pixels — at SCALE 2 that is a fat 2x2 on screen
   let LINEW = 0;           // interior cube-edge stroke; 0 by default — the checker does its job
   let RADIUS = 8;          // point-light radius, in cells
+  let OUTERR = 10;         // the OUTER STEP: a wide apron of near-black grey past the pool.
+                           // Ground still exists out there — barely. 0 disables it.
+  const AMB = [11, 13, 12]; // db32+1: the outer-step grey, sampled from the reference swatch
   let ENERGY = 1.4;        // light energy: >1 saturates the pool core so materials read true
   let BANDS = 6;           // quantize the falloff into N rings; 0 = fully smooth gradient
   let DOWNF = 0.3;         // energy kept when shining DOWNWARD: a torch barely feeds the abyss
@@ -493,7 +498,7 @@
   const DB32 = ("000000 222034 45283c 663931 8f563b df7126 d9a066 eec39a fbf236 99e550 " +
                 "6abe30 37946e 4b692f 524b24 323c39 3f3f74 306082 5b6ee1 639bff 5fcde4 " +
                 "cbdbfc ffffff 9badb7 847e87 696a6a 595652 76428a ac3232 d95763 d77bba " +
-                "8f974a 8a6f30").split(" ")
+                "8f974a 8a6f30 0b0d0c").split(" ")   // 33rd: outer-step grey, sampled from reference
     .map(h => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]);
 
   /* ---- THE COLOUR LUT ------------------------------------------------------------------
@@ -517,7 +522,7 @@
           px[1] = Math.round(gi * 255 / (n - 1));
           px[2] = Math.round(bi * 255 / (n - 1));
           let best = 0, bd = Infinity;
-          for (let p = 0; p < 32; p++) {
+          for (let p = 0; p < DB32.length; p++) {
             const c = DB32[p];
             const dr = px[0] - c[0], dg = px[1] - c[1], db = px[2] - c[2];
             const dist = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
@@ -545,7 +550,7 @@
     let s = dbIdx[key];
     if (s < 0) {
       let bd = Infinity;
-      for (let p = 0; p < 32; p++) {
+      for (let p = 0; p < DB32.length; p++) {
         const c = DB32[p];
         const dr = d[i] - c[0], dg = d[i + 1] - c[1], db = d[i + 2] - c[2];
         const dist = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
@@ -763,7 +768,7 @@
     if (!lamp || !lightMap[lamp.y]) return;
     // The shadow mask, and nothing else: a cell is visible from the lamp or it is not.
     // All falloff lives per PIXEL in the composite — the light owes the grid nothing.
-    const rr = Math.ceil(RADIUS) + 2;
+    const rr = Math.ceil(Math.max(RADIUS, OUTERR)) + 2;   // the outer step reaches past the pool
     for (let y = Math.max(0, lamp.y - rr); y <= Math.min(rows - 1, lamp.y + rr); y++)
       for (let x = Math.max(0, lamp.x - rr); x <= Math.min(cols - 1, lamp.x + rr); x++)
         if (at(ter, x, y) !== " " && los(ter, lamp.x, lamp.y, x, y))
@@ -1041,6 +1046,7 @@
         if (a[i + 3] === 0) continue;
         const flag = l[i + 2];
         let Lv = l[i] / 255;
+        let outer = 0, outerShad = 1;
         if (flag >= 48) {
           // THE POINT LIGHT, per pixel and in WORLD SPACE. The G-buffer names this pixel's
           // surface; invert the iso projection on it to get a true world position, then:
@@ -1080,13 +1086,21 @@
           // value across the occlusion edge — and a fraction is exactly what the bands
           // quantize and the Bayer seam mosaics. Shadow edges now dither like falloff
           // rings instead of snapping to hard cell-aligned boundaries.
+          let shad = 1;
           if (lightMap) {
             const sx0 = Math.floor(wx), sy0 = Math.floor(wy);
             const fx = wx - sx0, fy = wy - sy0;
             const sm = (X, Y) => lightMap[Y] && lightMap[Y][X] ? 1 : 0;
-            v *= sm(sx0, sy0) * (1 - fx) * (1 - fy) + sm(sx0 + 1, sy0) * fx * (1 - fy) +
-                 sm(sx0, sy0 + 1) * (1 - fx) * fy + sm(sx0 + 1, sy0 + 1) * fx * fy;
+            shad = sm(sx0, sy0) * (1 - fx) * (1 - fy) + sm(sx0 + 1, sy0) * fx * (1 - fy) +
+                   sm(sx0, sy0 + 1) * (1 - fx) * fy + sm(sx0 + 1, sy0 + 1) * fx * fy;
+            v *= shad;
           }
+          // THE OUTER STEP: past the lit pool, ground does not vanish — it survives as a
+          // wide apron of the outer-step grey (palette 33, from the reference swatch),
+          // out to OUTERR cells. Marked for the pixel loop below; the rim of the apron
+          // and its shadow edges dither through the same Bayer as everything else.
+          outer = OUTERR > 0 && shad > 0 ? Math.max(0, 1 - dw / OUTERR) : 0;
+          outerShad = shad;
           if (BANDS > 0) {
             const q = v * BANDS, b = Math.floor(q), frac = q - b;
             // The SEAM: remap the fractional remainder so only the middle SEAM-fraction of
@@ -1102,7 +1116,23 @@
           }
           Lv = v;
         }
-        if (Lv <= 0) { a[i + 3] = 0; continue; }
+        if (Lv <= 0) {
+          // THE OUTER STEP: no band survived here, but the apron might. Flat outer-step
+          // grey; its rim (last 30% of reach) and its shadow edges dither out through
+          // the same Bayer row as the light bands. dither off = hard apron edge.
+          if (outer > 0) {
+            const f2 = Math.min(1, outer / 0.3) * Math.min(1, outerShad * 2);
+            const show = ditherOn ? f2 > brow[((x / DITHER) | 0) & MM] : f2 >= 0.5;
+            if (show) {
+              lum[(y * W + x)] = 26;   // a whisper, so the contour ink survives out here
+              a[i] = AMB[0]; a[i + 1] = AMB[1]; a[i + 2] = AMB[2];
+              if (posterMode === "exact") snap32(a, i);
+              else if (lut) lutSnap(a, i, lut, lutN);
+              continue;
+            }
+          }
+          a[i + 3] = 0; continue;
+        }
         lum[(y * W + x)] = (Lv * 255 + 0.5) | 0;
         // Albedo x light colour, shortfall blended toward the shadow colour.
         a[i] = (a[i] * Lv * LIGHTC[0] / 255 + SHADOW[0] * (1 - Lv) + 0.5) | 0;
@@ -1270,6 +1300,7 @@
      lighting knobs (radius, shoulder, dither size) never do — that is the point of caching. */
   const KNOBS = {
     RADIUS:   { get: () => RADIUS,   set: v => RADIUS = v },
+    OUTERR:   { get: () => OUTERR,   set: v => OUTERR = v },
     ENERGY:   { get: () => ENERGY * 100, set: v => ENERGY = v / 100 },
     BANDS:    { get: () => BANDS,    set: v => BANDS = v },
     DOWNF:    { get: () => DOWNF * 100, set: v => DOWNF = v / 100 },
@@ -1283,7 +1314,7 @@
     INKW:     { get: () => INKW,     set: v => { INKW = v; albDirty = true; } },
     DEEP:     { get: () => DEEP,     set: v => { DEEP = v; albDirty = true; } },
   };
-  const KNOB_DEFAULTS = { RADIUS: 8, ENERGY: 140, BANDS: 6, DOWNF: 30, FPOW: 200, SEAM: 60, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
+  const KNOB_DEFAULTS = { RADIUS: 8, OUTERR: 10, ENERGY: 140, BANDS: 6, DOWNF: 30, FPOW: 200, SEAM: 60, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
 
   function setKnob(k, v) {
     // Clamp and snap to the slider's own min/max/step: the API accepts what the UI

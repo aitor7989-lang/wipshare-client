@@ -5,7 +5,7 @@ namespace DofusSlice.Sim;
 
 /// <summary>
 /// Deterministic self-tests for the BOXER export formats (<see cref="BoxSprite"/>,
-/// <see cref="TileLibrary"/>). Run with: `sim assets`. The fixtures below are LITERAL editor
+/// <see cref="VfxSprite"/>, <see cref="TileLibrary"/>). Run with: `sim assets`. The fixtures below are LITERAL editor
 /// exports, embedded rather than loaded from disk, so this test proves the browser editor and
 /// the game agree on the wire format without either end being installed — the contract lives
 /// here, in one greppable file, and a format drift fails in CI instead of on someone's screen.
@@ -18,8 +18,10 @@ public static class AssetsTest
     {
         KnightV2();
         LegacyV1Layers();
+        KnightV3Anims();
         TilesV2();
         TilesV1Conversion();
+        VfxSlash();
         Rejections();
         RoundTrip();
         Palette();
@@ -65,6 +67,14 @@ public static class AssetsTest
             $"'7' voxel moved (5,5,2)->(6,5,2): f0[5]={s.Frames[0][5, 5, 2]}, f1[5]={s.Frames[1][5, 5, 2]}, f1[6]={s.Frames[1][6, 5, 2]}");
         Check("char empty voxel", s.Frames[0][0, 0, 13] == 0,
             $"unspecified top layer reads {s.Frames[0][0, 0, 13]} (leniency: missing layers are empty)");
+
+        // Post-v3 compat contract: a v2 strip becomes the single "idle" anim, and the legacy
+        // Frames/Fps properties FORWARD to it (same list instance, not a copy).
+        bool hasIdle = s.Anims.Count == 1 && s.Anims.ContainsKey("idle");
+        bool forwards = hasIdle && ReferenceEquals(s.Frames, s.Anims["idle"].Frames)
+                     && s.Fps == s.Anims["idle"].Fps;
+        Check("char v2 anims compat", forwards,
+            $"{s.Anims.Count} anim(s), idle present={hasIdle}; Frames/Fps forward to Anims[\"idle\"]={forwards}");
     }
 
     /// <summary>v1 files (single implicit frame under "layers", no fps) predate the animation
@@ -81,6 +91,50 @@ public static class AssetsTest
                   && s.Frames[0][0, 3, 2] == 0;   // layer 2 absent entirely -> empty
         Check("char v1 leniency", cells,
             $"(1,0,0)={s.Frames[0][1, 0, 0]}, short-row (2,0,1)={s.Frames[0][2, 0, 1]}, missing-layer (0,3,2)={s.Frames[0][0, 3, 2]}");
+
+        bool hasIdle = s.Anims.Count == 1 && s.Anims.ContainsKey("idle");
+        bool forwards = hasIdle && ReferenceEquals(s.Frames, s.Anims["idle"].Frames)
+                     && s.Fps == 6 && s.Anims["idle"].Fps == 6;
+        Check("char v1 anims compat", forwards,
+            $"{s.Anims.Count} anim(s), idle present={hasIdle}; Frames forwards, Fps={s.Fps} (default 6)");
+    }
+
+    /// <summary>A v3 export: two NAMED animations with different rates and lengths, and a voxel
+    /// that sits in a different cell in walk f0 than in idle f0 — so an anim-aliasing bug (both
+    /// names decoding to the same strip) cannot hide behind identical content, the same trick
+    /// the v2 fixture plays between frames.</summary>
+    private const string KnightV3Json = """
+    {
+      "v": 3, "kind": "char", "name": "knight", "n": 4, "h": 3,
+      "anims": {
+        "idle": { "fps": 4, "frames": [ [[".a.."]], [["..a."]] ] },
+        "walk": { "fps": 8, "frames": [ [["b..."]], [[".b.."]], [["..b."]] ] }
+      }
+    }
+    """;
+
+    private static void KnightV3Anims()
+    {
+        var s = BoxSprite.Parse(KnightV3Json);
+        Check("char v3 header", s.Name == "knight" && s.N == 4 && s.H == 3 && s.Anims.Count == 2
+                && s.Anims.ContainsKey("idle") && s.Anims.ContainsKey("walk"),
+            $"name '{s.Name}', {s.N}x{s.N}x{s.H}, {s.Anims.Count} anims [{string.Join(", ", s.Anims.Keys)}]");
+
+        var idle = s.Anims["idle"];
+        var walk = s.Anims["walk"];
+        Check("char v3 per-anim strips", idle.Fps == 4 && idle.Frames.Count == 2
+                && walk.Fps == 8 && walk.Frames.Count == 3,
+            $"idle {idle.Frames.Count} frames @ {idle.Fps}fps, walk {walk.Frames.Count} frames @ {walk.Fps}fps");
+
+        // 'a'=index 10+1=11 at (1,0,0) in idle f0; 'b'=index 11+1=12 at (0,0,0) in walk f0 —
+        // that cell is EMPTY in idle f0, so the two anims provably decoded different content.
+        bool distinct = idle.Frames[0][1, 0, 0] == 11 && idle.Frames[0][0, 0, 0] == 0
+                     && walk.Frames[0][0, 0, 0] == 12;
+        Check("char v3 anim content", distinct,
+            $"idle f0 (1,0,0)={idle.Frames[0][1, 0, 0]} (0,0,0)={idle.Frames[0][0, 0, 0]}, walk f0 (0,0,0)={walk.Frames[0][0, 0, 0]} (expected 11/0/12)");
+
+        Check("char v3 forwards", s.Fps == 4 && ReferenceEquals(s.Frames, idle.Frames),
+            $"legacy Fps={s.Fps} and Frames forward to Anims[\"idle\"] when it exists");
     }
 
     /// <summary>A v2 library: three faces exercising every per-tile field once — explicit
@@ -152,6 +206,36 @@ public static class AssetsTest
             $"ShadeK = [{string.Join(", ", TileLibrary.ShadeK)}]");
     }
 
+    /// <summary>The vfx happy path: per-frame pixels land where authored, unauthored cells read
+    /// 0 (transparent), and the lenient shape rules carry over — the second frame authors one
+    /// row of two, the rest stay transparent.</summary>
+    private static void VfxSlash()
+    {
+        var s = VfxSprite.Parse("""
+        {
+          "v": 1, "kind": "vfx", "name": "slash", "w": 8, "h": 8, "fps": 12,
+          "frames": [
+            ["a.......", ".b......"],
+            ["..b....."]
+          ]
+        }
+        """);
+        Check("vfx header", s.Name == "slash" && s.W == 8 && s.H == 8 && s.Fps == 12 && s.Frames.Count == 2,
+            $"name '{s.Name}', {s.W}x{s.H} @ {s.Fps}fps, {s.Frames.Count} frames");
+
+        // 'a' = index 10+1, 'b' = index 11+1; frame 1 vacated (0,0), so the frames provably
+        // decoded to different arrays.
+        bool px = s.Frames[0][0, 0] == 11 && s.Frames[0][1, 1] == 12 && s.Frames[1][2, 0] == 12
+               && s.Frames[1][0, 0] == 0 && s.Frames[0][5, 5] == 0;
+        Check("vfx pixels", px,
+            $"f0(0,0)={s.Frames[0][0, 0]}, f0(1,1)={s.Frames[0][1, 1]}, f1(2,0)={s.Frames[1][2, 0]} (expected 11/12/12); " +
+            $"f1(0,0)={s.Frames[1][0, 0]} and unauthored f0(5,5)={s.Frames[0][5, 5]} transparent");
+
+        var d = VfxSprite.Parse("""{"kind":"vfx","w":8,"h":8,"frames":[["0"]]}""");
+        Check("vfx defaults", d.Fps == 12 && d.Name == "" && d.Frames[0][0, 0] == 1,
+            $"missing fps defaults to {d.Fps}, missing name to \"\"; '0' cell = {d.Frames[0][0, 0]} (index 0 + 1)");
+    }
+
     /// <summary>Hard violations must THROW, not limp: each of these files decodes to something —
     /// just the wrong something — so a lenient parser would ship a wrong asset silently.</summary>
     private static void Rejections()
@@ -202,6 +286,51 @@ public static class AssetsTest
             """{"v":2,"kind":"chars","tiles":[]}"""), "chars");
         Throws("reject non-array tiles", () => TileLibrary.Parse(
             """{"v":2,"tiles":5}"""), "'tiles'");
+
+        // v3 named-animation semantics: anim names are lookup keys, counts are allocation
+        // bounds — every violation refuses NAMING the offence, like the tile fields above.
+        Throws("reject 9 anims", () => BoxSprite.Parse(
+            "{\"v\":3,\"kind\":\"char\",\"n\":4,\"h\":3,\"anims\":{"
+            + string.Join(",", Enumerable.Range(0, 9).Select(i => $"\"a{i}\":{{\"frames\":[[]]}}")) + "}}"), "9");
+        Throws("reject anim name Idle!", () => BoxSprite.Parse(
+            """{"v":3,"kind":"char","n":4,"h":3,"anims":{"Idle!":{"frames":[[]]}}}"""), "Idle!");
+        Throws("reject 20-char anim name", () => BoxSprite.Parse(
+            "{\"v\":3,\"kind\":\"char\",\"n\":4,\"h\":3,\"anims\":{\"" + new string('x', 20)
+            + "\":{\"frames\":[[]]}}}"), new string('x', 20));
+        Throws("reject anim fps 0", () => BoxSprite.Parse(
+            """{"v":3,"kind":"char","n":4,"h":3,"anims":{"idle":{"fps":0,"frames":[[]]}}}"""), "fps=0");
+        Throws("reject anim fps 61", () => BoxSprite.Parse(
+            """{"v":3,"kind":"char","n":4,"h":3,"anims":{"idle":{"fps":61,"frames":[[]]}}}"""), "fps=61");
+        Throws("reject 17-frame anim", () => BoxSprite.Parse(
+            "{\"v\":3,\"kind\":\"char\",\"n\":4,\"h\":3,\"anims\":{\"idle\":{\"frames\":["
+            + string.Join(",", Enumerable.Repeat("[]", 17)) + "]}}}"), "17");
+        Throws("reject 65 total frames", () => BoxSprite.Parse( // 5 anims x 13 frames
+            "{\"v\":3,\"kind\":\"char\",\"n\":4,\"h\":3,\"anims\":{"
+            + string.Join(",", Enumerable.Range(0, 5).Select(i =>
+                $"\"a{i}\":{{\"frames\":[" + string.Join(",", Enumerable.Repeat("[]", 13)) + "]}"))
+            + "}}"), "65");
+        Throws("reject non-object anims", () => BoxSprite.Parse(
+            """{"v":3,"kind":"char","n":4,"h":3,"anims":[]}"""), "'anims'");
+        Throws("reject zero anims", () => BoxSprite.Parse(
+            """{"v":3,"kind":"char","n":4,"h":3,"anims":{}}"""), "zero");
+
+        // vfx semantics: note kind MISSING rejects too — the one place this file is stricter
+        // than the char/tile parsers, because no untagged legacy vfx exist (see VfxSprite doc).
+        Throws("reject vfx missing kind", () => VfxSprite.Parse(
+            """{"v":1,"name":"slash","w":8,"h":8,"frames":[["a"]]}"""), "kind");
+        Throws("reject vfx kind char", () => VfxSprite.Parse(
+            """{"v":1,"kind":"char","w":8,"h":8,"frames":[["a"]]}"""), "\"char\"");
+        Throws("reject vfx w=4", () => VfxSprite.Parse(
+            """{"v":1,"kind":"vfx","w":4,"h":8,"frames":[["a"]]}"""), "w=4");
+        Throws("reject vfx w=100", () => VfxSprite.Parse(
+            """{"v":1,"kind":"vfx","w":100,"h":8,"frames":[["a"]]}"""), "w=100");
+        Throws("reject vfx zero frames", () => VfxSprite.Parse(
+            """{"v":1,"kind":"vfx","w":8,"h":8,"frames":[]}"""), "zero");
+        Throws("reject vfx frame flood", () => VfxSprite.Parse(
+            "{\"v\":1,\"kind\":\"vfx\",\"w\":8,\"h\":8,\"frames\":["
+            + string.Join(",", Enumerable.Repeat("[]", 17)) + "]}"), "17");
+        Throws("reject vfx bad char", () => VfxSprite.Parse(
+            """{"v":1,"kind":"vfx","w":8,"h":8,"frames":[["!"]]}"""), "'!'");
     }
 
     /// <summary>Serialize frame 0 of the knight back to row strings and compare against the JSON

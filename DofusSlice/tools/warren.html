@@ -171,7 +171,9 @@
   </div>
 
   <div class="knobs" id="knobs">
-    <div class="knobhead" style="grid-column:1/-1"><span>tuning</span><button id="knobReset" type="button">reset</button></div>
+    <div class="knobhead" style="grid-column:1/-1"><span>tuning</span>
+      <span><button id="copySet" type="button" title="dump the live settings as JSON + C# consts (and copy to clipboard)">copy settings</button>
+      <button id="knobReset" type="button">reset</button></span></div>
     <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">8</b>
       <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="8"></div>
     <div class="knob"><span>outer step · cells</span><b data-v="OUTERR">12</b>
@@ -204,6 +206,8 @@
       <input type="range" data-k="DEEP" min="0" max="6" step="1" value="6"></div>
     <div class="knob"><span>contour colour</span><b></b>
       <input type="color" id="inkCol" value="#9badb7" style="height:22px; padding:0 2px; width:100%"></div>
+    <textarea id="settingsOut" spellcheck="false" hidden
+      style="grid-column:1/-1; min-height:150px; background:#0d0c12; color:#9badb7; border:1px solid #2a2836; font:11px/1.5 ui-monospace,monospace; padding:8px"></textarea>
   </div>
 
 
@@ -1344,7 +1348,7 @@
   function wire(cls, apply) {
     document.querySelectorAll("." + cls).forEach(b => b.addEventListener("click", () => {
       document.querySelectorAll("." + cls).forEach(o => o.setAttribute("aria-pressed", String(o === b)));
-      apply(b.dataset); draw();
+      apply(b.dataset); saveUiSoon(); draw();
     }));
   }
   // A new floor releases the pin: the pinned cell belonged to the OLD floor, and a pin that
@@ -1354,9 +1358,25 @@
   wire("lit", d => { light = d.lit; });
   wire("chk", d => { checkerOn = d.chk === "on"; albDirty = true; });
   wire("tex", d => { texOn = d.tex === "on"; albDirty = true; });
+  // Feedback on the reload button: a silent click that changed nothing reads as broken.
+  function tilesFlash(msg) {
+    const b = document.getElementById("tilesReload");
+    b.textContent = msg;
+    clearTimeout(tilesFlash.t);
+    tilesFlash.t = setTimeout(() => { b.textContent = "reload tiles"; }, 1400);
+  }
   document.getElementById("tilesReload").addEventListener("click", () => {
-    try { const t = localStorage.getItem("wander.tiles"); if (t) loadTileLib(t); } catch (e) {}
+    try {
+      const t = localStorage.getItem("wander.tiles");
+      if (t) { loadTileLib(t); tilesFlash("tiles ✓"); }
+      else tilesFlash("none saved");
+    } catch (e) { tilesFlash("bad library"); }
     draw();
+  });
+  // Live sync: BOXER saving in another tab fires a storage event here — no button needed.
+  window.addEventListener("storage", e => {
+    if (e.key !== "wander.tiles" || !e.newValue) return;
+    try { loadTileLib(e.newValue); tilesFlash("tiles ✓ (live)"); draw(); } catch (err) {}
   });
   document.getElementById("tilesLoad").addEventListener("click", () => {
     const ta = document.getElementById("tilesIn");
@@ -1402,10 +1422,87 @@
     document.querySelector(`#knobs b[data-v="${k}"]`).textContent = v;
   }
   document.querySelectorAll('#knobs input[data-k]').forEach(inp =>
-    inp.addEventListener("input", () => { setKnob(inp.dataset.k, +inp.value); draw(); }));
+    inp.addEventListener("input", () => { setKnob(inp.dataset.k, +inp.value); saveUiSoon(); draw(); }));
   document.getElementById("knobReset").addEventListener("click", () => {
     for (const k in KNOB_DEFAULTS) setKnob(k, KNOB_DEFAULTS[k]);
+    try { localStorage.removeItem("wander.warren"); } catch (e) {}
     draw();
+  });
+
+  /* ---- settings persistence + export -------------------------------------------------
+     Every UI choice (knobs, toggles, colours, seed) round-trips through "wander.warren"
+     so a reload lands exactly where you left off. Reset clears the slot on purpose:
+     "reset" means the shipped defaults, not "my last session again". */
+  function uiState() {
+    const o = { knobs: {} };
+    for (const k in KNOBS) o.knobs[k] = KNOBS[k].get();
+    o.seed = seed; o.view = view; o.light = light;
+    o.checker = checkerOn; o.tex = texOn; o.dither = ditherOn;
+    o.poster = posterMode; o.notes = notes;
+    o.lightCol = document.getElementById("lightCol").value;
+    o.inkCol = document.getElementById("inkCol").value;
+    return o;
+  }
+  let saveUiT = 0;
+  function saveUiSoon() {
+    clearTimeout(saveUiT);
+    saveUiT = setTimeout(() => {
+      try { localStorage.setItem("wander.warren", JSON.stringify(uiState())); } catch (e) {}
+    }, 250);
+  }
+  function restoreUi() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem("wander.warren") || "null"); } catch (e) {}
+    if (!s || typeof s !== "object" || Array.isArray(s)) return;
+    if (s.knobs && typeof s.knobs === "object")
+      for (const k in KNOBS) if (typeof s.knobs[k] === "number" && isFinite(s.knobs[k])) setKnob(k, s.knobs[k]);
+    // Toggles restore through the same buttons the user would press, so aria-pressed,
+    // state variable, and albedo invalidation can never disagree with a hand click.
+    const press = (cls, key, val) => {
+      const b = document.querySelector(`.${cls}[data-${key}="${val}"]`);
+      if (b && b.getAttribute("aria-pressed") !== "true") b.click();
+    };
+    if (typeof s.seed === "string") press("seed", "seed", s.seed);
+    if (s.view === "iso" || s.view === "flat") press("view", "view", s.view);
+    if (s.light === "on" || s.light === "off") press("lit", "lit", s.light);
+    if (typeof s.checker === "boolean") press("chk", "chk", s.checker ? "on" : "off");
+    if (typeof s.tex === "boolean") press("tex", "tex", s.tex ? "on" : "off");
+    if (typeof s.dither === "boolean") press("dith", "dith", s.dither ? "on" : "off");
+    if (["off", "exact", "lut16", "lut86"].includes(s.poster)) press("post", "post", s.poster);
+    if (s.notes === "on" || s.notes === "off") press("notes", "notes", s.notes);
+    const hex6 = h => typeof h === "string" && /^#[0-9a-f]{6}$/i.test(h);
+    for (const [id, h] of [["lightCol", s.lightCol], ["inkCol", s.inkCol]])
+      if (hex6(h)) {
+        const inp = document.getElementById(id);
+        inp.value = h;
+        inp.dispatchEvent(new Event("input"));
+      }
+  }
+
+  document.getElementById("copySet").addEventListener("click", () => {
+    const s = uiState();
+    const f2 = v => (Math.round(v * 100) / 100).toFixed(2) + "f";
+    const cs = [
+      "// WANDERER light — approved viewer settings",
+      `const int   LightRadius = ${s.knobs.RADIUS};        // cells`,
+      `const int   OuterStep   = ${s.knobs.OUTERR};        // cells, ambient apron (dz x3)`,
+      `const float Energy      = ${f2(s.knobs.ENERGY / 100)};`,
+      `const int   Bands       = ${s.knobs.BANDS};`,
+      `const float DownLight   = ${f2(s.knobs.DOWNF / 100)};`,
+      `const float FalloffPow  = ${f2(s.knobs.FPOW / 100)};`,
+      `const float DitherSeam  = ${f2(s.knobs.SEAM / 100)};`,
+      `const int   BayerN      = ${s.knobs.MATN};`,
+      `const int   DitherCell  = ${s.knobs.DITHER};   // px`,
+      `const int   CubePx      = ${s.knobs.TILE};`,
+      `const int   InkWidth    = ${s.knobs.INKW};    // px`,
+      `const int   DeepCubes   = ${s.knobs.DEEP};`,
+      `// poster: ${s.poster} · light ${s.lightCol} · ink ${s.inkCol} · seed ${s.seed} · view ${s.view}`,
+    ].join("\n");
+    const txt = "settings json:\n" + JSON.stringify(s) + "\n\n" + cs;
+    const ta = document.getElementById("settingsOut");
+    ta.hidden = false; ta.value = txt;
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).catch(() => {});
   });
 
   document.getElementById("lightCol").addEventListener("input", e => {
@@ -1493,5 +1590,6 @@
   }));
 
   lamp = defaultLamp();
+  restoreUi();          // may click seed/view buttons, each of which redraws safely now
   draw();
 </script>

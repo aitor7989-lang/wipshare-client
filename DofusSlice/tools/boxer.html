@@ -3,19 +3,21 @@
   :root { color-scheme: dark; }
   body { background: #0d0c12; color: #cbdbfc; font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
          margin: 0; padding: 14px 16px 40px; }
-  h1 { font-size: 15px; letter-spacing: 2px; color: #9badb7; margin: 0 0 2px; }
+  h1 { font-size: 15px; letter-spacing: 2px; color: #9badb7; margin: 0 0 2px; display:inline-block; }
+  #saveTick { font-size: 11px; color: #4b692f; margin-left: 12px; opacity: 0; transition: opacity .3s; }
+  #saveTick.show { opacity: 1; } #saveTick.bad { color: #ac3232; }
   .sub { color: #696a6a; margin: 0 0 12px; font-size: 12px; }
   nav { display: flex; gap: 6px; margin: 0 0 16px; }
   nav button { font-size: 13px; letter-spacing: 1px; padding: 6px 16px; }
   main { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
-  .col { display: flex; flex-direction: column; gap: 10px; }
+  .col { display: flex; flex-direction: column; gap: 10px; min-width: 300px; max-width: 480px; }
   .panel { background: #17151f; border: 1px solid #2a2836; border-radius: 6px; padding: 10px 12px; }
   .panel b.t { display: block; color: #847e87; font-size: 11px; letter-spacing: 1.5px; margin-bottom: 8px; }
   canvas { image-rendering: pixelated; display: block; }
-  #edit, #tedit, #demoCv { cursor: crosshair; touch-action: none; }
-  #pal { display: grid; grid-template-columns: repeat(8, 22px); gap: 4px; }
-  #pal div { width: 22px; height: 22px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; }
-  #pal div.on { border-color: #fff; }
+  #edit, #tedit, #vedit, #demoCv { cursor: crosshair; touch-action: none; }
+  #pal, #vpal { display: grid; grid-template-columns: repeat(8, 22px); gap: 4px; }
+  #pal div, #vpal div { width: 22px; height: 22px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; }
+  #pal div.on, #vpal div.on { border-color: #fff; }
   button, select, input[type=text] { background: #211f2d; color: #cbdbfc; border: 1px solid #3a3750;
            border-radius: 4px; padding: 4px 10px; font: inherit; cursor: pointer; }
   input[type=text] { cursor: text; width: 110px; }
@@ -25,32 +27,35 @@
   button:disabled { opacity: 0.4; cursor: default; }
   .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .row span, .hint { color: #696a6a; font-size: 11px; }
+  .hint { max-width: 300px; }
   input[type=range] { width: 100px; }
   input[type=color] { width: 40px; height: 24px; padding: 0 2px; background: #211f2d;
                       border: 1px solid #3a3750; border-radius: 4px; }
   textarea { width: 100%; box-sizing: border-box; height: 76px; background: #0d0c12; color: #9badb7;
              border: 1px solid #2a2836; border-radius: 4px; font: 11px ui-monospace, monospace; }
   #lay { color: #fbf236; min-width: 46px; display: inline-block; text-align: center; }
-  #frames button { min-width: 34px; }
-  #tileList > div:hover { border-color:#639bff !important; }
+  #frames button, #anims button, #vframes button { min-width: 34px; }
   .checker { background: repeating-conic-gradient(#141219 0% 25%, #0d0c12 0% 50%) 0 0 / 16px 16px;
-             border: 1px solid #2a2836; border-radius: 6px; padding: 14px; display: inline-block; }
+             border: 1px solid #2a2836; border-radius: 6px; padding: 14px; display: inline-block;
+             max-width: 100%; overflow: auto; }
+  #tileList > div:hover { border-color: #639bff !important; }
+  #vfxList > div:hover { border-color: #639bff !important; }
   .page { display: none; }
   .page.on { display: block; }
   #toast { position: fixed; bottom: 14px; right: 16px; background: #3f3f74; border: 1px solid #5b6ee1;
            color: #cbdbfc; padding: 6px 14px; border-radius: 5px; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
   #toast.show { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { #toast, #saveTick { transition: none; } }
 </style>
 
-<h1>BOXER</h1>
-<p class="sub">box asset studio — characters, tiles and the demo arena share the game's exact rasterizer, shading and ink. everything autosaves in this browser.</p>
+<h1>BOXER</h1><span id="saveTick">saved</span>
+<p class="sub">box asset studio — characters, animations, tiles, vfx and the demo arena share the game's exact rasterizer, shading and ink. everything autosaves in this browser.</p>
 
 <nav>
   <button id="navSprite" class="on">CHARACTERS</button>
   <button id="navTiles">TILES</button>
+  <button id="navVfx">VFX</button>
   <button id="navDemo">DEMO</button>
-  <button id="navUi" title="planned">UI</button>
 </nav>
 
 <!-- ============================== CHARACTERS ============================== -->
@@ -61,12 +66,12 @@
       <b class="t">LIBRARY</b>
       <div class="row">
         <select id="charSel"></select>
-        <input type="text" id="charName" spellcheck="false" title="rename">
+        <input type="text" id="charName" spellcheck="false" title="rename this character">
       </div>
       <div class="row" style="margin-top:8px">
         <button id="charNew">new</button>
         <button id="charDup">duplicate</button>
-        <button id="charDel">delete</button>
+        <button id="charDel" title="delete — undo with ctrl-z">delete</button>
       </div>
       <div class="row" style="margin-top:8px">
         <span>presets:</span>
@@ -82,25 +87,31 @@
     <div class="panel">
       <b class="t">TOOL</b>
       <div class="row">
-        <button id="tPaint" class="on">paint</button>
-        <button id="tErase">erase</button>
-        <button id="tFill">fill</button>
-        <button id="tPick">pick</button>
-        <button id="tMirror" class="on">mirror-x</button>
+        <button id="tPaint" class="on" title="paint (b)">paint</button>
+        <button id="tErase" title="erase (e) — right-drag anywhere">erase</button>
+        <button id="tFill" title="flood fill this layer (f)">fill</button>
+        <button id="tPick" title="pick a colour from the layer (i)">pick</button>
+        <button id="tMirror" class="on" title="mirror painting across x (x)">mirror-x</button>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="undoBtn">undo</button>
-        <button id="redoBtn">redo</button>
-        <span>ctrl-z / ctrl-y · right-drag erases</span>
+        <button id="undoBtn" title="ctrl-z">undo</button>
+        <button id="redoBtn" title="ctrl-y">redo</button>
+        <span>b/e/f/i tools · x mirror · , . frames · space play</span>
       </div>
     </div>
     <div class="panel">
       <b class="t">DATA</b>
       <div class="row" style="margin-bottom:6px">
-        <button id="exportBtn">export json</button>
+        <button id="exportBtn" title="write this character's json to the box below">export json</button>
         <button id="importBtn">import json</button>
+        <button id="dlBtn" title="download this character as a .json file">download .json</button>
+        <button id="dlAllBtn" title="download the whole character library">download all</button>
+      </div>
+      <div class="row" style="margin-bottom:6px">
         <button id="pngBtn">png</button>
-        <button id="sheetBtn">png sheet</button>
+        <button id="sheetBtn" title="grid: 4 facings x frames of the current animation">png sheet</button>
+        <button id="stripsBtn" title="one strip file per animation x facing: name_anim_dir_frames.png">png strips</button>
+        <input type="file" id="fileIn" accept=".json,application/json" style="font-size:11px; max-width:180px">
       </div>
       <textarea id="io" spellcheck="false" placeholder="export writes here; paste here then import"></textarea>
     </div>
@@ -110,23 +121,43 @@
     <div class="panel">
       <b class="t">LAYER — top-down slice</b>
       <div class="row" style="margin-bottom:8px">
-        <button id="layDn">▼</button><b id="lay">z 0</b><button id="layUp">▲</button>
+        <button id="layDn" title="[">▼</button><b id="lay">z 0</b><button id="layUp" title="]">▲</button>
         <button id="copyDn">copy below</button>
         <button id="clearLay">clear layer</button>
         <button id="clearFrame">clear frame</button>
       </div>
       <canvas id="edit"></canvas>
-      <div class="row" style="margin-top:6px"><span>grey ghost = layer below · dot = column continues above · [ ] = layer up/down</span></div>
+      <div class="row" style="margin-top:6px">
+        <span>shift</span>
+        <button id="shL" title="shift frame x-1 (shift+←)">x−</button>
+        <button id="shR" title="shift frame x+1 (shift+→)">x+</button>
+        <button id="shU" title="shift frame y-1 (shift+↑)">y−</button>
+        <button id="shD" title="shift frame y+1 (shift+↓)">y+</button>
+        <button id="shZd" title="shift frame down one layer">z−</button>
+        <button id="shZu" title="shift frame up one layer">z+</button>
+        <button id="shScope" class="on" title="what the shift buttons move">frame</button>
+      </div>
+      <div class="row" style="margin-top:4px"><span>ghost = layer below · dot = column continues above · yellow/blue outline in preview = prev/next frame</span></div>
     </div>
     <div class="panel">
-      <b class="t">FRAMES</b>
-      <div class="row" id="frames"></div>
+      <b class="t">ANIMATIONS</b>
+      <div class="row" id="anims"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="anAdd">+ new</button>
+        <button id="anDup">duplicate</button>
+        <button id="anDel">delete</button>
+        <input type="text" id="anName" spellcheck="false" title="rename this animation" style="width:90px">
+      </div>
+      <div class="row" style="margin-top:10px"><b class="t" style="margin:0">FRAMES</b></div>
+      <div class="row" id="frames" style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
         <button id="frAdd">+ add</button>
         <button id="frDup">duplicate</button>
         <button id="frDel">delete</button>
-        <button id="onionBtn" class="on">onion</button>
-        <button id="playBtn">▶ play</button>
+        <button id="frMovL" title="move this frame earlier">◀</button>
+        <button id="frMovR" title="move this frame later">▶</button>
+        <button id="onionBtn" class="on" title="ghost the previous (and next) frame in the preview">onion</button>
+        <button id="playBtn" title="space">▶ play</button>
         <span>fps</span><input type="range" id="fps" min="1" max="12" step="1" value="6"><b id="fpsV">6</b>
       </div>
     </div>
@@ -136,7 +167,7 @@
     <div class="panel">
       <b class="t">PREVIEW</b>
       <div class="row" style="margin-bottom:8px">
-        <button id="rotBtn">rotate ↻</button>
+        <button id="rotBtn" title="cycle facing">rotate ↻</button>
         <span>scale</span><input type="range" id="scale" min="2" max="12" step="1" value="7">
         <button id="inkBtn" class="on">outline</button>
         <input type="color" id="inkCol" value="#222034">
@@ -159,6 +190,7 @@
         <button id="tNew">new</button>
         <button id="tDup">duplicate</button>
         <button id="tDel">delete</button>
+        <button id="tDlBtn" title="download the tile library as a .json file">download .json</button>
       </div>
       <div class="hint" style="margin-top:8px">click any tile to edit it — its face opens in the editor, its rules below</div>
     </div>
@@ -201,16 +233,18 @@
     <div class="panel">
       <b class="t" id="faceTitle">FACE</b>
       <div class="row" style="margin-bottom:8px">
-        <button id="sh1" class="on">dark</button>
-        <button id="sh2">darker</button>
-        <button id="sh3">light</button>
-        <button id="shE">erase</button>
+        <button id="sh1" class="on" title="1">dark</button>
+        <button id="sh2" title="2">darker</button>
+        <button id="sh3" title="3">light</button>
+        <button id="shE" title="0">erase</button>
+        <button id="tFillBtn" title="flood fill (f)">fill</button>
+        <button id="tPickBtn" title="pick a shade (i)">pick</button>
         <button id="tClear">clear face</button>
         <button id="tUndoBtn">undo</button>
         <button id="tRedoBtn">redo</button>
       </div>
       <canvas id="tedit"></canvas>
-      <div class="row" style="margin-top:6px"><span>right-drag erases · outside the diamond is ignored · shades are relative to the tile's own colour</span></div>
+      <div class="row" style="margin-top:6px"><span>1/2/3/0 shades · shift+arrows shift the face · right-drag erases · shades are relative to the tile's own colour</span></div>
     </div>
     <div class="panel">
       <b class="t">IN THE FLOOR — every rule live</b>
@@ -221,63 +255,122 @@
 </main>
 </section>
 
-<!-- ============================== DEMO ============================== -->
-<section class="page" id="pageDemo">
+<!-- ============================== VFX ============================== -->
+<section class="page" id="pageVfx">
 <main>
   <div class="col">
     <div class="panel">
-      <b class="t">PLACE</b>
-      <div class="row">
-        <select id="demoChar"></select>
-        <button id="demoRot">facing ↻</button>
+      <b class="t">VFX LIBRARY — slashes, impacts, casts</b>
+      <div id="vfxList" style="display:flex;flex-wrap:wrap;gap:8px;max-width:320px"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="vNew">new</button>
+        <button id="vDup">duplicate</button>
+        <button id="vDel">delete</button>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="dPlace" class="on">place</button>
-        <button id="dErase">erase</button>
-        <button id="dWorn">paint worn</button>
-        <button id="dClear">clear arena</button>
+        <input type="text" id="vName" spellcheck="false" title="rename">
+        <span>fps</span><input type="range" id="vFps" min="1" max="24" step="1" value="12"><b id="vFpsV">12</b>
       </div>
-      <div class="row" style="margin-top:8px">
-        <span>scale</span><input type="range" id="demoScale" min="2" max="6" step="1" value="3">
-        <button id="demoAnim" class="on">animate</button>
+      <div class="hint" style="margin-top:8px">a vfx is a 24×24 pixel overlay animation, played once over a cell or a unit — test it in the DEMO arena's vfx tool</div>
+    </div>
+    <div class="panel">
+      <b class="t">PALETTE</b>
+      <div id="vpal"></div>
+      <div class="row" style="margin-top:8px"><button id="vErase" title="0 / right-drag">transparent</button></div>
+    </div>
+    <div class="panel">
+      <b class="t">DATA</b>
+      <div class="row" style="margin-bottom:6px">
+        <button id="vExport">export json</button>
+        <button id="vImport">import json</button>
+        <button id="vDlBtn">download .json</button>
       </div>
-      <div class="hint" style="margin-top:8px">the arena wears YOUR tile library and runs every character's frames at its own fps — this is the game's look, verbatim: same rasterizer, same shading, same silhouette ink.</div>
+      <textarea id="vio" spellcheck="false" placeholder="vfx json"></textarea>
     </div>
   </div>
   <div class="col">
     <div class="panel">
-      <b class="t">ARENA</b>
-      <canvas id="demoCv"></canvas>
+      <b class="t" id="vfxTitle">CANVAS — 24×24</b>
+      <canvas id="vedit"></canvas>
+      <div class="row" style="margin-top:6px"><span>right-drag erases to transparent · onion shows the previous frame</span></div>
+    </div>
+    <div class="panel">
+      <b class="t">FRAMES</b>
+      <div class="row" id="vframes"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="vfAdd">+ add</button>
+        <button id="vfDup">duplicate</button>
+        <button id="vfDel">delete</button>
+        <button id="vOnion" class="on">onion</button>
+        <button id="vPlay">▶ play</button>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <div class="panel">
+      <b class="t">PREVIEW — over a unit</b>
+      <div class="checker"><canvas id="vprev"></canvas></div>
     </div>
   </div>
 </main>
 </section>
 
-<!-- ============================== UI (planned) ============================== -->
-<section class="page" id="pageUi">
-  <div class="panel" style="max-width:560px">
-    <b class="t">UI ELEMENTS — PLANNED</b>
-    <p class="hint" style="font-size:12px; line-height:1.6">
-      next resident of this studio: 9-slice panels, icons and cursors, authored with the same
-      shade discipline as tiles (marks relative to a material, so one asset survives every
-      palette and light condition). the character and tile formats already leave room —
-      a ui asset will be one more "kind" in the same json family.
-    </p>
+<!-- ============================== DEMO ============================== -->
+<section class="page" id="pageDemo">
+<main>
+  <div class="col">
+    <div class="panel">
+      <b class="t">PLACE & PAINT</b>
+      <div class="row">
+        <select id="demoChar"></select>
+        <button id="demoRot">facing ↻</button>
+        <select id="demoVfxSel" title="vfx for the vfx tool"></select>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="dPlace" class="on" title="click a cell to place the selected character">place</button>
+        <button id="dErase" title="remove a unit (right-click also works)">erase</button>
+        <button id="dVfx" title="click a cell or unit to play the selected vfx there">vfx</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span>terrain brush (drag paints)</span>
+      </div>
+      <div class="row" style="margin-top:4px">
+        <button id="bWorn">worn</button>
+        <button id="bRock">rock</button>
+        <button id="bWater">water</button>
+        <button id="bVoid">void</button>
+        <button id="bFloor">restore floor</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span>world tile</span>
+        <select id="demoTile"><option value="16">16 — the game's</option><option value="24">24</option><option value="32">32</option></select>
+        <span>scale</span><input type="range" id="demoScale" min="2" max="6" step="1" value="3">
+        <button id="demoAnim" class="on">animate</button>
+        <button id="dShot" title="download the arena as png">png</button>
+        <button id="dClear">clear arena</button>
+      </div>
+      <div class="hint" style="margin-top:8px">TRUE WORLD SCALE: tiles here are the game's real tile size — characters overflow cells exactly as
+        they will in-game. rock brush makes wall context, void makes edge, water makes water. units play their idle animation.</div>
+    </div>
   </div>
+  <div class="col" style="max-width:none">
+    <div class="panel">
+      <b class="t">ARENA</b>
+      <div style="overflow:auto; max-width:100%"><canvas id="demoCv"></canvas></div>
+    </div>
+  </div>
+</main>
 </section>
 
 <div id="toast"></div>
 
 <script>
   /* =====================================================================================
-     BOXER v2 — characters (with animation frames) + tiles + demo arena.
-     One rendering law everywhere, identical to the game renderer: integer scanline
-     rasterizer, KTOP/KL/KR face shading, screen-space silhouette ink, DB32 only.
+     BOXER v3 — characters with NAMED ANIMATIONS, rule-driven tiles, VFX overlays, and a
+     TRUE-WORLD-SCALE demo arena. One rendering law everywhere, identical to the game.
      ===================================================================================== */
-
-  /* ---- shared constants ---- */
-  const N = 10, H = 14;                    // character voxel grid
-  const HWv = 2, HHv = 1, UNITv = 2;       // voxel cube metrics (smallest crisp 2:1)
+  const N = 10, H = 14;
+  const HWv = 2, HHv = 1, UNITv = 2;
   const B32 = "0123456789abcdefghijklmnopqrstuv";
   const DB32 = ("000000 222034 45283c 663931 8f563b df7126 d9a066 eec39a fbf236 99e550 " +
                 "6abe30 37946e 4b692f 524b24 323c39 3f3f74 306082 5b6ee1 639bff 5fcde4 " +
@@ -297,6 +390,21 @@
     clearTimeout(toast._h);
     toast._h = setTimeout(() => t.classList.remove("show"), 1600);
   };
+  // The autosave TICK: the page promises autosave, so it shows its receipts — and shows
+  // failure in red instead of swallowing a full session of quota errors.
+  const savedTick = okSave => {
+    const s = el("saveTick");
+    s.textContent = okSave ? "saved" : "save FAILED — storage blocked or full";
+    s.className = okSave ? "show" : "show bad";
+    clearTimeout(savedTick._h);
+    if (okSave) savedTick._h = setTimeout(() => s.className = "", 1200);
+  };
+  function download(name, url) {
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+  }
+  const dlJson = (name, txt) =>
+    download(name, "data:application/json;charset=utf-8," + encodeURIComponent(txt));
 
   /* ---- the rasterizer (the game's, verbatim minus edge lines) ---- */
   function quadSpans(pts) {
@@ -327,7 +435,6 @@
       if (b > a) g.fillRect(a, y0 + k, b - a, 1);
     }
   }
-  /// Silhouette ink over a finished alpha mass — the game's contour rule.
   function inkPass(g, W, Hp, ink) {
     const A = g.getImageData(0, 0, W, Hp), a = A.data;
     const mask = new Uint8Array(W * Hp);
@@ -345,16 +452,17 @@
   }
 
   /* =====================================================================================
-     CHARACTERS — the library. A character: { fps, frames: [Uint8Array(N*N*H)] }.
-     Cell value 0 = empty, else DB32 index + 1. The JSON is the asset; the C# side
-     (DofusSlice.Core.Content.BoxAssets) parses this exact shape.
+     CHARACTERS — v3: a character is { anims: { name: { fps, frames: [Uint8Array] } } }.
+     Everything the old single strip could do lives on as the "idle" animation.
      ===================================================================================== */
   const chars = new Map();
-  let curName = null, curFrame = 0;
+  let curName = null, curAnim = "idle", curFrame = 0;
   const vi = (x, y, z) => (z * N + y) * N + x;
   const cur = () => chars.get(curName);
-  const frame = () => cur().frames[curFrame];
+  const anim = () => cur().anims[curAnim];
+  const frame = () => anim().frames[curFrame];
   const at = (x, y, z) => x >= 0 && x < N && y >= 0 && y < N && z >= 0 && z < H ? frame()[vi(x, y, z)] : 0;
+  const ANIM_RE = /^[a-z0-9-]{1,16}$/;
 
   function frameToLayers(u8) {
     const layers = [];
@@ -381,36 +489,55 @@
       }
     return u8;
   }
-  const charJson = name => JSON.stringify({
-    v: 2, kind: "char", name, n: N, h: H, fps: chars.get(name).fps,
-    frames: chars.get(name).frames.map(frameToLayers),
-  });
+  const charJson = name => {
+    const c = chars.get(name);
+    const anims = {};
+    for (const an of Object.keys(c.anims))
+      anims[an] = { fps: c.anims[an].fps, frames: c.anims[an].frames.map(frameToLayers) };
+    return JSON.stringify({ v: 3, kind: "char", name, n: N, h: H, anims });
+  };
   const BAD_NAMES = new Set(["__proto__", "constructor", "prototype"]);
   function charFromJson(txt) {
-    const o = JSON.parse(txt);
+    const o = typeof txt === "string" ? JSON.parse(txt) : txt;
     if (o.kind && o.kind !== "char") throw new Error(`kind "${o.kind}" is not a character`);
-    // Declared dimensions must match this build — silently cropping an imported 16x16x20
-    // model to 10x10x14 is data loss wearing a success toast.
     if (o.n != null && +o.n !== N) throw new Error(`footprint ${o.n} — this build is ${N}x${N}x${H}`);
     if (o.h != null && +o.h !== H) throw new Error(`height ${o.h} — this build is ${N}x${N}x${H}`);
-    const frames = o.frames ? o.frames.map(layersToFrame)
-                 : o.layers ? [layersToFrame(o.layers)] : null;   // v1 compat
-    if (!frames || !frames.length) throw new Error("no frames in json");
+    const anims = {};
+    if (o.anims && typeof o.anims === "object") {           // v3
+      const keys = Object.keys(o.anims);
+      if (!keys.length || keys.length > 8) throw new Error("anims must have 1..8 entries");
+      let total = 0;
+      for (const k of keys) {
+        if (!ANIM_RE.test(k)) throw new Error(`anim name "${k}" (want a-z 0-9 - , 1..16 chars)`);
+        const a = o.anims[k];
+        const fr = (a && a.frames || []).map(layersToFrame);
+        if (!fr.length || fr.length > 16) throw new Error(`anim "${k}": 1..16 frames`);
+        total += fr.length;
+        anims[k] = { fps: clamp(+(a && a.fps) || 6, 1, 12), frames: fr };
+      }
+      if (total > 64) throw new Error("more than 64 frames across all anims");
+    } else {                                                 // v2 / v1 -> one idle strip
+      const frames = o.frames ? o.frames.map(layersToFrame)
+                   : o.layers ? [layersToFrame(o.layers)] : null;
+      if (!frames || !frames.length) throw new Error("no frames in json");
+      anims.idle = { fps: clamp(+o.fps || 6, 1, 12), frames };
+    }
     let name = String(o.name || "imported");
     if (BAD_NAMES.has(name)) name = "imported";
-    return { name, fps: clamp(+o.fps || 6, 1, 12), frames };
+    return { name, anims };
   }
 
-  /* ---- persistence: the whole library under one key ---- */
+  let saveT = 0;
   function saveChars() {
     try {
-      // null prototype: a character named "__proto__" must not vanish into the
-      // prototype setter — every accepted name has to round-trip.
       const o = Object.create(null);
       for (const [name] of chars) o[name] = JSON.parse(charJson(name));
       localStorage.setItem("wander.chars.v2", JSON.stringify(o));
-    } catch (e) { /* storage full or blocked — the session copy still works */ }
+      savedTick(true);
+    } catch (e) { savedTick(false); }
   }
+  function saveCharsSoon() { clearTimeout(saveT); saveT = setTimeout(saveChars, 300); }
+  window.addEventListener("beforeunload", () => saveChars());
   function loadChars() {
     try {
       const raw = localStorage.getItem("wander.chars.v2");
@@ -418,13 +545,13 @@
       const o = JSON.parse(raw);
       for (const name of Object.keys(o)) {
         const c = charFromJson(JSON.stringify(o[name]));
-        chars.set(name, { fps: c.fps, frames: c.frames });
+        chars.set(name, { anims: c.anims });
       }
       return chars.size > 0;
     } catch (e) { return false; }
   }
 
-  /* ---- presets: proof that boxes are enough. Two frames each — a simple idle bob. ---- */
+  /* ---- presets: two-frame idle bobs, exactly as before, now as the idle anim ---- */
   function boxInto(u8, x0, x1, y0, y1, z0, z1, c) {
     for (let z = z0; z <= z1; z++)
       for (let y = y0; y <= y1; y++)
@@ -434,7 +561,7 @@
   function makePreset(build) {
     const f1 = new Uint8Array(N * N * H), f2 = new Uint8Array(N * N * H);
     build(f1, 0); build(f2, 1);
-    return { fps: 4, frames: [f1, f2] };
+    return { anims: { idle: { fps: 4, frames: [f1, f2] } } };
   }
   const PRESETS = {
     knight: () => makePreset((f, ph) => {
@@ -443,17 +570,17 @@
       boxInto(f, 3, 6, 3, 6, 6, 6, 22);
       boxInto(f, 4, 5, 4, 5, 7, 9, 7);
       boxInto(f, 4, 5, 4, 5, 10, 10, 22);
-      boxInto(f, 7, 7, 5, 5, 2 + ph, 8 + ph, 23);   // sword bobs
+      boxInto(f, 7, 7, 5, 5, 2 + ph, 8 + ph, 23);
       boxInto(f, 7, 7, 5, 5, 9 + ph, 10 + ph, 20);
-      boxInto(f, 2, 2, 4, 6, 4 - ph, 6 - ph, 3);    // shield counter-bobs
+      boxInto(f, 2, 2, 4, 6, 4 - ph, 6 - ph, 3);
     }),
     archer: () => makePreset((f, ph) => {
       boxInto(f, 3, 4, 4, 5, 0, 2, 13); boxInto(f, 5, 6, 4, 5, 0, 2, 13);
       boxInto(f, 3, 6, 3, 6, 3, 6, 12);
       boxInto(f, 4, 5, 4, 5, 7, 9, 7);
       boxInto(f, 4, 5, 4, 5, 10, 10, 12);
-      boxInto(f, 7, 7, 5, 5, 1 + ph, 9 + ph, 3);    // bow bobs
-      boxInto(f, 2, 2, 5, 5, 5 - ph, 6 - ph, 30);   // quiver counter-bobs
+      boxInto(f, 7, 7, 5, 5, 1 + ph, 9 + ph, 3);
+      boxInto(f, 2, 2, 5, 5, 5 - ph, 6 - ph, 30);
     }),
     brute: () => makePreset((f, ph) => {
       boxInto(f, 2, 4, 4, 6, 0, 2, 14); boxInto(f, 5, 7, 4, 6, 0, 2, 14);
@@ -465,25 +592,30 @@
     }),
   };
 
-  /* ---- library boot ---- */
   if (!loadChars()) {
     chars.set("knight", PRESETS.knight());
     chars.set("archer", PRESETS.archer());
     chars.set("brute", PRESETS.brute());
   }
   curName = chars.keys().next().value;
+  if (!cur().anims[curAnim]) curAnim = Object.keys(cur().anims)[0];
 
   /* =====================================================================================
-     UNDO / REDO — snapshot per stroke or per operation, tagged by target.
+     UNDO — snapshots by target. "sprite" = one frame's voxels; "char" = a whole character
+     (structural ops: frame add/dup/del/reorder, anim ops, preset overwrite, delete);
+     "tile" / "tilelib" / "vfx" as before. Structural ops used to WIPE the stacks — the
+     one moment you need ctrl-z most is right after deleting the wrong thing.
      ===================================================================================== */
   const undoS = [], redoS = [];
   function snapSprite() {
-    return { type: "sprite", name: curName, fi: curFrame, data: frame().slice() };
+    return { type: "sprite", name: curName, an: curAnim, fi: curFrame, data: frame().slice() };
+  }
+  function snapChar(name = curName) {
+    return { type: "char", name, json: charJson(name), an: curAnim, fi: curFrame };
   }
   function snapTile() { return { type: "tile", idx: tSel, data: curTile().grid.slice() }; }
-  // The whole library at once — imports and structural ops (new/dup/delete/rules)
-  // replace more than one tile, so their undo must too.
   function snapTileLib() { return { type: "tilelib", json: tilesJson() }; }
+  function snapVfxLib() { return { type: "vfxlib", json: vfxJsonAll() }; }
   function pushUndo(snap) {
     undoS.push(snap);
     if (undoS.length > 80) undoS.shift();
@@ -492,23 +624,44 @@
   function applySnap(s) {
     if (s.type === "sprite") {
       const c = chars.get(s.name);
-      if (!c || !c.frames[s.fi]) return null;
-      const back = { type: "sprite", name: s.name, fi: s.fi, data: c.frames[s.fi].slice() };
-      c.frames[s.fi].set(s.data);
-      curName = s.name; curFrame = s.fi; playing = false;
-      // Undo is a navigation: jump to where the change is visible and resync every
-      // header that names the current character — a hidden undo reads as a dead key.
+      if (!c || !c.anims[s.an] || !c.anims[s.an].frames[s.fi]) return null;
+      const back = { type: "sprite", name: s.name, an: s.an, fi: s.fi, data: c.anims[s.an].frames[s.fi].slice() };
+      c.anims[s.an].frames[s.fi].set(s.data);
+      curName = s.name; curAnim = s.an; curFrame = s.fi; playing = false;
       if (activeTab !== "sprite") showTab("sprite");
       afterCharEdit(false);
-      saveChars();             // undo persists NOW — a debounce window here loses the undo on close
+      saveChars();
       charSelUi(); playUi();
       return back;
+    }
+    if (s.type === "char") {
+      const back = chars.has(s.name)
+        ? { type: "char", name: s.name, json: charJson(s.name), an: curAnim, fi: curFrame }
+        : null;
+      const c = charFromJson(s.json);
+      chars.set(s.name, { anims: c.anims });
+      curName = s.name;
+      curAnim = c.anims[s.an] ? s.an : Object.keys(c.anims)[0];
+      curFrame = clamp(s.fi, 0, c.anims[curAnim].frames.length - 1);
+      playing = false;
+      if (activeTab !== "sprite") showTab("sprite");
+      afterCharEdit(false);
+      saveChars();
+      charSelUi(); playUi();
+      return back || { type: "char", name: s.name, json: s.json, an: s.an, fi: s.fi };
     }
     if (s.type === "tilelib") {
       const back = snapTileLib();
       loadTiles(s.json);
       if (activeTab !== "tiles") showTab("tiles");
       afterTiles(true);
+      return back;
+    }
+    if (s.type === "vfxlib") {
+      const back = snapVfxLib();
+      loadVfxAll(s.json);
+      if (activeTab !== "vfx") showTab("vfx");
+      afterVfx(true);
       return back;
     }
     const t = tlib.tiles[s.idx];
@@ -523,9 +676,7 @@
   function doUndo() { const s = undoS.pop(); if (!s) return; const b = applySnap(s); if (b) redoS.push(b); }
   function doRedo() { const s = redoS.pop(); if (!s) return; const b = applySnap(s); if (b) undoS.push(b); }
 
-  /* =====================================================================================
-     MODEL RENDER — one function, explicit inputs, draws into any context.
-     ===================================================================================== */
+  /* ---- model render (unchanged law) ---- */
   function rotIdx(x, y, rot) {
     if (rot === 1) return [y, N - 1 - x];
     if (rot === 2) return [N - 1 - x, N - 1 - y];
@@ -533,11 +684,8 @@
     return [x, y];
   }
   const SPR_W = 2 * N * HWv + 2;
-  // Top margin includes HHv: the cap diamond of a voxel at z = H-1 rises HHv above its
-  // unit top — without it the topmost cell's cap lost its first pixel row.
   const SPR_H = 2 * N * HHv + H * UNITv + 2 * UNITv + HHv + 2;
   const SPR_OX = N * HWv + 1, SPR_OY = UNITv * H + HHv;
-  // ground-plane centre inside the sprite canvas — the demo pins this to a tile centre
   const SPR_GY = SPR_OY + N * HHv;
 
   function drawModel(g, u8, rot, opts) {
@@ -552,7 +700,6 @@
     const dia = (cx, cy) => [[cx, cy - HHv], [cx + HWv, cy], [cx, cy + HHv], [cx - HWv, cy]];
     const faceL = (cx, cy) => [[cx - HWv, cy - UNITv], [cx, cy + HHv - UNITv], [cx, cy + HHv], [cx - HWv, cy]];
     const faceR = (cx, cy) => [[cx + HWv, cy - UNITv], [cx, cy + HHv - UNITv], [cx, cy + HHv], [cx + HWv, cy]];
-
     if (tile) {
       const cx = ox, cy = SPR_GY;
       rQuad(g, [[cx - N * HWv, cy], [cx, cy + N * HHv], [cx, cy + N * HHv + 2 * UNITv], [cx - N * HWv, cy + 2 * UNITv]], rgb(MONO, KL));
@@ -575,38 +722,28 @@
     if (ink) inkPass(g, SPR_W, SPR_H, ink);
   }
 
-  /* ---- sprite canvas cache (demo + preview ghosts). Bumped on any character edit. ---- */
   let charVer = 0;
   const sprCache = new Map();
-  function spriteCanvas(name, rot, fi, opts) {
+  function spriteCanvas(name, an, rot, fi, opts) {
     const c = chars.get(name);
     if (!c) return null;
-    fi %= c.frames.length;
-    // The ink COLOUR is part of the key — a cached dark-ink sprite must not answer for a
-    // red-ink request (the export path is uncached and disagreed with the preview).
-    const key = `${name}|${rot}|${fi}|${opts.ink ? opts.ink.join(".") : "-"}${opts.tile ? "t" : "-"}|${charVer}`;
+    const a = c.anims[an] || c.anims[Object.keys(c.anims)[0]];
+    fi %= a.frames.length;
+    const key = `${name}|${an}|${rot}|${fi}|${opts.ink ? opts.ink.join(".") : "-"}${opts.tile ? "t" : "-"}|${charVer}`;
     let cv = sprCache.get(key);
-    if (cv) {
-      // LRU: refresh recency on hit. The old nuke-all eviction met a 192-sprite live
-      // working set (4 chars x 4 facings x 12 frames) by clearing the cache every
-      // frame — the demo arena ran at 7 fps rebuilding sprites it had just drawn.
-      sprCache.delete(key); sprCache.set(key, cv);
-      return cv;
-    }
+    if (cv) { sprCache.delete(key); sprCache.set(key, cv); return cv; }
     cv = document.createElement("canvas");
     cv.width = SPR_W; cv.height = SPR_H;
-    drawModel(cv.getContext("2d"), c.frames[fi], rot, opts);
+    drawModel(cv.getContext("2d"), a.frames[fi], rot, opts);
     if (sprCache.size >= 256) sprCache.delete(sprCache.keys().next().value);
     sprCache.set(key, cv);
     return cv;
   }
 
-  /* =====================================================================================
-     CHARACTER EDITOR UI
-     ===================================================================================== */
+  /* ---- character editor state + slice canvas ---- */
   let layerZ = 0, colr = 22, tool = "paint", mirror = true;
   let rot = 0, SCALE = 7, inkOn = true, inkRGB = [34, 32, 52], tileOn = true;
-  let onion = true, playing = false;
+  let onion = true, playing = false, shiftScope = "frame";
 
   const edit = el("edit");
   const CELL = 26;
@@ -646,17 +783,12 @@
   }
 
   let prevDirty = true;
-  // Persistence is DEBOUNCED for strokes: saveChars re-serializes the whole library, and
-  // doing that once per moved pixel made drag cost scale with library size. Structural
-  // ops (rename/delete/import/undo) still save immediately via saveChars().
-  let saveT = 0;
-  function saveCharsSoon() { clearTimeout(saveT); saveT = setTimeout(saveChars, 300); }
-  window.addEventListener("beforeunload", () => saveChars());
   function afterCharEdit(pushSave = true) {
     charVer++;
-    sprCache.clear();          // every cached sprite of this library version is now stale
+    sprCache.clear();
     prevDirty = true;
     drawEdit();
+    drawAnimsUi();
     drawFramesUi();
     if (pushSave) saveCharsSoon();
   }
@@ -677,13 +809,8 @@
     }
   }
 
-  let painting = 0;
-  // The stroke's undo snapshot is taken at pointerdown but only COMMITTED on the first
-  // real mutation — a pick click or a miss must not spend the user's redo stack.
-  let strokeSnap = null;
-  function commitStroke() {
-    if (strokeSnap) { pushUndo(strokeSnap); strokeSnap = null; }
-  }
+  let painting = 0, strokeSnap = null;
+  function commitStroke() { if (strokeSnap) { pushUndo(strokeSnap); strokeSnap = null; } }
   function applyAt(ev) {
     const r = edit.getBoundingClientRect();
     const x = Math.floor((ev.clientX - r.left) / CELL), y = Math.floor((ev.clientY - r.top) / CELL);
@@ -697,14 +824,14 @@
     if (painting === 2 || tool === "erase") setVox(x, y, 0);
     else if (tool === "fill") {
       fillLayer(x, y, colr + 1);
-      if (mirror) fillLayer(N - 1 - x, y, colr + 1);   // fill honours the mirror like the brush
+      if (mirror) fillLayer(N - 1 - x, y, colr + 1);
     }
     else setVox(x, y, colr + 1);
     afterCharEdit();
   }
   edit.addEventListener("contextmenu", e => e.preventDefault());
   edit.addEventListener("pointerdown", e => {
-    if (e.button !== 0 && e.button !== 2) return;   // middle/back/forward do nothing
+    if (e.button !== 0 && e.button !== 2) return;
     strokeSnap = snapSprite();
     painting = e.button === 2 ? 2 : 1;
     edit.setPointerCapture(e.pointerId);
@@ -713,7 +840,37 @@
   edit.addEventListener("pointermove", e => { if (painting) applyAt(e); });
   edit.addEventListener("pointerup", () => { painting = 0; strokeSnap = null; });
 
-  /* ---- palette ---- */
+  /* ---- SHIFT: rigid translate of the frame (or layer) — the bread of box animation ---- */
+  function shiftFrame(dx, dy, dz) {
+    pushUndo(snapSprite());
+    const src = frame().slice(), dst = frame();
+    dst.fill(0);
+    const zlo = shiftScope === "layer" ? layerZ : 0;
+    const zhi = shiftScope === "layer" ? layerZ : H - 1;
+    for (let z = 0; z < H; z++)
+      for (let y = 0; y < N; y++)
+        for (let x = 0; x < N; x++) {
+          const v = src[vi(x, y, z)];
+          if (!v) continue;
+          let nx = x, ny = y, nz = z;
+          if (z >= zlo && z <= zhi) { nx = x + dx; ny = y + dy; nz = z + dz; }
+          if (nx < 0 || nx >= N || ny < 0 || ny >= N || nz < 0 || nz >= H) continue;
+          dst[vi(nx, ny, nz)] = v;
+        }
+    afterCharEdit();
+  }
+  el("shL").onclick = () => shiftFrame(-1, 0, 0);
+  el("shR").onclick = () => shiftFrame(1, 0, 0);
+  el("shU").onclick = () => shiftFrame(0, -1, 0);
+  el("shD").onclick = () => shiftFrame(0, 1, 0);
+  el("shZd").onclick = () => shiftFrame(0, 0, -1);
+  el("shZu").onclick = () => shiftFrame(0, 0, 1);
+  el("shScope").onclick = () => {
+    shiftScope = shiftScope === "frame" ? "layer" : "frame";
+    el("shScope").textContent = shiftScope;
+  };
+
+  /* ---- palette / tools ---- */
   const pal = el("pal");
   DB32.forEach((c, i) => {
     const d = document.createElement("div");
@@ -724,8 +881,6 @@
   });
   function palUi() { [...pal.children].forEach((e, j) => e.className = j === colr ? "on" : ""); }
   palUi();
-
-  /* ---- tools ---- */
   function toolUi() {
     for (const [id, t] of [["tPaint", "paint"], ["tErase", "erase"], ["tFill", "fill"], ["tPick", "pick"]])
       el(id).className = tool === t ? "on" : "";
@@ -739,7 +894,6 @@
   el("undoBtn").onclick = doUndo;
   el("redoBtn").onclick = doRedo;
 
-  /* ---- layers ---- */
   el("layUp").onclick = () => { layerZ = clamp(layerZ + 1, 0, H - 1); drawEdit(); };
   el("layDn").onclick = () => { layerZ = clamp(layerZ - 1, 0, H - 1); drawEdit(); };
   el("copyDn").onclick = () => {
@@ -756,49 +910,129 @@
   };
   el("clearFrame").onclick = () => { pushUndo(snapSprite()); frame().fill(0); afterCharEdit(); };
 
-  /* ---- frames ---- */
+  /* ---- ANIMATIONS ---- */
+  function drawAnimsUi() {
+    const host = el("anims");
+    host.innerHTML = "";
+    for (const an of Object.keys(cur().anims)) {
+      const b = document.createElement("button");
+      b.textContent = an;
+      if (an === curAnim) b.className = "on";
+      b.onclick = () => {
+        curAnim = an; curFrame = 0; playing = false; playUi();
+        el("anName").value = an;
+        el("fps").value = anim().fps; el("fpsV").textContent = anim().fps;
+        prevDirty = true; drawEdit(); drawAnimsUi(); drawFramesUi();
+      };
+      host.appendChild(b);
+    }
+    el("anDel").disabled = Object.keys(cur().anims).length <= 1;
+    el("anName").value = curAnim;
+  }
+  function freshAnimName(base) {
+    let n = base, i = 2;
+    while (cur().anims[n]) n = base + "-" + i++;
+    return n;
+  }
+  el("anAdd").onclick = () => {
+    if (Object.keys(cur().anims).length >= 8) { toast("8 anims max"); return; }
+    pushUndo(snapChar());
+    const an = freshAnimName("anim");
+    cur().anims[an] = { fps: 6, frames: [frame().slice()] };   // seed from what you see
+    curAnim = an; curFrame = 0;
+    afterCharEdit(); toast("created " + an + " — rename it (idle/walk/attack...)");
+  };
+  el("anDup").onclick = () => {
+    if (Object.keys(cur().anims).length >= 8) { toast("8 anims max"); return; }
+    pushUndo(snapChar());
+    const src = anim();
+    const an = freshAnimName(curAnim);
+    cur().anims[an] = { fps: src.fps, frames: src.frames.map(f => f.slice()) };
+    curAnim = an; curFrame = 0;
+    afterCharEdit(); toast("duplicated as " + an);
+  };
+  el("anDel").onclick = () => {
+    const keys = Object.keys(cur().anims);
+    if (keys.length <= 1) return;
+    pushUndo(snapChar());
+    delete cur().anims[curAnim];
+    curAnim = Object.keys(cur().anims)[0]; curFrame = 0;
+    afterCharEdit(); toast("deleted");
+  };
+  el("anName").onchange = () => {
+    const name = el("anName").value.trim();
+    if (!name || name === curAnim) { el("anName").value = curAnim; return; }
+    if (!ANIM_RE.test(name)) { toast("a-z 0-9 - only, 1..16 chars"); el("anName").value = curAnim; return; }
+    if (cur().anims[name]) { toast("name taken"); el("anName").value = curAnim; return; }
+    pushUndo(snapChar());
+    const rebuilt = {};
+    for (const k of Object.keys(cur().anims)) rebuilt[k === curAnim ? name : k] = cur().anims[k];
+    cur().anims = rebuilt;
+    curAnim = name;
+    afterCharEdit();
+  };
+  el("fps").oninput = () => { anim().fps = +el("fps").value; el("fpsV").textContent = anim().fps; saveCharsSoon(); };
+
+  /* ---- FRAMES ---- */
   function drawFramesUi() {
     const host = el("frames");
     host.innerHTML = "";
-    cur().frames.forEach((f, i) => {
+    anim().frames.forEach((f, i) => {
       const b = document.createElement("button");
       b.textContent = "f" + (i + 1);
       if (i === curFrame) b.className = "on";
+      b.dataset.fi = i;
       b.onclick = () => { curFrame = i; playing = false; playUi(); drawEdit(); drawFramesUi(); prevDirty = true; };
       host.appendChild(b);
     });
-    el("frDel").disabled = cur().frames.length <= 1;
+    el("frDel").disabled = anim().frames.length <= 1;
   }
   el("frAdd").onclick = () => {
-    cur().frames.push(new Uint8Array(N * N * H));
-    curFrame = cur().frames.length - 1;
-    playing = false; playUi();          // show the new frame, don't keep cycling past it
+    if (anim().frames.length >= 16) { toast("16 frames max per anim"); return; }
+    pushUndo(snapChar());
+    anim().frames.push(new Uint8Array(N * N * H));
+    curFrame = anim().frames.length - 1;
+    playing = false; playUi();
     afterCharEdit();
   };
   el("frDup").onclick = () => {
-    cur().frames.splice(curFrame + 1, 0, frame().slice());
+    if (anim().frames.length >= 16) { toast("16 frames max per anim"); return; }
+    pushUndo(snapChar());
+    anim().frames.splice(curFrame + 1, 0, frame().slice());
     curFrame++;
     playing = false; playUi();
-    undoS.length = redoS.length = 0;   // indices after curFrame shifted; stale snapshots would mis-target
     afterCharEdit();
   };
   el("frDel").onclick = () => {
-    if (cur().frames.length <= 1) return;
-    cur().frames.splice(curFrame, 1);
-    curFrame = clamp(curFrame, 0, cur().frames.length - 1);
+    if (anim().frames.length <= 1) return;
+    pushUndo(snapChar());
+    anim().frames.splice(curFrame, 1);
+    curFrame = clamp(curFrame, 0, anim().frames.length - 1);
     playing = false; playUi();
-    undoS.length = redoS.length = 0;   // frame indices shifted; stale snapshots would mis-target
     afterCharEdit();
   };
+  const moveFrame = dir => {
+    const j = curFrame + dir;
+    if (j < 0 || j >= anim().frames.length) return;
+    pushUndo(snapChar());
+    const fr = anim().frames;
+    [fr[curFrame], fr[j]] = [fr[j], fr[curFrame]];
+    curFrame = j;
+    afterCharEdit();
+  };
+  el("frMovL").onclick = () => moveFrame(-1);
+  el("frMovR").onclick = () => moveFrame(1);
   el("onionBtn").onclick = () => { onion = !onion; el("onionBtn").className = onion ? "on" : ""; prevDirty = true; };
   function playUi() { el("playBtn").textContent = playing ? "❚❚ pause" : "▶ play"; el("playBtn").className = playing ? "on" : ""; }
-  el("playBtn").onclick = () => { playing = !playing; playUi(); prevDirty = true; };
-  el("fps").oninput = () => { cur().fps = +el("fps").value; el("fpsV").textContent = cur().fps; saveChars(); };
+  el("playBtn").onclick = () => togglePlay();
+  function togglePlay() {
+    if (playing) { playing = false; curFrame = lastShownFrame; drawEdit(); drawFramesUi(); }
+    else playing = true;
+    playUi(); prevDirty = true;
+  }
 
   /* ---- library controls ---- */
   function charSelUi() {
-    // Rebuilding a <select> resets it to option 0 — remember the demo pick and put it
-    // back if that character still exists, or the arena's brush silently changes.
     const demoKeep = el("demoChar").value;
     for (const sel of [el("charSel"), el("demoChar")]) {
       sel.innerHTML = "";
@@ -811,12 +1045,14 @@
     el("charSel").value = curName;
     el("demoChar").value = chars.has(demoKeep) ? demoKeep : curName;
     el("charName").value = curName;
-    el("fps").value = cur().fps; el("fpsV").textContent = cur().fps;
+    el("fps").value = anim().fps; el("fpsV").textContent = anim().fps;
   }
   function switchChar(name) {
     if (!chars.has(name)) return;
-    curName = name; curFrame = 0; layerZ = clamp(layerZ, 0, H - 1); playing = false;
-    playUi(); charSelUi(); drawEdit(); drawFramesUi(); prevDirty = true;
+    curName = name;
+    curAnim = cur().anims.idle ? "idle" : Object.keys(cur().anims)[0];
+    curFrame = 0; playing = false;
+    playUi(); charSelUi(); drawEdit(); drawAnimsUi(); drawFramesUi(); prevDirty = true;
   }
   el("charSel").onchange = () => switchChar(el("charSel").value);
   function freshName(base) {
@@ -826,25 +1062,24 @@
   }
   el("charNew").onclick = () => {
     const name = freshName("char");
-    chars.set(name, { fps: 6, frames: [new Uint8Array(N * N * H)] });
+    chars.set(name, { anims: { idle: { fps: 6, frames: [new Uint8Array(N * N * H)] } } });
     switchChar(name); saveChars(); toast("created " + name);
   };
   el("charDup").onclick = () => {
     const name = freshName(curName);
-    const src = cur();
-    chars.set(name, { fps: src.fps, frames: src.frames.map(f => f.slice()) });
+    const c = charFromJson(charJson(curName));
+    chars.set(name, { anims: c.anims });
     switchChar(name); saveChars(); toast("duplicated as " + name);
   };
   el("charDel").onclick = () => {
     const dead = curName;
+    pushUndo(snapChar(dead));           // recoverable: ctrl-z resurrects the character
     chars.delete(dead);
-    undoS.length = redoS.length = 0;
-    charVer++;                                        // the name may be recreated later
-    // The arena must not keep invisible ghosts of the dead character.
+    charVer++; sprCache.clear();
     demo.units = demo.units.filter(u => u.name !== dead);
     saveDemo();
     if (!chars.size) chars.set("knight", PRESETS.knight());
-    switchChar(chars.keys().next().value); saveChars(); toast("deleted " + dead);
+    switchChar(chars.keys().next().value); saveChars(); toast("deleted " + dead + " — ctrl-z to undo");
   };
   el("charName").onchange = () => {
     const name = el("charName").value.trim();
@@ -853,43 +1088,60 @@
     if (BAD_NAMES.has(name)) { toast("name not allowed"); el("charName").value = curName; return; }
     chars.set(name, cur());
     chars.delete(curName);
-    // A rename follows the character everywhere: pending undo history, arena units,
-    // and the sprite cache (the old name's cached pixels must never serve the new one).
-    for (const s of undoS) if (s.type === "sprite" && s.name === curName) s.name = name;
-    for (const s of redoS) if (s.type === "sprite" && s.name === curName) s.name = name;
+    for (const s of undoS) if ((s.type === "sprite" || s.type === "char") && s.name === curName) s.name = name;
+    for (const s of redoS) if ((s.type === "sprite" || s.type === "char") && s.name === curName) s.name = name;
     for (const u of demo.units) if (u.name === curName) u.name = name;
     saveDemo();
-    charVer++;
+    charVer++; sprCache.clear();
     curName = name;
     charSelUi(); saveChars(); toast("renamed");
   };
   for (const p of ["Knight", "Archer", "Brute"])
     el("p" + p).onclick = () => {
       const key = p.toLowerCase();
+      if (chars.has(key)) pushUndo(snapChar(key));   // overwrite is undoable now
       const name = chars.has(key) ? key : freshName(key);
       chars.set(name, PRESETS[key]());
-      charVer++;                       // same name, new pixels — the cache must not serve stale
-      undoS.length = redoS.length = 0; // old snapshots target replaced frames
-      switchChar(name); saveChars(); toast("preset " + name);
+      charVer++; sprCache.clear();
+      switchChar(name); saveChars(); toast("preset " + name + (chars.has(key) ? " — ctrl-z restores yours" : ""));
     };
 
-  /* ---- character data i/o ---- */
+  /* ---- data i/o ---- */
   el("exportBtn").onclick = () => { el("io").value = charJson(curName); el("io").select(); };
-  el("importBtn").onclick = () => {
-    try {
-      const c = charFromJson(el("io").value);
-      const replaced = chars.has(c.name);
-      chars.set(c.name, { fps: c.fps, frames: c.frames });
-      charVer++;                       // replacement under an existing name invalidates its cache
-      undoS.length = redoS.length = 0;
-      switchChar(c.name); saveChars();
-      toast(replaced ? `imported ${c.name} (replaced)` : "imported " + c.name);
-    } catch (e) { el("io").value = "import failed: " + e.message; }
-  };
-  function download(name, url) {
-    const a = document.createElement("a");
-    a.href = url; a.download = name; a.click();
+  function importCharText(txt) {
+    const c = charFromJson(txt);
+    if (chars.has(c.name)) pushUndo(snapChar(c.name));
+    chars.set(c.name, { anims: c.anims });
+    charVer++; sprCache.clear();
+    switchChar(c.name); saveChars();
+    toast("imported " + c.name);
   }
+  el("importBtn").onclick = () => {
+    try { importCharText(el("io").value); }
+    catch (e) { el("io").value = "import failed: " + e.message; }
+  };
+  el("dlBtn").onclick = () => dlJson(curName + ".json", charJson(curName));
+  el("dlAllBtn").onclick = () => {
+    const o = Object.create(null);
+    for (const [name] of chars) o[name] = JSON.parse(charJson(name));
+    dlJson("characters.json", JSON.stringify({ v: 1, kind: "charlib", chars: o }));
+  };
+  el("fileIn").addEventListener("change", async ev => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    try {
+      const txt = await f.text();
+      const o = JSON.parse(txt);
+      if (o.kind === "charlib" && o.chars) {
+        for (const k of Object.keys(o.chars)) importCharText(JSON.stringify(o.chars[k]));
+        toast("imported library");
+      }
+      else if (o.kind === "tiles" || o.tiles || o.floor) { loadTiles(txt); afterTiles(); toast("tiles imported"); }
+      else if (o.kind === "vfx") { importVfxText(txt); }
+      else importCharText(txt);
+    } catch (e) { toast("import failed: " + e.message); }
+    ev.target.value = "";
+  });
   el("pngBtn").onclick = () => {
     const cv = document.createElement("canvas");
     cv.width = SPR_W; cv.height = SPR_H;
@@ -897,8 +1149,7 @@
     download(curName + ".png", cv.toDataURL());
   };
   el("sheetBtn").onclick = () => {
-    // all frames x 4 facings — the atlas the game consumes
-    const F = cur().frames.length;
+    const F = anim().frames.length;
     const cv = document.createElement("canvas");
     cv.width = SPR_W * 4 + 6; cv.height = SPR_H * F + 2 * (F - 1);
     const g = cv.getContext("2d");
@@ -906,10 +1157,31 @@
       for (let r = 0; r < 4; r++) {
         const t = document.createElement("canvas");
         t.width = SPR_W; t.height = SPR_H;
-        drawModel(t.getContext("2d"), cur().frames[fi], r, { ink: inkOn ? inkRGB : null });
+        drawModel(t.getContext("2d"), anim().frames[fi], r, { ink: inkOn ? inkRGB : null });
         g.drawImage(t, r * (SPR_W + 2), fi * (SPR_H + 2));
       }
-    download(curName + "-sheet.png", cv.toDataURL());
+    download(`${curName}-${curAnim}-sheet.png`, cv.toDataURL());
+  };
+  // The game's SpriteBank convention: one HORIZONTAL strip per (anim, facing), named
+  // {name}_{anim}_{dir}_{frames}.png — what the engine loads without translation.
+  el("stripsBtn").onclick = () => {
+    const dirs = ["s", "e", "n", "w"];
+    for (const an of Object.keys(cur().anims)) {
+      const a = cur().anims[an], F = a.frames.length;
+      for (let r = 0; r < 4; r++) {
+        const cv = document.createElement("canvas");
+        cv.width = SPR_W * F; cv.height = SPR_H;
+        const g = cv.getContext("2d");
+        for (let fi = 0; fi < F; fi++) {
+          const t = document.createElement("canvas");
+          t.width = SPR_W; t.height = SPR_H;
+          drawModel(t.getContext("2d"), a.frames[fi], r, { ink: inkOn ? inkRGB : null });
+          g.drawImage(t, fi * SPR_W, 0);
+        }
+        download(`${curName}_${an}_${dirs[r]}_${F}.png`, cv.toDataURL());
+      }
+    }
+    toast("strips for every anim x facing");
   };
 
   /* ---- preview ---- */
@@ -923,10 +1195,14 @@
   };
   el("tileBtn").onclick = () => { tileOn = !tileOn; el("tileBtn").className = tileOn ? "on" : ""; prevDirty = true; };
 
-  let lastShownFrame = -1;
+  let lastShownFrame = 0;
   function renderPreview(t) {
-    const F = cur().frames.length;
-    const fi = playing ? ((t / 1000 * cur().fps) | 0) % F : curFrame;
+    const F = anim().frames.length;
+    const fi = playing ? ((t / 1000 * anim().fps) | 0) % F : curFrame;
+    if (playing && fi !== lastShownFrame) {
+      // the strip follows playback, so "that frame where the arm pops" is findable
+      [...el("frames").children].forEach(b => b.className = +b.dataset.fi === fi ? "on" : "");
+    }
     if (!prevDirty && fi === lastShownFrame) return;
     lastShownFrame = fi; prevDirty = false;
     const cv = el("prev");
@@ -936,30 +1212,25 @@
     cv.style.height = (SPR_H * SCALE / dpr) + "px";
     const g = cv.getContext("2d");
     g.clearRect(0, 0, SPR_W, SPR_H);
-    if (onion && !playing && curFrame > 0) {
+    if (onion && !playing && F > 1) {
+      // WRAPPING onion: frame 1 ghosts the LAST frame — cycles live on the loop seam.
       g.globalAlpha = 0.3;
-      g.drawImage(spriteCanvas(curName, rot, curFrame - 1, { ink: null, tile: false }), 0, 0);
+      g.drawImage(spriteCanvas(curName, curAnim, rot, (curFrame - 1 + F) % F, { ink: null, tile: false }), 0, 0);
+      g.globalAlpha = 0.14;
+      g.drawImage(spriteCanvas(curName, curAnim, rot, (curFrame + 1) % F, { ink: null, tile: false }), 0, 0);
       g.globalAlpha = 1;
     }
-    g.drawImage(spriteCanvas(curName, rot, fi, { ink: inkOn ? inkRGB : null, tile: tileOn }), 0, 0);
+    g.drawImage(spriteCanvas(curName, curAnim, rot, fi, { ink: inkOn ? inkRGB : null, tile: tileOn }), 0, 0);
   }
 
   /* =====================================================================================
-     TILES v2 — a LIBRARY with RULES. A tile is a named 16x8 shade face plus the law of
-     where it appears: a ROLE (floor / worn / edge / wall / water), a WEIGHT among its
-     role's rivals, and whether MIRRORING is allowed. One global knob says how much
-     ground stays plain. The JSON is the asset; localStorage "wander.tiles" is the live
-     bridge to the warren viewer, and BoxAssets.TileLibrary parses the same shape.
-     Context law (identical in all three consumers): worn cell -> worn; water -> water;
-     any 4-neighbour void -> edge; any 4-neighbour rock -> wall; else floor. Edge/wall
-     fall back to floor tiles when their role is empty; worn/water never fall back; the
-     plain gate applies only to floor/edge/wall.
+     TILES v2 — library with rules (unchanged model; + fill/pick tools and face shifts).
      ===================================================================================== */
   const TW16 = 16, TH8 = 8, THW = 8, THH = 4;
   const SHK = [0, 0.85, 0.72, 1.08];
   const ROLES = ["floor", "worn", "edge", "wall", "water"];
   let tlib = { plain: 45, tiles: [] };
-  let tSel = 0, shade = 1;
+  let tSel = 0, shade = 1, tTool = "paint";
 
   const dspans = quadSpans([[THW, 0], [THW * 2, THH], [THW, THH * 2], [0, THH]]);
   const inDiamond = (col, row) => {
@@ -968,7 +1239,6 @@
     const [a, b] = dspans.spans[k];
     return col >= a && col < b;
   };
-
   function tGridFrom(rows) {
     const g = new Uint8Array(TW16 * TH8);
     for (let r = 0; r < TH8; r++)
@@ -988,7 +1258,6 @@
     return rows;
   }
   const curTile = () => tlib.tiles[tSel] || null;
-
   function tilesJson() {
     return JSON.stringify({ v: 2, kind: "tiles", plain: tlib.plain,
       tiles: tlib.tiles.map(t => ({ name: t.name, role: t.role, weight: t.weight,
@@ -1001,14 +1270,13 @@
       if (o.tiles.length > 64) throw new Error("too many tiles (max 64)");
       const tiles = [];
       o.tiles.forEach((t, i) => {
-        if (!t || typeof t !== "object" || !ROLES.includes(t.role)) return;   // editor never writes junk; skip it
+        if (!t || typeof t !== "object" || !ROLES.includes(t.role)) return;
         tiles.push({ name: String(t.name || "tile-" + (i + 1)).slice(0, 24), role: t.role,
                      weight: clamp((+t.weight || 1) | 0, 1, 9), mirror: !!t.mirror,
                      grid: tGridFrom(t.grid || []) });
       });
       tlib = { plain: o.plain == null ? 45 : clamp((+o.plain || 0) | 0, 0, 95), tiles };
     } else if (Array.isArray(o.floor) || Array.isArray(o.worn)) {
-      // v1: four floor slots and a trail — converted, empty grids dropped
       const tiles = [];
       (o.floor || []).slice(0, 4).forEach((rows, i) => {
         const g = tGridFrom(rows || []);
@@ -1020,8 +1288,10 @@
     } else throw new Error('not a tile library (want v2 {"tiles":[...]} or v1 {"floor":[...],"worn":[...]})');
     tSel = clamp(tSel, 0, Math.max(0, tlib.tiles.length - 1));
   }
-  function saveTiles() { try { localStorage.setItem("wander.tiles", tilesJson()); } catch (e) {} }
-
+  function saveTiles() {
+    try { localStorage.setItem("wander.tiles", tilesJson()); savedTick(true); }
+    catch (e) { savedTick(false); }
+  }
   const DEFAULT_TILES = { v: 2, kind: "tiles", plain: 45, tiles: [
     { name: "pebbles-a", role: "floor", weight: 3, mirror: true, grid:
       ["................", "......1.........", "..........2.....", "....2...........",
@@ -1048,8 +1318,6 @@
       ["................", "................", "................", "....3...3.......",
        "......3...3.....", "................", "................", "................"] },
   ] };
-
-  /* ---- the shared pick rule — the same law the viewer and the game implement ---- */
   function poolFor(role) {
     let pool = tlib.tiles.filter(t => t.role === role && t.grid.some(v => v));
     if (!pool.length && (role === "edge" || role === "wall"))
@@ -1065,8 +1333,6 @@
     for (const t of pool) { if (r < t.weight) return t; r -= t.weight; }
     return pool[0];
   }
-
-  /* ---- library UI ---- */
   function freshTileName(base) {
     let n = base, i = 2;
     while (tlib.tiles.some(t => t.name === n)) n = base + "-" + i++;
@@ -1103,8 +1369,6 @@
   }
   function tRulesUi() {
     const t = curTile();
-    // The face panel names what it is editing — "am I editing the library tile I
-    // clicked?" should never be a question.
     el("faceTitle").textContent = t
       ? `FACE — editing “${t.name}” · ${t.role} · 16×8`
       : "FACE — no tile selected (create one in the library)";
@@ -1120,10 +1384,9 @@
   }
   function afterTiles(saveIt = true) {
     drawTileList(); tRulesUi(); drawTedit(); drawTprev();
-    demoFloorDirty = true;               // the arena wears this library — never let it go stale
+    demoFloorDirty = true;
     if (saveIt) saveTiles();
   }
-
   el("tNew").onclick = () => {
     if (tlib.tiles.length >= 64) { toast("library full (64)"); return; }
     pushUndo(snapTileLib());
@@ -1147,8 +1410,9 @@
     const dead = tlib.tiles[tSel].name;
     tlib.tiles.splice(tSel, 1);
     tSel = clamp(tSel, 0, Math.max(0, tlib.tiles.length - 1));
-    afterTiles(); toast("deleted " + dead);
+    afterTiles(); toast("deleted " + dead + " — ctrl-z to undo");
   };
+  el("tDlBtn").onclick = () => dlJson("tiles.json", tilesJson());
   el("tileName").onchange = () => {
     const t = curTile();
     if (!t) return;
@@ -1180,13 +1444,18 @@
     tlib.plain = +el("plainPct").value; el("plainPctV").textContent = tlib.plain;
     drawTprev(); demoFloorDirty = true; saveTiles();
   };
-
   const shadeBtns = { 1: "sh1", 2: "sh2", 3: "sh3", 0: "shE" };
-  function shadeUi() { for (const k in shadeBtns) el(shadeBtns[k]).className = +k === shade ? "on" : ""; }
-  el("sh1").onclick = () => { shade = 1; shadeUi(); };
-  el("sh2").onclick = () => { shade = 2; shadeUi(); };
-  el("sh3").onclick = () => { shade = 3; shadeUi(); };
-  el("shE").onclick = () => { shade = 0; shadeUi(); };
+  function shadeUi() {
+    for (const k in shadeBtns) el(shadeBtns[k]).className = +k === shade && tTool === "paint" ? "on" : "";
+    el("tFillBtn").className = tTool === "fill" ? "on" : "";
+    el("tPickBtn").className = tTool === "pick" ? "on" : "";
+  }
+  el("sh1").onclick = () => { shade = 1; tTool = "paint"; shadeUi(); };
+  el("sh2").onclick = () => { shade = 2; tTool = "paint"; shadeUi(); };
+  el("sh3").onclick = () => { shade = 3; tTool = "paint"; shadeUi(); };
+  el("shE").onclick = () => { shade = 0; tTool = "paint"; shadeUi(); };
+  el("tFillBtn").onclick = () => { tTool = "fill"; shadeUi(); };
+  el("tPickBtn").onclick = () => { tTool = "pick"; shadeUi(); };
   el("tClear").onclick = () => {
     if (!curTile()) return;
     pushUndo(snapTile()); curTile().grid.fill(0); afterTiles();
@@ -1195,8 +1464,6 @@
   el("tRedoBtn").onclick = doRedo;
   el("tExport").onclick = () => { el("tio").value = tilesJson(); el("tio").select(); };
   el("tImport").onclick = () => {
-    // Snapshot the WHOLE library, push only on success: a failed paste must not spend
-    // the redo stack, and undo of an import restores everything, not one tile.
     const before = snapTileLib();
     try {
       loadTiles(el("tio").value);
@@ -1206,8 +1473,22 @@
     }
     catch (e) { el("tio").value = "import failed: " + e.message; }
   };
+  function shiftTileFace(dc, dr) {
+    if (!curTile()) return;
+    pushUndo(snapTile());
+    const src = curTile().grid.slice(), dst = curTile().grid;
+    dst.fill(0);
+    for (let r = 0; r < TH8; r++)
+      for (let c = 0; c < TW16; c++) {
+        const v = src[r * TW16 + c];
+        if (!v) continue;
+        const nc = c + dc, nr = r + dr;
+        if (nc < 0 || nc >= TW16 || nr < 0 || nr >= TH8) continue;
+        dst[nr * TW16 + nc] = v;
+      }
+    afterTiles();
+  }
 
-  /* ---- the face editor ---- */
   const CELLT = 28;
   const tedit = el("tedit");
   tedit.width = TW16 * CELLT + 1; tedit.height = TH8 * CELLT + 1;
@@ -1229,13 +1510,31 @@
     g.stroke();
   }
   let tPainting = 0, tStrokeSnap = null;
+  function tFillFace(c0, r0, v) {
+    const g = curTile().grid;
+    const from = g[r0 * TW16 + c0];
+    if (from === v) return;
+    const q = [[c0, r0]];
+    while (q.length) {
+      const [c, r] = q.pop();
+      if (c < 0 || r < 0 || c >= TW16 || r >= TH8 || !inDiamond(c, r) || g[r * TW16 + c] !== from) continue;
+      g[r * TW16 + c] = v;
+      q.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+    }
+  }
   function tApply(ev) {
     if (!curTile()) return;
     const r = tedit.getBoundingClientRect();
     const c = Math.floor((ev.clientX - r.left) / CELLT), row = Math.floor((ev.clientY - r.top) / CELLT);
     if (c < 0 || row < 0 || c >= TW16 || row >= TH8 || !inDiamond(c, row)) return;
+    if (tTool === "pick" && tPainting !== 2) {
+      const v = curTile().grid[row * TW16 + c];
+      shade = v || shade; tTool = "paint"; shadeUi(); toast("picked shade " + (v || "none"));
+      return;
+    }
     if (tStrokeSnap) { pushUndo(tStrokeSnap); tStrokeSnap = null; }
-    curTile().grid[row * TW16 + c] = tPainting === 2 ? 0 : shade;
+    if (tTool === "fill" && tPainting !== 2) tFillFace(c, row, shade);
+    else curTile().grid[row * TW16 + c] = tPainting === 2 ? 0 : shade;
     afterTiles();
   }
   tedit.addEventListener("contextmenu", e => e.preventDefault());
@@ -1250,7 +1549,6 @@
   tedit.addEventListener("pointermove", e => { if (tPainting) tApply(e); });
   tedit.addEventListener("pointerup", () => { tPainting = 0; tStrokeSnap = null; });
 
-  /* ---- tile stamp: sample a 16x8 face onto a diamond of half-width hw / half-height hh */
   function stampFace(g, cx, cyTop, grid, k, hw, hh, flip) {
     const pts = [[cx, cyTop], [cx + hw, cyTop + hh], [cx, cyTop + 2 * hh], [cx - hw, cyTop + hh]];
     const { y0, spans } = quadSpans(pts);
@@ -1265,19 +1563,17 @@
       }
     }
   }
-
-  /* ---- the preview: a little world with every context in it ---- */
   const PV = 7;
-  const PV_VOID = new Set(["6,0", "5,0", "6,1"]);              // a notch of void — its rim is EDGE
-  const PV_ROCK = new Set(["2,4", "4,2"]);                     // blocks — their sides are WALL
-  const PV_WATER = new Set(["1,5", "0,5"]);                    // a pool — WATER
-  const PV_WORN = new Set(["3,0", "3,1", "3,2", "4,3", "4,4", "5,5"]);  // the trail — WORN
+  const PV_VOID = new Set(["6,0", "5,0", "6,1"]);
+  const PV_ROCK = new Set(["2,4", "4,2"]);
+  const PV_WATER = new Set(["1,5", "0,5"]);
+  const PV_WORN = new Set(["3,0", "3,1", "3,2", "4,3", "4,4", "5,5"]);
   function pvContext(x, y) {
     const key = x + "," + y;
     if (PV_WORN.has(key)) return "worn";
     if (PV_WATER.has(key)) return "water";
     const n = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
-    if (n.some(([nx, ny]) => PV_VOID.has(nx + "," + ny) )) return "edge";
+    if (n.some(([nx, ny]) => PV_VOID.has(nx + "," + ny))) return "edge";
     if (n.some(([nx, ny]) => PV_ROCK.has(nx + "," + ny))) return "wall";
     return "floor";
   }
@@ -1311,74 +1607,400 @@
   }
 
   /* =====================================================================================
-     DEMO — the arena. Your tiles underfoot, your characters on top, everything animated,
-     rendered with the game's exact look. Tile here is 40x20 so a 10-voxel footprint fits
-     a cell exactly: the character's ground plane IS the tile.
+     VFX — 24x24 pixel overlay animations (slashes, impacts). '.'/index encoding, played
+     once over a cell or unit. Library under localStorage "wander.vfx".
      ===================================================================================== */
-  const DP = 10;                       // arena is DP x DP cells
-  const DHW = N * HWv, DHH = N * HHv;  // 20 x 10 — one cell = one character footprint
-  let demoTool = "place", demoRotV = 0, demoScale = 3, demoAnim = true;
-  let demo = { worn: [], units: [] };  // worn: ["x,y"], units: [{name, rot, x, y, phase}]
+  const VW = 24, VH = 24, VMAXF = 16;
+  const vlib = new Map();           // name -> { fps, frames: [Uint8Array(VW*VH)] }
+  let vName = null, vFrame = 0, vColr = 21, vOnionOn = true, vPlaying = false;
 
-  function saveDemo() { try { localStorage.setItem("wander.demo", JSON.stringify(demo)); } catch (e) {} }
-  // Seed the default scene ONLY when nothing was ever saved: an intentionally cleared
-  // arena is a saved state, and repopulating it on reload is data loss, not hospitality.
+  const vfxJson = name => {
+    const v = vlib.get(name);
+    return JSON.stringify({ v: 1, kind: "vfx", name, w: VW, h: VH, fps: v.fps,
+      frames: v.frames.map(f => {
+        const rows = [];
+        for (let y = 0; y < VH; y++) {
+          let s = "";
+          for (let x = 0; x < VW; x++) { const p = f[y * VW + x]; s += p ? B32[p - 1] : "."; }
+          rows.push(s);
+        }
+        return rows;
+      }) });
+  };
+  const vfxJsonAll = () => {
+    const o = Object.create(null);
+    for (const [name] of vlib) o[name] = JSON.parse(vfxJson(name));
+    return JSON.stringify(o);
+  };
+  function vfxFromJson(txt) {
+    const o = typeof txt === "string" ? JSON.parse(txt) : txt;
+    if (o.kind !== "vfx") throw new Error('kind must be "vfx"');
+    if (o.w != null && +o.w !== VW || o.h != null && +o.h !== VH)
+      throw new Error(`this build authors ${VW}x${VH} vfx`);
+    const frames = (o.frames || []).slice(0, VMAXF).map(rows => {
+      const f = new Uint8Array(VW * VH);
+      for (let y = 0; y < Math.min(VH, rows.length); y++) {
+        const row = rows[y] || "";
+        for (let x = 0; x < Math.min(VW, row.length); x++) {
+          const idx = B32.indexOf(row[x]);
+          if (idx >= 0) f[y * VW + x] = idx + 1;
+        }
+      }
+      return f;
+    });
+    if (!frames.length) throw new Error("no frames");
+    let name = String(o.name || "vfx");
+    if (BAD_NAMES.has(name)) name = "vfx";
+    return { name, fps: clamp(+o.fps || 12, 1, 24), frames };
+  }
+  function loadVfxAll(txt) {
+    const o = JSON.parse(txt);
+    vlib.clear();
+    for (const k of Object.keys(o)) {
+      try { const v = vfxFromJson(JSON.stringify(o[k])); vlib.set(v.name, { fps: v.fps, frames: v.frames }); }
+      catch (e) {}
+    }
+    if (!vlib.size) seedVfx();
+    if (!vlib.has(vName)) vName = vlib.keys().next().value;
+    vFrame = 0;
+  }
+  function saveVfx() {
+    try { localStorage.setItem("wander.vfx", vfxJsonAll()); savedTick(true); }
+    catch (e) { savedTick(false); }
+  }
+  // A starter slash: a pale arc sweeping across three frames — proof of the format and
+  // something to fire in the arena on day one.
+  function seedVfx() {
+    const mk = pts => {
+      const f = new Uint8Array(VW * VH);
+      for (const [x, y, c] of pts) if (x >= 0 && x < VW && y >= 0 && y < VH) f[y * VW + x] = c + 1;
+      return f;
+    };
+    const arc = (cx, cy, r0, r1, a0, a1, c) => {
+      const pts = [];
+      for (let a = a0; a <= a1; a += 0.08)
+        for (let r = r0; r <= r1; r += 0.5)
+          pts.push([Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * 0.6), c]);
+      return pts;
+    };
+    vlib.set("slash", { fps: 14, frames: [
+      mk(arc(12, 12, 8, 9, -2.4, -1.2, 21)),
+      mk([...arc(12, 12, 8, 10, -1.6, 0.2, 21), ...arc(12, 12, 6, 7, -1.2, 0.0, 20)]),
+      mk(arc(12, 12, 8, 10, -0.2, 1.0, 22)),
+    ] });
+    vlib.set("hit", { fps: 12, frames: [
+      mk([[12, 12, 21], [11, 12, 21], [13, 12, 21], [12, 11, 21], [12, 13, 21]]),
+      mk([[9, 12, 8], [15, 12, 8], [12, 9, 8], [12, 15, 8], [10, 10, 21], [14, 14, 21], [10, 14, 21], [14, 10, 21]]),
+      mk([[7, 12, 24], [17, 12, 24], [12, 7, 24], [12, 16, 24]]),
+    ] });
+    vName = "slash";
+  }
+
+  const curVfx = () => vlib.get(vName) || null;
+  function afterVfx(saveIt = true) {
+    drawVfxList(); drawVedit(); drawVFramesUi();
+    if (saveIt) saveVfx();
+  }
+  const vpal = el("vpal");
+  DB32.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.style.background = rgb(c);
+    d.title = "index " + i;
+    d.onclick = () => { vColr = i; [...vpal.children].forEach((e, j) => e.className = j === i ? "on" : ""); };
+    vpal.appendChild(d);
+  });
+  [...vpal.children].forEach((e, j) => e.className = j === vColr ? "on" : "");
+  el("vErase").onclick = () => { vColr = -1; [...vpal.children].forEach(e => e.className = ""); };
+
+  const VCELL = 16;
+  const vedit = el("vedit");
+  vedit.width = VW * VCELL + 1; vedit.height = VH * VCELL + 1;
+  function drawVedit() {
+    const g = vedit.getContext("2d");
+    g.fillStyle = "#0d0c12"; g.fillRect(0, 0, vedit.width, vedit.height);
+    const v = curVfx();
+    el("vfxTitle").textContent = v ? `CANVAS — editing “${vName}” · ${VW}×${VH}` : "CANVAS — no vfx selected";
+    if (!v) return;
+    const f = v.frames[vFrame];
+    const prev = vOnionOn && v.frames.length > 1 ? v.frames[(vFrame - 1 + v.frames.length) % v.frames.length] : null;
+    for (let y = 0; y < VH; y++)
+      for (let x = 0; x < VW; x++) {
+        const p = f[y * VW + x];
+        if (p) {
+          g.fillStyle = rgb(DB32[p - 1]);
+          g.fillRect(x * VCELL + 1, y * VCELL + 1, VCELL - 1, VCELL - 1);
+        } else if (prev && prev[y * VW + x]) {
+          const c = DB32[prev[y * VW + x] - 1];
+          g.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.25)`;
+          g.fillRect(x * VCELL + 1, y * VCELL + 1, VCELL - 1, VCELL - 1);
+        }
+      }
+    g.strokeStyle = "#2a2836";
+    g.beginPath();
+    for (let i = 0; i <= VW; i++) { g.moveTo(i * VCELL + 0.5, 0); g.lineTo(i * VCELL + 0.5, VH * VCELL); }
+    for (let i = 0; i <= VH; i++) { g.moveTo(0, i * VCELL + 0.5); g.lineTo(VW * VCELL, i * VCELL + 0.5); }
+    g.stroke();
+  }
+  let vPaint = 0, vSnap = null;
+  function vApply(ev) {
+    const v = curVfx();
+    if (!v) return;
+    const r = vedit.getBoundingClientRect();
+    const x = Math.floor((ev.clientX - r.left) / VCELL), y = Math.floor((ev.clientY - r.top) / VCELL);
+    if (x < 0 || y < 0 || x >= VW || y >= VH) return;
+    if (vSnap) { pushUndo(vSnap); vSnap = null; }
+    v.frames[vFrame][y * VW + x] = vPaint === 2 || vColr < 0 ? 0 : vColr + 1;
+    afterVfx();
+  }
+  vedit.addEventListener("contextmenu", e => e.preventDefault());
+  vedit.addEventListener("pointerdown", e => {
+    if (e.button !== 0 && e.button !== 2) return;
+    if (!curVfx()) return;
+    vSnap = snapVfxLib();
+    vPaint = e.button === 2 ? 2 : 1;
+    vedit.setPointerCapture(e.pointerId);
+    vApply(e);
+  });
+  vedit.addEventListener("pointermove", e => { if (vPaint) vApply(e); });
+  vedit.addEventListener("pointerup", () => { vPaint = 0; vSnap = null; });
+
+  function drawVfxList() {
+    const host = el("vfxList");
+    host.innerHTML = "";
+    for (const [name, v] of vlib) {
+      const d = document.createElement("div");
+      d.style.cssText = "cursor:pointer;text-align:center;padding:4px;border-radius:4px;border:1px solid " +
+        (name === vName ? "#5b6ee1;background:#211f2d" : "#2a2836");
+      const cv = document.createElement("canvas");
+      cv.width = VW; cv.height = VH;
+      const g = cv.getContext("2d");
+      const f = v.frames[Math.min(1, v.frames.length - 1)];
+      for (let i = 0; i < f.length; i++)
+        if (f[i]) { g.fillStyle = rgb(DB32[f[i] - 1]); g.fillRect(i % VW, (i / VW) | 0, 1, 1); }
+      cv.style.cssText = "image-rendering:pixelated;width:48px;height:48px;display:block;background:#000";
+      const lab = document.createElement("div");
+      lab.textContent = `${name} · ${v.frames.length}f`;
+      lab.style.cssText = "font-size:9px;color:#847e87;max-width:64px;overflow:hidden";
+      d.append(cv, lab);
+      d.onclick = () => { vName = name; vFrame = 0; vPlaying = false; vPlayUi(); afterVfx(false); vRulesUi(); };
+      host.appendChild(d);
+    }
+    drawDemoVfxSel();
+  }
+  function vRulesUi() {
+    const v = curVfx();
+    el("vName").value = vName || "";
+    if (v) { el("vFps").value = v.fps; el("vFpsV").textContent = v.fps; }
+  }
+  function drawVFramesUi() {
+    const host = el("vframes");
+    host.innerHTML = "";
+    const v = curVfx();
+    if (!v) return;
+    v.frames.forEach((f, i) => {
+      const b = document.createElement("button");
+      b.textContent = "f" + (i + 1);
+      if (i === vFrame) b.className = "on";
+      b.onclick = () => { vFrame = i; vPlaying = false; vPlayUi(); drawVedit(); drawVFramesUi(); };
+      host.appendChild(b);
+    });
+    el("vfDel").disabled = v.frames.length <= 1;
+  }
+  function vPlayUi() { el("vPlay").textContent = vPlaying ? "❚❚ pause" : "▶ play"; el("vPlay").className = vPlaying ? "on" : ""; }
+  el("vPlay").onclick = () => { vPlaying = !vPlaying; vPlayUi(); };
+  el("vOnion").onclick = () => { vOnionOn = !vOnionOn; el("vOnion").className = vOnionOn ? "on" : ""; drawVedit(); };
+  el("vfAdd").onclick = () => {
+    const v = curVfx();
+    if (!v || v.frames.length >= VMAXF) return;
+    pushUndo(snapVfxLib());
+    v.frames.push(new Uint8Array(VW * VH));
+    vFrame = v.frames.length - 1;
+    afterVfx();
+  };
+  el("vfDup").onclick = () => {
+    const v = curVfx();
+    if (!v || v.frames.length >= VMAXF) return;
+    pushUndo(snapVfxLib());
+    v.frames.splice(vFrame + 1, 0, v.frames[vFrame].slice());
+    vFrame++;
+    afterVfx();
+  };
+  el("vfDel").onclick = () => {
+    const v = curVfx();
+    if (!v || v.frames.length <= 1) return;
+    pushUndo(snapVfxLib());
+    v.frames.splice(vFrame, 1);
+    vFrame = clamp(vFrame, 0, v.frames.length - 1);
+    afterVfx();
+  };
+  function freshVfxName(base) {
+    let n = base, i = 2;
+    while (vlib.has(n)) n = base + "-" + i++;
+    return n;
+  }
+  el("vNew").onclick = () => {
+    pushUndo(snapVfxLib());
+    const n = freshVfxName("vfx");
+    vlib.set(n, { fps: 12, frames: [new Uint8Array(VW * VH)] });
+    vName = n; vFrame = 0;
+    afterVfx(); vRulesUi(); toast("created " + n);
+  };
+  el("vDup").onclick = () => {
+    const v = curVfx();
+    if (!v) return;
+    pushUndo(snapVfxLib());
+    const n = freshVfxName(vName);
+    vlib.set(n, { fps: v.fps, frames: v.frames.map(f => f.slice()) });
+    vName = n; vFrame = 0;
+    afterVfx(); vRulesUi(); toast("duplicated as " + n);
+  };
+  el("vDel").onclick = () => {
+    if (!curVfx()) return;
+    pushUndo(snapVfxLib());
+    vlib.delete(vName);
+    if (!vlib.size) seedVfx();
+    vName = vlib.keys().next().value; vFrame = 0;
+    afterVfx(); vRulesUi(); toast("deleted — ctrl-z to undo");
+  };
+  el("vName").onchange = () => {
+    const name = el("vName").value.trim().slice(0, 24);
+    if (!name || name === vName || vlib.has(name) || BAD_NAMES.has(name)) { vRulesUi(); return; }
+    pushUndo(snapVfxLib());
+    vlib.set(name, vlib.get(vName));
+    vlib.delete(vName);
+    for (const fx of demo.fx) if (fx.name === vName) fx.name = name;
+    vName = name;
+    afterVfx(); vRulesUi();
+  };
+  el("vFps").oninput = () => {
+    const v = curVfx();
+    if (!v) return;
+    v.fps = +el("vFps").value; el("vFpsV").textContent = v.fps; saveVfx();
+  };
+  el("vExport").onclick = () => { el("vio").value = vfxJson(vName); el("vio").select(); };
+  function importVfxText(txt) {
+    const v = vfxFromJson(txt);
+    pushUndo(snapVfxLib());
+    vlib.set(v.name, { fps: v.fps, frames: v.frames });
+    vName = v.name; vFrame = 0;
+    afterVfx(); vRulesUi(); toast("imported " + v.name);
+  }
+  el("vImport").onclick = () => {
+    try { importVfxText(el("vio").value); }
+    catch (e) { el("vio").value = "import failed: " + e.message; }
+  };
+  el("vDlBtn").onclick = () => dlJson(vName + ".json", vfxJson(vName));
+
+  function renderVfxPreview(t) {
+    const v = curVfx();
+    const cv = el("vprev");
+    const S = 6;
+    if (cv.width !== VW + 16 || cv.height !== VH + 16) { cv.width = VW + 16; cv.height = VH + 16; }
+    const dpr = window.devicePixelRatio || 1;
+    cv.style.width = ((VW + 16) * S / dpr) + "px"; cv.style.height = ((VH + 16) * S / dpr) + "px";
+    const g = cv.getContext("2d");
+    g.clearRect(0, 0, cv.width, cv.height);
+    // a unit behind the vfx, so a slash is judged over what it will actually hit
+    const spr = spriteCanvas(curName, curAnim, 0, 0, { ink: inkRGB, tile: false });
+    if (spr) g.drawImage(spr, ((cv.width - SPR_W) / 2) | 0, cv.height - SPR_H - 1);
+    if (!v) return;
+    const fi = vPlaying ? ((t / 1000 * v.fps) | 0) % v.frames.length : vFrame;
+    const f = v.frames[fi];
+    const ox = ((cv.width - VW) / 2) | 0, oy = ((cv.height - VH) / 2) | 0;
+    for (let i = 0; i < f.length; i++)
+      if (f[i]) { g.fillStyle = rgb(DB32[f[i] - 1]); g.fillRect(ox + i % VW, oy + ((i / VW) | 0), 1, 1); }
+  }
+
+  /* =====================================================================================
+     DEMO — TRUE WORLD SCALE. Tiles are the game's real size (16/24/32 selectable);
+     characters render at native voxel scale and OVERFLOW cells exactly as in-game.
+     Terrain brushes stage every context: rock (wall), void (edge), water, worn.
+     ===================================================================================== */
+  const DP = 12;
+  let DTILE = 16;
+  let DHW = DTILE / 2, DHH = DTILE / 4, DUNIT = DTILE / 4;
+  let demoTool = "place", demoRotV = 0, demoScale = 3, demoAnim = true, demoBrush = null;
+  let demo = { worn: [], rocks: [], water: [], voids: [], units: [], fx: [] };
+
+  function saveDemo() {
+    try { localStorage.setItem("wander.demo", JSON.stringify({ ...demo, fx: [] })); }
+    catch (e) {}
+  }
   let demoLoaded = false;
   try {
     const d = JSON.parse(localStorage.getItem("wander.demo") || "null");
-    if (d && Array.isArray(d.worn) && Array.isArray(d.units)) {
-      // Sanitize CONTENTS, not just the envelope: a null unit or non-numeric phase in
-      // stored data threw a TypeError on every animation frame — and re-saved itself.
+    if (d && Array.isArray(d.units)) {
+      const strs = a => (Array.isArray(a) ? a : []).filter(w => typeof w === "string");
       demo = {
-        worn: d.worn.filter(w => typeof w === "string"),
-        units: d.units
-          .filter(u => u && typeof u === "object" && typeof u.name === "string")
-          .map(u => ({
-            name: u.name, rot: (+u.rot || 0) & 3,
-            x: clamp((+u.x || 0) | 0, 0, DP - 1), y: clamp((+u.y || 0) | 0, 0, DP - 1),
-            phase: (+u.phase || 0) | 0,
-          })),
+        worn: strs(d.worn), rocks: strs(d.rocks), water: strs(d.water), voids: strs(d.voids), fx: [],
+        units: d.units.filter(u => u && typeof u === "object" && typeof u.name === "string")
+          .map(u => ({ name: u.name, rot: (+u.rot || 0) & 3,
+                       x: clamp((+u.x || 0) | 0, 0, DP - 1), y: clamp((+u.y || 0) | 0, 0, DP - 1),
+                       phase: (+u.phase || 0) | 0 })),
       };
       demoLoaded = true;
     }
   } catch (e) {}
   if (!demoLoaded && chars.size) {
     const names = [...chars.keys()];
-    demo.units = names.slice(0, 3).map((name, i) => ({ name, rot: i % 4, x: 2 + i * 2, y: 3 + i * 2, phase: i }));
-    demo.worn = ["4,4", "5,4", "5,5", "6,5", "6,6", "3,4", "7,6"];
+    demo.units = names.slice(0, 3).map((name, i) => ({ name, rot: i % 4, x: 3 + i * 2, y: 4 + i * 2, phase: i }));
+    demo.worn = ["5,5", "6,5", "6,6", "7,6", "7,7", "4,5"];
+    demo.rocks = ["9,3", "9,4", "2,8"];
+    demo.water = ["2,2", "3,2", "3,3"];
+    demo.voids = ["11,0", "11,1", "10,0"];
   }
+  const dkey = (x, y) => x + "," + y;
+  const inSet = (arr, x, y) => arr.includes(dkey(x, y));
 
   const demoCv = el("demoCv");
-  const DW = 2 * DP * DHW + 2;
-  const DHp = 2 * DP * DHH + H * UNITv + 2;
-  const DOX = DP * DHW + 1, DOY = H * UNITv;
-  demoCv.width = DW; demoCv.height = DHp;
-
   const demoFloor = document.createElement("canvas");
-  demoFloor.width = DW; demoFloor.height = DHp;
   let demoFloorDirty = true;
+  let DW = 0, DHp = 0, DOX = 0, DOY = 0;
+  function demoMetrics() {
+    DHW = DTILE / 2; DHH = DTILE / 4; DUNIT = DTILE / 4;
+    DW = 2 * DP * DHW + 2;
+    DHp = 2 * DP * DHH + SPR_H + 2;
+    DOX = DP * DHW + 1;
+    DOY = SPR_H - N * HHv;      // room above for characters that overflow upward
+    if (demoCv.width !== DW || demoCv.height !== DHp) { demoCv.width = DW; demoCv.height = DHp; }
+    if (demoFloor.width !== DW || demoFloor.height !== DHp) { demoFloor.width = DW; demoFloor.height = DHp; }
+  }
+  demoMetrics();
 
+  function demoCtxOf(x, y) {
+    if (inSet(demo.worn, x, y)) return "worn";
+    if (inSet(demo.water, x, y)) return "water";
+    const nb = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+    if (nb.some(([a, b]) => a < 0 || b < 0 || a >= DP || b >= DP || inSet(demo.voids, a, b))) return "edge";
+    if (nb.some(([a, b]) => inSet(demo.rocks, a, b))) return "wall";
+    return "floor";
+  }
   function drawDemoFloor() {
+    demoMetrics();
     const g = demoFloor.getContext("2d");
     g.clearRect(0, 0, DW, DHp);
     for (let y = 0; y < DP; y++)
       for (let x = 0; x < DP; x++) {
+        if (inSet(demo.voids, x, y) || inSet(demo.rocks, x, y)) continue;
         const cx = DOX + (x - y) * DHW, cy = DOY + (x + y) * DHH;
-        const k = (x + y) & 1 ? 1 : 0.88;
+        const water = inSet(demo.water, x, y);
+        const k = water ? 0.72 : ((x + y) & 1 ? 1 : 0.88);
         rQuad(g, [[cx, cy], [cx + DHW, cy + DHH], [cx, cy + 2 * DHH], [cx - DHW, cy + DHH]], rgb(MONO, k));
-        const worn = demo.worn.includes(x + "," + y);
         const h = (x * 73856093 ^ y * 19349663) >>> 0;
-        // Same context law as the game: the arena's perimeter borders the void -> EDGE.
-        const ctx = worn ? "worn"
-                  : (x === 0 || y === 0 || x === DP - 1 || y === DP - 1) ? "edge" : "floor";
-        const t = pickTile(ctx, h);
+        const t = pickTile(demoCtxOf(x, y), h);
         if (t) stampFace(g, cx, cy, t.grid, k, DHW, DHH, t.mirror && !!(h & 32));
       }
-    // the arena's own silhouette — the same ink that rims the game's ground
     inkPass(g, DW, DHp, [34, 32, 52]);
     demoFloorDirty = false;
   }
-
+  function drawRock(g, x, y) {
+    const cx = DOX + (x - y) * DHW, cy = DOY + (x + y) * DHH + DHH;   // cell centre
+    const hgt = 2 * DUNIT;
+    const yT = cy - hgt;
+    rQuad(g, [[cx - DHW, yT], [cx, yT + DHH], [cx, cy + DHH], [cx - DHW, cy]], rgb(MONO, 0.5 * KL / KTOP + 0.2));
+    rQuad(g, [[cx + DHW, yT], [cx, yT + DHH], [cx, cy + DHH], [cx + DHW, cy]], rgb(MONO, 0.28));
+    rQuad(g, [[cx, yT - DHH], [cx + DHW, yT], [cx, yT + DHH], [cx - DHW, yT]], rgb(MONO, 0.5));
+  }
   function renderDemo(t) {
     if (demoFloorDirty) drawDemoFloor();
     const dpr = window.devicePixelRatio || 1;
@@ -1387,24 +2009,55 @@
     const g = demoCv.getContext("2d");
     g.clearRect(0, 0, DW, DHp);
     g.drawImage(demoFloor, 0, 0);
-    const sorted = [...demo.units].sort((a, b) => (a.x + a.y) - (b.x + b.y));
-    for (const u of sorted) {
-      const c = chars.get(u.name);
+    // rocks and units interleave in painter order so tall things occlude correctly
+    const things = [
+      ...demo.rocks.map(k => { const [x, y] = k.split(",").map(Number); return { kind: "rock", x, y }; }),
+      ...demo.units.map(u => ({ kind: "unit", ...u, u })),
+    ].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    for (const th of things) {
+      if (th.kind === "rock") { drawRock(g, th.x, th.y); continue; }
+      const c = chars.get(th.name);
       if (!c) continue;
-      const F = c.frames.length;
-      const fi = demoAnim ? (((t / 1000 * c.fps) | 0) + (u.phase || 0)) % F : 0;
-      const spr = spriteCanvas(u.name, u.rot, fi, { ink: inkOn ? inkRGB : null, tile: false });
-      const cx = DOX + (u.x - u.y) * DHW, cy = DOY + (u.x + u.y) * DHH + DHH;
-      g.drawImage(spr, cx - SPR_OX, cy - SPR_GY);
+      const an = c.anims.idle ? "idle" : Object.keys(c.anims)[0];
+      const F = c.anims[an].frames.length;
+      const fi = demoAnim ? (((t / 1000 * c.anims[an].fps) | 0) + (th.phase || 0)) % F : 0;
+      const cx = DOX + (th.x - th.y) * DHW, cy = DOY + (th.x + th.y) * DHH + DHH;
+      // contact shadow: a half-size valhalla diamond under the feet grounds the sprite
+      rQuad(g, [[cx, cy - DHH * 0.5], [cx + DHW * 0.5, cy], [cx, cy + DHH * 0.5], [cx - DHW * 0.5, cy]], "rgb(34,32,52)");
+      const spr = spriteCanvas(th.name, an, th.rot, fi, { ink: inkOn ? inkRGB : null, tile: false });
+      g.drawImage(spr, (cx - SPR_OX) | 0, (cy - SPR_GY) | 0);
     }
+    // vfx overlays: play once, then evaporate
+    demo.fx = demo.fx.filter(fx => {
+      const v = vlib.get(fx.name);
+      if (!v) return false;
+      if (fx.t0 == null) fx.t0 = t;
+      const fi = ((t - fx.t0) / 1000 * v.fps) | 0;
+      if (fi >= v.frames.length) return false;
+      const cx = DOX + (fx.x - fx.y) * DHW, cy = DOY + (fx.x + fx.y) * DHH + DHH;
+      const f = v.frames[fi];
+      const ox = (cx - VW / 2) | 0, oy = (cy - VH + 4 - N * HHv) | 0;   // centred over the unit's body
+      for (let i = 0; i < f.length; i++)
+        if (f[i]) { g.fillStyle = rgb(DB32[f[i] - 1]); g.fillRect(ox + i % VW, oy + ((i / VW) | 0), 1, 1); }
+      return true;
+    });
   }
-
   function demoCell(ev) {
     const r = demoCv.getBoundingClientRect();
     const px = (ev.clientX - r.left) * (DW / r.width), py = (ev.clientY - r.top) * (DHp / r.height);
-    const a = (px - DOX) / DHW, b = (py - DOY) / DHH - 1;   // -1: pick against cell centres
+    const a = (px - DOX) / DHW, b = (py - DOY) / DHH - 1;
     const x = Math.round((a + b) / 2), y = Math.round((b - a) / 2);
     return x >= 0 && x < DP && y >= 0 && y < DP ? [x, y] : null;
+  }
+  let dPainting = false;
+  function applyBrush(x, y, erase) {
+    for (const arr of [demo.worn, demo.rocks, demo.water, demo.voids]) {
+      const i = arr.indexOf(dkey(x, y));
+      if (i >= 0) arr.splice(i, 1);
+    }
+    if (!erase && demoBrush && demoBrush !== "floor")
+      demo[{ worn: "worn", rock: "rocks", water: "water", void: "voids" }[demoBrush]].push(dkey(x, y));
+    demoFloorDirty = true; saveDemo();
   }
   demoCv.addEventListener("contextmenu", e => e.preventDefault());
   demoCv.addEventListener("pointerdown", ev => {
@@ -1413,12 +2066,8 @@
     if (!cell) return;
     const [x, y] = cell;
     const erase = ev.button === 2;
-    if (demoTool === "worn" && !erase) {
-      const key = x + "," + y;
-      const i = demo.worn.indexOf(key);
-      if (i >= 0) demo.worn.splice(i, 1); else demo.worn.push(key);
-      demoFloorDirty = true; saveDemo(); return;
-    }
+    if (demoTool === "brush") { dPainting = true; demoCv.setPointerCapture(ev.pointerId); applyBrush(x, y, erase); return; }
+    if (demoTool === "vfx" && !erase) { demo.fx.push({ name: el("demoVfxSel").value, x, y, t0: null }); return; }
     const hit = demo.units.findIndex(u => u.x === x && u.y === y);
     if (demoTool === "erase" || erase) {
       if (hit >= 0) { demo.units.splice(hit, 1); saveDemo(); }
@@ -1428,54 +2077,110 @@
     demo.units.push({ name: el("demoChar").value, rot: demoRotV, x, y, phase: (x + y) % 3 });
     saveDemo();
   });
+  demoCv.addEventListener("pointermove", ev => {
+    if (!dPainting) return;
+    const cell = demoCell(ev);
+    if (cell) applyBrush(cell[0], cell[1], ev.buttons === 2);
+  });
+  demoCv.addEventListener("pointerup", () => dPainting = false);
+
   function demoToolUi() {
     el("dPlace").className = demoTool === "place" ? "on" : "";
     el("dErase").className = demoTool === "erase" ? "on" : "";
-    el("dWorn").className = demoTool === "worn" ? "on" : "";
+    el("dVfx").className = demoTool === "vfx" ? "on" : "";
+    for (const [id, b] of [["bWorn", "worn"], ["bRock", "rock"], ["bWater", "water"], ["bVoid", "void"], ["bFloor", "floor"]])
+      el(id).className = demoTool === "brush" && demoBrush === b ? "on" : "";
   }
-  el("dPlace").onclick = () => { demoTool = "place"; demoToolUi(); };
-  el("dErase").onclick = () => { demoTool = "erase"; demoToolUi(); };
-  el("dWorn").onclick = () => { demoTool = "worn"; demoToolUi(); };
-  el("dClear").onclick = () => { demo.units = []; demo.worn = []; demoFloorDirty = true; saveDemo(); };
+  el("dPlace").onclick = () => { demoTool = "place"; demoBrush = null; demoToolUi(); };
+  el("dErase").onclick = () => { demoTool = "erase"; demoBrush = null; demoToolUi(); };
+  el("dVfx").onclick = () => { demoTool = "vfx"; demoBrush = null; demoToolUi(); };
+  for (const [id, b] of [["bWorn", "worn"], ["bRock", "rock"], ["bWater", "water"], ["bVoid", "void"], ["bFloor", "floor"]])
+    el(id).onclick = () => { demoTool = "brush"; demoBrush = b; demoToolUi(); };
+  el("dClear").onclick = () => {
+    demo.units = []; demo.worn = []; demo.rocks = []; demo.water = []; demo.voids = []; demo.fx = [];
+    demoFloorDirty = true; saveDemo();
+  };
   function demoRotUi() { el("demoRot").textContent = "facing ↻ " + "SENW"[demoRotV]; }
   el("demoRot").onclick = () => { demoRotV = (demoRotV + 1) % 4; demoRotUi(); };
   demoRotUi();
   el("demoScale").oninput = () => { demoScale = +el("demoScale").value; };
+  el("demoTile").onchange = () => { DTILE = +el("demoTile").value; demoFloorDirty = true; };
   el("demoAnim").onclick = () => { demoAnim = !demoAnim; el("demoAnim").className = demoAnim ? "on" : ""; };
+  el("dShot").onclick = () => download("arena.png", demoCv.toDataURL());
+  function drawDemoVfxSel() {
+    const sel = el("demoVfxSel");
+    const keep = sel.value;
+    sel.innerHTML = "";
+    for (const name of vlib.keys()) {
+      const o = document.createElement("option");
+      o.value = o.textContent = name;
+      sel.appendChild(o);
+    }
+    if (vlib.has(keep)) sel.value = keep;
+  }
 
   /* =====================================================================================
-     TABS + KEYBOARD + THE ONE LOOP
+     TABS + KEYBOARD + THE LOOP
      ===================================================================================== */
   let activeTab = "sprite";
-  const TABS = { sprite: "navSprite", tiles: "navTiles", demo: "navDemo", ui: "navUi" };
+  const TABS = { sprite: "navSprite", tiles: "navTiles", vfx: "navVfx", demo: "navDemo" };
   function showTab(tab) {
     activeTab = tab;
     for (const [t, nav] of Object.entries(TABS)) {
       el(nav).className = t === tab ? "on" : "";
       el("page" + t[0].toUpperCase() + t.slice(1)).className = "page" + (t === tab ? " on" : "");
     }
-    if (tab === "tiles") { drawTedit(); drawTprev(); }
-    if (tab === "demo") { charSelUi(); demoFloorDirty = true; }
+    if (tab === "tiles") { drawTileList(); tRulesUi(); drawTedit(); drawTprev(); }
+    if (tab === "vfx") { drawVfxList(); vRulesUi(); drawVedit(); drawVFramesUi(); }
+    if (tab === "demo") { charSelUi(); drawDemoVfxSel(); demoFloorDirty = true; }
     prevDirty = true;
   }
   el("navSprite").onclick = () => showTab("sprite");
   el("navTiles").onclick = () => showTab("tiles");
+  el("navVfx").onclick = () => showTab("vfx");
   el("navDemo").onclick = () => showTab("demo");
-  el("navUi").onclick = () => showTab("ui");
 
   window.addEventListener("keydown", e => {
-    if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT") return;
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); return; }
-    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) { e.preventDefault(); doRedo(); return; }
-    if (activeTab !== "sprite") return;
-    if (e.key === "]") el("layUp").onclick();
-    if (e.key === "[") el("layDn").onclick();
+    if (e.target.tagName === "TEXTAREA" || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); doRedo(); return; }
+    if (activeTab === "sprite") {
+      if (e.shiftKey && e.key === "ArrowLeft") { e.preventDefault(); shiftFrame(-1, 0, 0); return; }
+      if (e.shiftKey && e.key === "ArrowRight") { e.preventDefault(); shiftFrame(1, 0, 0); return; }
+      if (e.shiftKey && e.key === "ArrowUp") { e.preventDefault(); shiftFrame(0, -1, 0); return; }
+      if (e.shiftKey && e.key === "ArrowDown") { e.preventDefault(); shiftFrame(0, 1, 0); return; }
+      if (e.key === "]") { el("layUp").onclick(); return; }
+      if (e.key === "[") { el("layDn").onclick(); return; }
+      if (k === "b") { tool = "paint"; toolUi(); return; }
+      if (k === "e") { tool = "erase"; toolUi(); return; }
+      if (k === "f") { tool = "fill"; toolUi(); return; }
+      if (k === "i") { tool = "pick"; toolUi(); return; }
+      if (k === "x") { mirror = !mirror; toolUi(); return; }
+      if (k === ",") { curFrame = (curFrame - 1 + anim().frames.length) % anim().frames.length; playing = false; playUi(); drawEdit(); drawFramesUi(); prevDirty = true; return; }
+      if (k === ".") { curFrame = (curFrame + 1) % anim().frames.length; playing = false; playUi(); drawEdit(); drawFramesUi(); prevDirty = true; return; }
+      if (k === " ") { e.preventDefault(); togglePlay(); return; }
+    }
+    if (activeTab === "tiles") {
+      if (e.shiftKey && e.key.startsWith("Arrow")) {
+        e.preventDefault();
+        const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        shiftTileFace(d[0], d[1]); return;
+      }
+      if (k === "1") { shade = 1; tTool = "paint"; shadeUi(); return; }
+      if (k === "2") { shade = 2; tTool = "paint"; shadeUi(); return; }
+      if (k === "3") { shade = 3; tTool = "paint"; shadeUi(); return; }
+      if (k === "0") { shade = 0; tTool = "paint"; shadeUi(); return; }
+      if (k === "f") { tTool = "fill"; shadeUi(); return; }
+      if (k === "i") { tTool = "pick"; shadeUi(); return; }
+    }
   });
 
   function tick(t) {
     requestAnimationFrame(tick);
     if (activeTab === "sprite") renderPreview(t);
     else if (activeTab === "demo") renderDemo(t);
+    else if (activeTab === "vfx") { renderVfxPreview(t); if (vPlaying) { /* live */ } }
   }
 
   /* ---- boot ---- */
@@ -1483,15 +2188,25 @@
     const savedT = localStorage.getItem("wander.tiles");
     loadTiles(savedT ? savedT : DEFAULT_TILES);
   } catch (e) { loadTiles(DEFAULT_TILES); }
+  try {
+    const savedV = localStorage.getItem("wander.vfx");
+    if (savedV) loadVfxAll(savedV); else seedVfx();
+  } catch (e) { seedVfx(); }
+  if (!vName) vName = vlib.keys().next().value;
   charSelUi();
   toolUi();
   shadeUi();
   demoToolUi();
   drawEdit();
+  drawAnimsUi();
   drawFramesUi();
   drawTileList();
   tRulesUi();
   drawTedit();
   drawTprev();
+  drawVfxList();
+  vRulesUi();
+  drawVedit();
+  drawVFramesUi();
   requestAnimationFrame(tick);
 </script>

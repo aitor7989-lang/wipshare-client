@@ -128,8 +128,8 @@
   <h2>One complete floor</h2>
   <div class="bar">
     <div class="grp"><span>seed</span>
-      <button class="btn seed" data-seed="12" aria-pressed="true">12</button>
-      <button class="btn seed" data-seed="43" aria-pressed="false">43</button>
+      <button class="btn seed" data-seed="12" aria-pressed="false">12</button>
+      <button class="btn seed" data-seed="43" aria-pressed="true">43</button>
       <button class="btn seed" data-seed="5" aria-pressed="false">5</button>
     </div>
     <div class="grp"><span>view</span>
@@ -161,8 +161,8 @@
     <div class="grp"><span>posterize</span>
       <button class="btn post" data-post="off" aria-pressed="false">off</button>
       <button class="btn post" data-post="exact" aria-pressed="false">exact</button>
-      <button class="btn post" data-post="lut16" aria-pressed="false">lut 16</button>
-      <button class="btn post" data-post="lut86" aria-pressed="true">lut 86</button>
+      <button class="btn post" data-post="lut16" aria-pressed="true">lut 16</button>
+      <button class="btn post" data-post="lut86" aria-pressed="false">lut 86</button>
     </div>
     <div class="grp"><span>labels</span>
       <button class="btn notes" data-notes="off" aria-pressed="true">off</button>
@@ -172,20 +172,20 @@
 
   <div class="knobs" id="knobs">
     <div class="knobhead" style="grid-column:1/-1"><span>tuning</span><button id="knobReset" type="button">reset</button></div>
-    <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">8</b>
-      <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="8"></div>
-    <div class="knob"><span>outer step · cells</span><b data-v="OUTERR">10</b>
-      <input type="range" data-k="OUTERR" min="0" max="18" step="1" value="10"></div>
-    <div class="knob"><span>light energy · %</span><b data-v="ENERGY">140</b>
-      <input type="range" data-k="ENERGY" min="20" max="300" step="10" value="140"></div>
-    <div class="knob"><span>light bands</span><b data-v="BANDS">6</b>
-      <input type="range" data-k="BANDS" min="0" max="10" step="1" value="6"></div>
+    <div class="knob"><span>light radius · cells</span><b data-v="RADIUS">10</b>
+      <input type="range" data-k="RADIUS" min="3" max="16" step="1" value="10"></div>
+    <div class="knob"><span>outer step · cells</span><b data-v="OUTERR">12</b>
+      <input type="range" data-k="OUTERR" min="0" max="18" step="1" value="12"></div>
+    <div class="knob"><span>light energy · %</span><b data-v="ENERGY">110</b>
+      <input type="range" data-k="ENERGY" min="20" max="300" step="10" value="110"></div>
+    <div class="knob"><span>light bands</span><b data-v="BANDS">5</b>
+      <input type="range" data-k="BANDS" min="0" max="10" step="1" value="5"></div>
     <div class="knob"><span>downlight · %</span><b data-v="DOWNF">30</b>
       <input type="range" data-k="DOWNF" min="0" max="100" step="5" value="30"></div>
     <div class="knob"><span>falloff power · %</span><b data-v="FPOW">200</b>
       <input type="range" data-k="FPOW" min="100" max="300" step="25" value="200"></div>
-    <div class="knob"><span>dither seam · %</span><b data-v="SEAM">30</b>
-      <input type="range" data-k="SEAM" min="0" max="100" step="10" value="30"></div>
+    <div class="knob"><span>dither seam · %</span><b data-v="SEAM">20</b>
+      <input type="range" data-k="SEAM" min="0" max="100" step="10" value="20"></div>
     <div class="knob"><span>bayer matrix</span><b data-v="MATN">2</b>
       <input type="range" data-k="MATN" min="2" max="4" step="2" value="2"></div>
     <div class="knob"><span>light colour</span><b></b>
@@ -320,8 +320,8 @@
 <script>
   const DATA = {"12":{"ter":["            ............                       ","            .........#..                       ","          ..............                       ","          :..:::...:.:..:..                    ","   ..    ...............:...      ...          ","  ....   ......       ...:...  ......          ","  ........:..           ..:\".........          ","   ..    .:.      .......\"...........          ","         ...    ..:....:::.. .........         ","        ~.:.   .::....::...:..:.::..:. ........","        ~~.........\"....\"...........:. ........","       .~~......##..\"................. ..#..#..","      ..~.......#\"....\"..............: ........","   ~~~.~::..~..:...::.:........................","   ~~:::...:::....:......................#..#..","   ~:....~~:..#.......    ...........: ........","   .:~~:...~..:.:.....    ............ ........","   :.~~..............     ..........::         ","  ...#.........::....              ::.         ","  #:................   .~~~~      ...          ","  .....#:.:.:...      .~~~~~..  .....          ","  ...#... ......      .~~~~~~. ::...           ","  #.............      .~~~~~~.::..             ","  ............        :.::::.....              ","  .::.........        ..........               ","   ..:.:.::..         ........                 ","   .~....~.           ........                 ","   .~~~~.~.                                    ","    ~~~~...                                    ","        .                                      ","        .                                      ","      ....                                     ","     ......                                    ","     ......                                    ","     ......                                    ","     ......                                    ","      ....                                     "],"mk":["                                               ","                                               ","                                               ","          +++++++++++++++                      ","   SS     +             ++                     ","  SSSS    +              ++                    ","  SSSS    +               ++                   ","   SS     +               ++                   ","          +      ++++++++++                    ","          +     ++   ++++++++++++++++  WWWWWWWW","          +    ++   ++              ++ WWWWWWWW","          +    +   ++                + WWWWWWWW","         ++    +   +                 + WWWWWWWW","        ++++  ++ +++++++++++++++++++++tWWWWWWWW","     ++++++++++ ++++                 + WWWWWWWW","    +t +   ++   +++                  + WWWWWWWW","   t+  +    ++++++                   + WWWWWWWW","   t   +    +   +                   ++         ","   +   +    +  ++                  ++          ","   +   ++   + ++                  ++           ","   +    +++++++                 +++            ","   +        +                  ++              ","   +        +                 ++               ","   +        +         A++++++++                ","   ++      ++                                  ","    ++++++++                                   ","                                               ","                                               ","                                               ","                                               ","                                               ","      VVVV                                     ","     VVVVVV                                    ","     VVVVVV                                    ","     VVVVVV                                    ","     VVVVVV                                    ","      VVVV                                     "]},"43":{"ter":["                        ..            ","                      ......          ","                     ...::..          ","                     ....:...         ","                     ..:......        ","                     .#....:....      ","                     ..:..... ..      ","                     ....... ...      ","                     ...........      ","                     .#:........      ","                    .......:....      ","                   ...~....:....      ","                  ....~:..~.....      ","               .......~......         ","         ~~~~~.#..#..#~...:.          ","        .~~~~~........~::..  ~~~~.    ","        ...~....:::::.::..  ~~~~~~    ","        .................   ~~~~~~    ","    ........::.:..:.:....  .~~~~~~    ","       ..  :............#  .~~~~~.    ","  ........ ....#..#..#.... ........   ","  ........ :.....:.:.::..:~::......   ","  ..#..... .............\"..:........  ","  ........ ......... .   ..:.   ....  ","  ........ :.. ....       .:... ..:.  ","  ..#..... :...~~~~       ...:....:.  ","  ........ ....~~~~~.     ..#.:..~... ","  ........ ....~~~~~.     .:.#.:..:.. ","           ...~~~~~~..    .:#.###.... ","        \".#....~~~~~.......:.#...:....","        .#...:.~~~~~.......:..#.:::...","         ....:.:....:..:.:.:.:.:......","             ....................#:...","              ........   .............","              ........   ....#....:.. ","              ...... .    .:....#.... ","                     .    ...  ...:.. ","                   ....   ....~~~~... ","                  ......  .:..~~~~... ","                  ......  ....~~.::.. ","                  ......   .:......   ","                  ......     ......   ","                   ....      ...~..   ","                             ......   ","                             .....    "],"mk":["                                      ","                        +             ","                       +++            ","                       + ++           ","                       +  ++          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +   +          ","                       +  ++          ","                       + ++           ","                       +++            ","            +++++++++++++             ","           +t        ++               ","       +++++++++++++++                ","       t   +                          ","  WWWWWWWW +                +++++++   ","  WWWWWWWW +   A++++++++++ ++     +   ","  WWWWWWWW +             +++      +   ","  WWWWWWWW +              ++      +   ","  WWWWWWWW +               ++     +   ","  WWWWWWWW +               +++    +   ","  WWWWWWWW +               t ++   +   ","  WWWWWWWW +               +  +++++   ","           +               t      +   ","           ++              +     ++   ","            ++             +    +++   ","             ++++++++++++++++++++ +   ","                           +      +   ","                           +      +   ","                           +      +   ","                           +      +   ","                           +      +   ","                   VVVV    +      +   ","                  VVVVVV   +      +   ","                  VVVVVV   ++    ++   ","                  VVVVVV    ++++++    ","                  VVVVVV              ","                   VVVV               ","                                      ","                                      "]},"5":{"ter":["                 ....               ","                ......              ","                ......              ","                ......              ","                ......              ","                 ....               ","                   .                ","               ~~. .                ","              ~~~. .                ","             .~~~. .                ","             .~~~...                ","             .~~~...                ","             .~.......              ","       \"..~~~~:....:...     ........","       ..~~~~......:....    ........","       ....#.:.....~....    ..#..#..","       \".\"##...#.##.:..  .. ........","      ....#...........   .:.........","   ......::.:.:.:....  ..::...#..#..","   .....:.\"...\"......  .:.. ........","  ....:.~...#\"..#.#..  ::.. ........","  ....:~~~.................         ","  .~~~...~..\".#......#............  ","   ~~~..:~..:.......#.:...:.. ..    ","    ~~..:.~.:..........#..:.....    ","    ....~......................     ","    .....:...::.:...........        ","    ......:.~..~~.:::.:....         ","    ..:::...~~~~~.~........         ","    ....:..:~~~~~~~.......          ","    ........~~~~~~...               ","     .:....:~~~~                    ","     .::...:...                     ","     .:.  ...                       ","     .:..  :.                       ","     .:.~  :.                       ","     ..... ..                       ","   ..~.::..:.                       ","   ~~~......                        ","       ~~ ..                        ","       ~~                           ","       ..                           ","       ..                           "],"mk":["                 SSSS               ","                SSSSSS              ","                SSSSSS              ","                SSSSSS              ","                SSSSSS              ","                 SSSS               ","                                    ","                                    ","                                    ","                                    ","                                    ","                                    ","               ++++                 ","              ++  ++        WWWWWWWW","             ++    ++       WWWWWWWW","             +      +       WWWWWWWW","             +     ++       WWWWWWWW","             +    ++      +tWWWWWWWW","      +++++++++++++      ++ WWWWWWWW","      +++    ++         ++A WWWWWWWW","      ++     +++       ++ + WWWWWWWW","      +      + +       +  +         ","      ++     + +       +  +         ","      +++   ++ +      ++  +         ","      + ++ ++  +     ++   +         ","      +  +++   ++   ++    +         ","      + +++++++++++++    ++         ","      ++++++     +++++++++          ","      ++++ +                        ","      +++  +                        ","      ++   +                        ","      ++   +                        ","      ++   +                        ","      ++   +                        ","      ++   t                        ","      ++   t                        ","      +++  t                        ","      ++++ +                        ","      ++++++                        ","                                    ","                                    ","                                    ","                                    "]}};
 
-  let seed = "12", view = "iso", light = "on", notes = "off";
-  let ditherOn = true, posterMode = "lut86";
+  let seed = "43", view = "iso", light = "on", notes = "off";
+  let ditherOn = true, posterMode = "lut16";
   let checkerOn = true;
   let texOn = true;
   let lamp = null, pinned = false;
@@ -474,15 +474,15 @@
   let DEEP = 6;            // cubes of rock under the floor
   let DITHER = 1;          // one Bayer cell in backing pixels — at SCALE 2 that is a fat 2x2 on screen
   let LINEW = 0;           // interior cube-edge stroke; 0 by default — the checker does its job
-  let RADIUS = 8;          // point-light radius, in cells
-  let OUTERR = 10;         // the OUTER STEP: a wide apron of near-black grey past the pool.
+  let RADIUS = 10;         // point-light radius, in cells
+  let OUTERR = 12;         // the OUTER STEP: a wide apron of near-black grey past the pool.
                            // Ground still exists out there — barely. 0 disables it.
   const AMB = [11, 13, 12]; // db32+1: the outer-step grey, sampled from the reference swatch
-  let ENERGY = 1.4;        // light energy: >1 saturates the pool core so materials read true
-  let BANDS = 6;           // quantize the falloff into N rings; 0 = fully smooth gradient
+  let ENERGY = 1.1;        // light energy: >1 saturates the pool core so materials read true
+  let BANDS = 5;           // quantize the falloff into N rings; 0 = fully smooth gradient
   let DOWNF = 0.3;         // energy kept when shining DOWNWARD: a torch barely feeds the abyss
   let FPOW = 2;            // attenuation exponent: 1 = linear cone, 2 = engine default, 3 = tight
-  let SEAM = 0.3;          // how much of each band boundary becomes mosaic: 0 hard, 1 fully blended
+  let SEAM = 0.2;          // how much of each band boundary becomes mosaic: 0 hard, 1 fully blended
   let MATN = 2;            // Bayer matrix size: 2x2 clean checker, 4x4 finer texture
   let LIGHTC = [255, 255, 255];  // the light's colour, godot-style
   let INKW = 1;            // the CONTOUR outline (drop edges), its own knob — 0 removes the ink
@@ -1332,7 +1332,7 @@
     INKW:     { get: () => INKW,     set: v => { INKW = v; albDirty = true; } },
     DEEP:     { get: () => DEEP,     set: v => { DEEP = v; albDirty = true; } },
   };
-  const KNOB_DEFAULTS = { RADIUS: 8, OUTERR: 10, ENERGY: 140, BANDS: 6, DOWNF: 30, FPOW: 200, SEAM: 30, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
+  const KNOB_DEFAULTS = { RADIUS: 10, OUTERR: 12, ENERGY: 110, BANDS: 5, DOWNF: 30, FPOW: 200, SEAM: 20, MATN: 2, DITHER: 1, TILE: 16, SCALE: 4, LINEW: 0, INKW: 1, DEEP: 6 };
 
   function setKnob(k, v) {
     // Clamp and snap to the slider's own min/max/step: the API accepts what the UI

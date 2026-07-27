@@ -1097,9 +1097,14 @@
           }
           // THE OUTER STEP: past the lit pool, ground does not vanish — it survives as a
           // wide apron of the outer-step grey (palette 33, from the reference swatch),
-          // out to OUTERR cells. Marked for the pixel loop below; the rim of the apron
-          // and its shadow edges dither through the same Bayer as everything else.
-          outer = OUTERR > 0 && shad > 0 ? Math.max(0, 1 - dw / OUTERR) : 0;
+          // out to OUTERR cells. The apron's distance is ANISOTROPIC: a cube of height
+          // costs three cells of reach, so the dim glow hugs the lamp's plane instead of
+          // pouring down the cliffs as far as it spreads across the floor.
+          if (OUTERR > 0 && shad > 0) {
+            const dxy = Math.sqrt((wx - lamp.x) * (wx - lamp.x) + (wy - lamp.y) * (wy - lamp.y));
+            const dz3 = (wz - lampWZ) * 3;
+            outer = Math.max(0, 1 - Math.sqrt(dxy * dxy + dz3 * dz3) / OUTERR);
+          }
           outerShad = shad;
           if (BANDS > 0) {
             const q = v * BANDS, b = Math.floor(q), frac = q - b;
@@ -1126,7 +1131,10 @@
             const show = ditherOn && SEAM > 0 ? f2 > brow[((x / DITHER) | 0) & MM]
                                               : outer > 0 && outerShad >= 0.5;
             if (show) {
-              lum[(y * W + x)] = 26;   // a whisper, so the contour ink survives out here
+              // The contour ink out here carries the APRON'S OWN light: it fades with
+              // the outer reach and dims in shadow, instead of sitting at one fixed
+              // brightness from the pool's edge to the rim.
+              lum[(y * W + x)] = (Math.min(1, outer * 1.6) * outerShad * 60) | 0;
               a[i] = AMB[0]; a[i + 1] = AMB[1]; a[i + 2] = AMB[2];
               if (posterMode === "exact") snap32(a, i);
               else if (lut) lutSnap(a, i, lut, lutN);
@@ -1176,12 +1184,28 @@
             if (inked[p]) continue;
             inked[p] = 1;
             const i = p * 4;
-            // sqrt response: the line dims with the light but refuses to vanish into the
-            // navy the way a linear response made it — a contour that reacts AND reads.
-            const Lv = Math.sqrt(lum[p] / 255);
-            a[i] = (INKRGB[0] * Lv * LIGHTC[0] / 255 + SHADOW[0] * (1 - Lv) + 0.5) | 0;
-            a[i + 1] = (INKRGB[1] * Lv * LIGHTC[1] / 255 + SHADOW[1] * (1 - Lv) + 0.5) | 0;
-            a[i + 2] = (INKRGB[2] * Lv * LIGHTC[2] / 255 + SHADOW[2] * (1 - Lv) + 0.5) | 0;
+            // The ink's RESTING colour is where it fades to at zero light. In the lit
+            // floor that is the shadow navy, and the sqrt response keeps the line
+            // readable there. On the OUTER STEP the rest is the apron's own grey (navy
+            // is BRIGHTER than the apron — a "faded" line floated at constant glow),
+            // the response is LINEAR (sqrt overdrives whispers), and the ink takes the
+            // ordered-dither nudge before snapping: the dark palette has nothing
+            // between apron grey and valhalla, so an apron line is either invisible or
+            // a two-step glow unless the dither mediates the snap.
+            const isAmb = a[i] === AMB[0] && a[i + 1] === AMB[1] && a[i + 2] === AMB[2];
+            const Lv = isAmb ? Math.min(1, lum[p] / 255 * 2.2) : Math.sqrt(lum[p] / 255);
+            const rest = isAmb ? AMB : SHADOW;
+            a[i] = (INKRGB[0] * Lv * LIGHTC[0] / 255 + rest[0] * (1 - Lv) + 0.5) | 0;
+            a[i + 1] = (INKRGB[1] * Lv * LIGHTC[1] / 255 + rest[1] * (1 - Lv) + 0.5) | 0;
+            a[i + 2] = (INKRGB[2] * Lv * LIGHTC[2] / 255 + rest[2] * (1 - Lv) + 0.5) | 0;
+            if (isAmb && ditherOn && SEAM > 0 && posterMode !== "off") {
+              const ax = p % W, ay = (p / W) | 0;
+              const thr = MAT[((ay / DITHER) | 0) & MM][((ax / DITHER) | 0) & MM];
+              const nudge = (thr - (0.5 - 1 / (2 * MATN * MATN))) * (40 + 80 * SEAM);
+              a[i] = Math.max(0, Math.min(255, a[i] + nudge));
+              a[i + 1] = Math.max(0, Math.min(255, a[i + 1] + nudge));
+              a[i + 2] = Math.max(0, Math.min(255, a[i + 2] + nudge));
+            }
             if (posterMode === "exact") snap32(a, i);
             else if (lut) lutSnap(a, i, lut, lutN);
             const px = p % W, py = (p / W) | 0;

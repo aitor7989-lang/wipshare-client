@@ -18,7 +18,8 @@ public static class AssetsTest
     {
         KnightV2();
         LegacyV1Layers();
-        Tiles();
+        TilesV2();
+        TilesV1Conversion();
         Rejections();
         RoundTrip();
         Palette();
@@ -82,29 +83,69 @@ public static class AssetsTest
             $"(1,0,0)={s.Frames[0][1, 0, 0]}, short-row (2,0,1)={s.Frames[0][2, 0, 1]}, missing-layer (0,3,2)={s.Frames[0][0, 3, 2]}");
     }
 
-    private static void Tiles()
+    /// <summary>A v2 library: three faces exercising every per-tile field once — explicit
+    /// weight/mirror on the first, defaulted weight/mirror on the second, defaulted NAME on the
+    /// third — plus an explicit plain gate, so no default can hide behind an explicit value.</summary>
+    private static void TilesV2()
+    {
+        var lib = TileLibrary.Parse("""
+        {
+          "v": 2, "kind": "tiles", "plain": 60,
+          "tiles": [
+            { "name": "pebbles-a", "role": "floor", "weight": 3, "mirror": true,
+              "grid": ["3...............", ".2.............."] },
+            { "name": "rim", "role": "edge",
+              "grid": ["1..............."] },
+            { "role": "worn",
+              "grid": ["................", "...1............"] }
+          ]
+        }
+        """);
+        Check("tiles v2 header", lib.Plain == 60 && lib.Tiles.Count == 3,
+            $"Plain={lib.Plain} (expected 60), {lib.Tiles.Count} faces (expected 3)");
+
+        var (a, b, c) = (lib.Tiles[0], lib.Tiles[1], lib.Tiles[2]);
+        Check("tiles v2 faces",
+            a.Name == "pebbles-a" && a.Role == TileRole.Floor && a.Weight == 3 && a.Mirror
+            && b.Name == "rim" && b.Role == TileRole.Edge && b.Weight == 1 && !b.Mirror
+            && c.Name == "tile-2" && c.Role == TileRole.Worn && c.Weight == 1 && !c.Mirror,
+            $"[0] {a.Name}/{a.Role}/w{a.Weight}/mirror={a.Mirror}, [1] {b.Name}/{b.Role}/w{b.Weight}/mirror={b.Mirror}, " +
+            $"[2] {c.Name}/{c.Role}/w{c.Weight}/mirror={c.Mirror} (absent name/weight/mirror defaulted)");
+
+        Check("tiles v2 marks", a.Grid[1, 1] == 2 && b.Grid[0, 0] == 1 && c.Grid[3, 1] == 1 && a.Grid[5, 5] == 0,
+            $"pebbles-a(1,1)={a.Grid[1, 1]}, rim(0,0)={b.Grid[0, 0]}, tile-2(3,1)={c.Grid[3, 1]}, " +
+            $"unmarked cell reads {a.Grid[5, 5]} (leniency: short/missing rows are empty)");
+    }
+
+    /// <summary>v1 libraries (four floor slots + worn) must both parse AND convert to the v2
+    /// face list: slot 1 here is authored but all-zero, so it must be DROPPED — the plain gate,
+    /// not an empty face, is the v2 way to say "draw the plain tile".</summary>
+    private static void TilesV1Conversion()
     {
         var lib = TileLibrary.Parse("""
         {
           "v": 1,
           "floor": [
-            ["3...............", ".2.............."]
+            ["3...............", ".2.............."],
+            ["................"],
+            ["1..............."]
           ],
           "worn": ["................", "...1............"]
         }
         """);
-        Check("tiles marks", lib.Floor[0][0, 0] == 3 && lib.Floor[0][1, 1] == 2 && lib.Worn[3, 1] == 1,
-            $"floor[0](0,0)={lib.Floor[0][0, 0]}, floor[0](1,1)={lib.Floor[0][1, 1]}, worn(3,1)={lib.Worn[3, 1]} (expected 3/2/1)");
+        Check("tiles v1 conversion", lib.Plain == 45 && lib.Tiles.Count == 3,
+            $"Plain={lib.Plain} (expected default 45), {lib.Tiles.Count} faces (expected 3: empty slot 1 dropped)");
 
-        // One variant in the file must still yield four slots, the absent ones all-zero: the
-        // renderer indexes by variant and must never null-check.
-        bool empties = true;
-        for (int i = 1; i < lib.Floor.Count && empties; i++)
-            for (int y = 0; y < TileLibrary.Rows && empties; y++)
-                for (int x = 0; x < TileLibrary.Cols; x++)
-                    if (lib.Floor[i][x, y] != 0) { empties = false; break; }
-        Check("tiles slot padding", lib.Floor.Count == 4 && empties && lib.Floor[0][5, 5] == 0,
-            $"Floor.Count={lib.Floor.Count}, slots 1..3 all-zero={empties}, unmarked cell reads 0");
+        var (a, b, c) = (lib.Tiles[0], lib.Tiles[1], lib.Tiles[2]);
+        Check("tiles v1 faces",
+            a.Name == "floor-0" && a.Role == TileRole.Floor && a.Weight == 1 && a.Mirror
+            && b.Name == "floor-2" && b.Role == TileRole.Floor && b.Weight == 1 && b.Mirror
+            && c.Name == "trail" && c.Role == TileRole.Worn && c.Weight == 1 && !c.Mirror,
+            $"[0] {a.Name}/{a.Role}/w{a.Weight}/mirror={a.Mirror}, [1] {b.Name}/{b.Role}/w{b.Weight}/mirror={b.Mirror}, " +
+            $"[2] {c.Name}/{c.Role}/w{c.Weight}/mirror={c.Mirror} (names keep slot index)");
+
+        Check("tiles marks", a.Grid[0, 0] == 3 && a.Grid[1, 1] == 2 && b.Grid[0, 0] == 1 && c.Grid[3, 1] == 1,
+            $"floor-0(0,0)={a.Grid[0, 0]}, floor-0(1,1)={a.Grid[1, 1]}, floor-2(0,0)={b.Grid[0, 0]}, trail(3,1)={c.Grid[3, 1]} (expected 3/2/1/1)");
 
         Check("tiles shade table", TileLibrary.ShadeK.Length == 4
                 && TileLibrary.ShadeK[1] == 0.85f && TileLibrary.ShadeK[2] == 0.72f && TileLibrary.ShadeK[3] == 1.08f,
@@ -146,6 +187,21 @@ public static class AssetsTest
             """{"v":2,"""));
         Throws("reject fractional n", () => BoxSprite.Parse(
             """{"v":2,"kind":"char","n":4.5,"h":4,"frames":[[]]}"""));
+
+        // v2 tile-library semantics: every strict field refuses with a message NAMING the
+        // offending value, so the artist reads the error, not the parser source.
+        Throws("reject tile role lava", () => TileLibrary.Parse(
+            """{"v":2,"tiles":[{"role":"lava"}]}"""), "lava");
+        Throws("reject tile weight 0", () => TileLibrary.Parse(
+            """{"v":2,"tiles":[{"role":"floor","weight":0}]}"""), "weight=0");
+        Throws("reject tile weight 12", () => TileLibrary.Parse(
+            """{"v":2,"tiles":[{"role":"floor","weight":12}]}"""), "weight=12");
+        Throws("reject tile flood", () => TileLibrary.Parse(
+            "{\"v\":2,\"tiles\":[" + string.Join(",", Enumerable.Repeat("{\"role\":\"floor\"}", 100)) + "]}"), "100");
+        Throws("reject kind chars on tiles doc", () => TileLibrary.Parse(
+            """{"v":2,"kind":"chars","tiles":[]}"""), "chars");
+        Throws("reject non-array tiles", () => TileLibrary.Parse(
+            """{"v":2,"tiles":5}"""), "'tiles'");
     }
 
     /// <summary>Serialize frame 0 of the knight back to row strings and compare against the JSON
@@ -213,7 +269,9 @@ public static class AssetsTest
         if (ok) _pass++; else _fail++;
     }
 
-    private static void Throws(string name, Action act)
+    /// <summary>When <paramref name="contains"/> is given, the FormatException must also NAME
+    /// the offence — the message contract is part of the format, not decoration.</summary>
+    private static void Throws(string name, Action act, string? contains = null)
     {
         try
         {
@@ -222,7 +280,9 @@ public static class AssetsTest
         }
         catch (FormatException ex)
         {
-            Check(name, true, $"FormatException: {ex.Message}");
+            bool ok = contains == null || ex.Message.Contains(contains);
+            Check(name, ok, ok ? $"FormatException: {ex.Message}"
+                : $"message lacks \"{contains}\": {ex.Message}");
         }
         catch (Exception ex)
         {

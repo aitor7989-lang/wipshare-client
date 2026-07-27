@@ -822,46 +822,79 @@
      same face for a given seed (the albedo cache stays honest) and no two neighbours
      repeat. Shades are multiples of the tile's own colour — the texture survives any
      palette snap, light band and checker state, because it is material, not paint. */
-  // The library: five 16x8 shade grids over the canonical TW=16 diamond — floor[0..3]
-  // hash-picked per cell (after a 45% "stay plain" gate) and the worn-trail face. Edited
-  // in the BOXER page; shared via localStorage "wander.tiles", or pasted as JSON. The
-  // built-in default is the same starter set BOXER ships with.
-  const TILE_DEFAULT = { v: 1,
-    floor: [
+  // THE TILE LIBRARY v2 — tiles with RULES, authored in the BOXER editor. Each tile is a
+  // named 16x8 shade face plus a ROLE (floor/worn/edge/wall/water), a WEIGHT among its
+  // role's rivals and a MIRROR flag; one global "plain" says how much ground stays bare.
+  // Context law (identical in BOXER's preview, its demo arena, and BoxAssets.cs):
+  // worn cell -> worn; water -> water; any 4-neighbour void -> edge; any 4-neighbour
+  // rock -> wall; else floor. Edge/wall fall back to floor tiles when their role is
+  // empty; worn/water never fall back; the plain gate skips only floor/edge/wall.
+  // Shared via localStorage "wander.tiles" (v1 five-slot libraries still load).
+  const TILE_DEFAULT = { v: 2, kind: "tiles", plain: 45, tiles: [
+    { name: "pebbles-a", role: "floor", weight: 3, mirror: true, grid:
       ["................", "......1.........", "..........2.....", "....2...........",
-       ".........1......", "......2.........", "................", "................"],
+       ".........1......", "......2.........", "................", "................"] },
+    { name: "pebbles-b", role: "floor", weight: 2, mirror: true, grid:
       ["................", "........3.......", "....1...........", "...........2....",
-       "......2.........", "..........1.....", "................", "................"],
+       "......2.........", "..........1.....", "................", "................"] },
+    { name: "crack", role: "floor", weight: 2, mirror: true, grid:
       ["................", "................", "....2...........", ".....22.........",
-       ".......12.......", ".........2......", "................", "................"],
+       ".......12.......", ".........2......", "................", "................"] },
+    { name: "chip", role: "floor", weight: 1, mirror: true, grid:
       ["................", "................", "................", "................",
-       "............21..", "...........2....", "................", "................"],
-    ],
-    worn: ["................", "................", "................", "....1...1.......",
-           "......1...1.....", "........1.......", "................", "................"],
-  };
+       "............21..", "...........2....", "................", "................"] },
+    { name: "trail", role: "worn", weight: 1, mirror: false, grid:
+      ["................", "................", "................", "....1...1.......",
+       "......1...1.....", "........1.......", "................", "................"] },
+    { name: "crumble", role: "edge", weight: 1, mirror: true, grid:
+      ["................", "................", "................", "................",
+       "....2........2..", "......2...2.....", ".........2......", "................"] },
+    { name: "roots", role: "wall", weight: 1, mirror: true, grid:
+      ["................", "......2.........", "........1.......", ".....1..........",
+       "................", "................", "................", "................"] },
+    { name: "ripple", role: "water", weight: 1, mirror: true, grid:
+      ["................", "................", "................", "....3...3.......",
+       "......3...3.....", "................", "................", "................"] },
+  ] };
   const TILE_SHK = [0, 0.85, 0.72, 1.08];
+  const TILE_ROLES = ["floor", "worn", "edge", "wall", "water"];
   let TILELIB = null;
   function tileGrid(rows) {
     const g = new Uint8Array(16 * 8);
     for (let r = 0; r < 8; r++)
       for (let c = 0; c < 16; c++) {
         const ch = (rows[r] || "")[c] || ".";
-        // Only the shade set '.123' exists. A stray '9' used to index TILE_SHK off the
-        // end and paint stale-fillStyle garbage via an invalid NaN colour.
         if (ch === "1" || ch === "2" || ch === "3") g[r * 16 + c] = +ch;
       }
     return g;
   }
   function loadTileLib(txt) {
     const o = typeof txt === "string" ? JSON.parse(txt) : txt;
-    // Same shape guard as the BOXER editor: valid JSON that is not a tile library
-    // ({}, [5], "x") must fail loudly, not silently wipe all five grids.
-    if (!o || typeof o !== "object" || Array.isArray(o) ||
-        (!Array.isArray(o.floor) && !Array.isArray(o.worn)))
-      throw new Error('not a tile library (want {"floor":[...], "worn":[...]})');
-    TILELIB = { floor: (o.floor || []).slice(0, 4).map(tileGrid), worn: tileGrid(o.worn || []) };
-    while (TILELIB.floor.length < 4) TILELIB.floor.push(new Uint8Array(16 * 8));
+    if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("not a tile library");
+    let tiles = [], plain = 45;
+    if (Array.isArray(o.tiles)) {
+      if (o.tiles.length > 64) throw new Error("too many tiles (max 64)");
+      o.tiles.forEach((t, i) => {
+        if (!t || typeof t !== "object" || !TILE_ROLES.includes(t.role)) return;
+        const grid = tileGrid(t.grid || []);
+        if (!grid.some(v => v)) return;             // an empty face stamps nothing anyway
+        tiles.push({ role: t.role, weight: Math.max(1, Math.min(9, (+t.weight || 1) | 0)),
+                     mirror: !!t.mirror, grid });
+      });
+      plain = o.plain == null ? 45 : Math.max(0, Math.min(95, (+o.plain || 0) | 0));
+    } else if (Array.isArray(o.floor) || Array.isArray(o.worn)) {
+      (o.floor || []).slice(0, 4).forEach(rows => {
+        const g = tileGrid(rows || []);
+        if (g.some(v => v)) tiles.push({ role: "floor", weight: 1, mirror: true, grid: g });
+      });
+      const w = tileGrid(o.worn || []);
+      if (w.some(v => v)) tiles.push({ role: "worn", weight: 1, mirror: false, grid: w });
+    } else throw new Error('not a tile library (want v2 {"tiles":[...]} or v1 {"floor":[...],"worn":[...]})');
+    const byRole = {};
+    for (const r of TILE_ROLES) byRole[r] = [];
+    for (const t of tiles) byRole[t.role].push(t);
+    for (const r of TILE_ROLES) byRole[r].tot = byRole[r].reduce((s, t) => s + t.weight, 0);
+    TILELIB = { plain, byRole };
     albDirty = true;
   }
   try {
@@ -869,21 +902,17 @@
     loadTileLib(shared || TILE_DEFAULT);
   } catch (e) { loadTileLib(TILE_DEFAULT); }
 
-  function texTop(g, gx, gy, cx, cy, base, kTop, tc) {
-    if (tc !== "." && tc !== ":") return;
+  function texTop(g, gx, gy, cx, cy, base, kTop, tctx) {
     const sn = parseInt(seed, 10) || 0;
     const h = (gx * 73856093 ^ gy * 19349663 ^ sn * 83492791) >>> 0;
-    let grid = null, flip = false;
-    if (tc === ":") grid = TILELIB.worn;
-    else {
-      if (h % 100 < 45) return;         // most tiles stay quiet — texture is seasoning
-      // Same pick rule as the BOXER editor's arena: hash across ALL four slots, and an
-      // empty slot simply stamps nothing (reads as plain). The old rule filtered to
-      // non-empty slots and modded by the survivor count, so the same library laid a
-      // DIFFERENT floor here than in the editor whenever any slot was empty.
-      grid = TILELIB.floor[(h >>> 7) & 3];
-      flip = !!(h & 32);                // free variety: half the stamps mirror
-    }
+    let pool = TILELIB.byRole[tctx];
+    if ((!pool || !pool.tot) && (tctx === "edge" || tctx === "wall")) pool = TILELIB.byRole.floor;
+    if (!pool || !pool.tot) return;
+    if (tctx !== "worn" && tctx !== "water" && h % 100 < TILELIB.plain) return;
+    let r = (h >>> 7) % pool.tot;
+    let t = pool[0];
+    for (const c of pool) { if (r < c.weight) { t = c; break; } r -= c.weight; }
+    const flip = t.mirror && !!(h & 32);
     // Sample the 16x8 face onto this tile's raster — 1:1 at TILE 16, nearest below/above.
     const { y0, spans } = quadSpans(diamondPts(cx, cy));
     for (let k = 0; k < spans.length; k++) {
@@ -892,7 +921,7 @@
       for (let x = a; x < b; x++) {
         let sc = Math.min(15, (((x - (cx - HW)) / (2 * HW)) * 16) | 0);
         if (flip) sc = 15 - sc;
-        const v = grid[sr * 16 + sc];
+        const v = t.grid[sr * 16 + sc];
         if (v) { g.fillStyle = mul(base, kTop * TILE_SHK[v]); g.fillRect(x, y0 + k, 1, 1); }
       }
     }
@@ -999,7 +1028,16 @@
           const bright = TW <= 8 ? null : mul(base, KEDGE);
           const kTop = KTOP * (checkerOn && tc !== "#" && !((x + y) & 1) ? 0.88 : 1);
           rDiamondTop(g, cx, cy - h * UNIT, mul(base, kTop), bright, bright, null, null);
-          if (texOn) texTop(g, x, y, cx, cy - h * UNIT, base, kTop, tc);
+          if (texOn && tc !== "#") {
+            // The context law — worn and water by tile kind, edge and wall by neighbours.
+            const tctx = tc === ":" ? "worn" : tc === "~" ? "water"
+              : (at(ter, x - 1, y) === " " || at(ter, x + 1, y) === " " ||
+                 at(ter, x, y - 1) === " " || at(ter, x, y + 1) === " ") ? "edge"
+              : (at(ter, x - 1, y) === "#" || at(ter, x + 1, y) === "#" ||
+                 at(ter, x, y - 1) === "#" || at(ter, x, y + 1) === "#") ? "wall"
+              : "floor";
+            texTop(g, x, y, cx, cy - h * UNIT, base, kTop, tctx);
+          }
         }
       }
     }

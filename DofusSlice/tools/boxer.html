@@ -152,43 +152,68 @@
 <main>
   <div class="col">
     <div class="panel">
-      <b class="t">SLOT</b>
-      <div class="row" id="slots"></div>
+      <b class="t">LIBRARY — autosaves on every change</b>
+      <div id="tileList" style="display:flex;flex-wrap:wrap;gap:8px;max-width:320px"></div>
       <div class="row" style="margin-top:10px">
-        <button id="sh1" class="on">dark</button>
-        <button id="sh2">darker</button>
-        <button id="sh3">light</button>
-        <button id="shE">erase</button>
-        <button id="tClear">clear slot</button>
+        <button id="tNew">new</button>
+        <button id="tDup">duplicate</button>
+        <button id="tDel">delete</button>
+      </div>
+    </div>
+    <div class="panel">
+      <b class="t">RULES — when this tile is used</b>
+      <div class="row"><input type="text" id="tileName" spellcheck="false" title="rename"></div>
+      <div class="row" style="margin-top:8px">
+        <span>role</span>
+        <select id="tileRole">
+          <option value="floor">floor — open ground</option>
+          <option value="worn">worn — the walked trail</option>
+          <option value="edge">edge — beside the void</option>
+          <option value="wall">wall — hugging rock</option>
+          <option value="water">water</option>
+        </select>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="tUndoBtn">undo</button>
-        <button id="tRedoBtn">redo</button>
-        <span>marks are shades of the tile's own colour</span>
+        <span>weight</span>
+        <input type="range" id="tileWeight" min="1" max="9" step="1" value="1"><b id="tileWeightV">1</b>
+        <button id="tileMirror">mirror ok</button>
       </div>
+      <div class="row" style="margin-top:10px">
+        <span>plain ground · %</span>
+        <input type="range" id="plainPct" min="0" max="90" step="5" value="45"><b id="plainPctV">45</b>
+      </div>
+      <div class="hint" style="margin-top:8px">weight = how often it wins among same-role tiles · plain = share of ground left untextured ·
+        edge/wall fall back to floor tiles when their role is empty · worn/water never fall back</div>
     </div>
     <div class="panel">
       <b class="t">TILE DATA</b>
       <div class="row" style="margin-bottom:6px">
-        <button id="tExport">export tiles</button>
-        <button id="tImport">import tiles</button>
+        <button id="tExport">export json</button>
+        <button id="tImport">import json</button>
       </div>
-      <textarea id="tio" spellcheck="false" placeholder="tile library json"></textarea>
+      <textarea id="tio" spellcheck="false" placeholder="tile library json (v2; v1 accepted)"></textarea>
       <div class="hint" style="margin-top:6px">the warren viewer reads this library automatically in this browser (its "reload tiles" button), or paste the json there.</div>
     </div>
   </div>
   <div class="col">
     <div class="panel">
       <b class="t">FACE — 16×8 diamond</b>
+      <div class="row" style="margin-bottom:8px">
+        <button id="sh1" class="on">dark</button>
+        <button id="sh2">darker</button>
+        <button id="sh3">light</button>
+        <button id="shE">erase</button>
+        <button id="tClear">clear face</button>
+        <button id="tUndoBtn">undo</button>
+        <button id="tRedoBtn">redo</button>
+      </div>
       <canvas id="tedit"></canvas>
-      <div class="row" style="margin-top:6px"><span>right-drag erases · outside the diamond is ignored</span></div>
+      <div class="row" style="margin-top:6px"><span>right-drag erases · outside the diamond is ignored · shades are relative to the tile's own colour</span></div>
     </div>
-  </div>
-  <div class="col">
     <div class="panel">
-      <b class="t">IN THE FLOOR</b>
+      <b class="t">IN THE FLOOR — every rule live</b>
       <div class="checker" style="background:#0d0c12"><canvas id="tprev"></canvas></div>
-      <div class="row" style="margin-top:6px"><span>middle row wears the trail · rest mixes variants with plain tiles</span></div>
+      <div class="row" style="margin-top:6px"><span>notch rim = edge · beside the dark blocks = wall · the streak = worn · the pool = water</span></div>
     </div>
   </div>
 </main>
@@ -453,11 +478,10 @@
   function snapSprite() {
     return { type: "sprite", name: curName, fi: curFrame, data: frame().slice() };
   }
-  function snapTile() { return { type: "tile", slot: tSlot, data: slotGrid(tSlot).slice() }; }
-  // The whole tile library at once — an import replaces all five grids, so its undo must too.
-  function snapTileLib() {
-    return { type: "tilelib", floor: lib.floor.map(f => f.slice()), worn: lib.worn.slice() };
-  }
+  function snapTile() { return { type: "tile", idx: tSel, data: curTile().grid.slice() }; }
+  // The whole library at once — imports and structural ops (new/dup/delete/rules)
+  // replace more than one tile, so their undo must too.
+  function snapTileLib() { return { type: "tilelib", json: tilesJson() }; }
   function pushUndo(snap) {
     undoS.push(snap);
     if (undoS.length > 80) undoS.shift();
@@ -480,17 +504,18 @@
     }
     if (s.type === "tilelib") {
       const back = snapTileLib();
-      for (let i = 0; i < 4; i++) lib.floor[i].set(s.floor[i]);
-      lib.worn.set(s.worn);
+      loadTiles(s.json);
       if (activeTab !== "tiles") showTab("tiles");
-      afterTileEdit(true);
+      afterTiles(true);
       return back;
     }
-    const back = { type: "tile", slot: s.slot, data: slotGrid(s.slot).slice() };
-    slotGrid(s.slot).set(s.data);
-    tSlot = s.slot;
+    const t = tlib.tiles[s.idx];
+    if (!t) return null;
+    const back = { type: "tile", idx: s.idx, data: t.grid.slice() };
+    t.grid.set(s.data);
+    tSel = s.idx;
     if (activeTab !== "tiles") showTab("tiles");
-    afterTileEdit(true);
+    afterTiles(true);
     return back;
   }
   function doUndo() { const s = undoS.pop(); if (!s) return; const b = applySnap(s); if (b) redoS.push(b); }
@@ -918,14 +943,21 @@
   }
 
   /* =====================================================================================
-     TILES — unchanged format, now with undo and tab residency.
+     TILES v2 — a LIBRARY with RULES. A tile is a named 16x8 shade face plus the law of
+     where it appears: a ROLE (floor / worn / edge / wall / water), a WEIGHT among its
+     role's rivals, and whether MIRRORING is allowed. One global knob says how much
+     ground stays plain. The JSON is the asset; localStorage "wander.tiles" is the live
+     bridge to the warren viewer, and BoxAssets.TileLibrary parses the same shape.
+     Context law (identical in all three consumers): worn cell -> worn; water -> water;
+     any 4-neighbour void -> edge; any 4-neighbour rock -> wall; else floor. Edge/wall
+     fall back to floor tiles when their role is empty; worn/water never fall back; the
+     plain gate applies only to floor/edge/wall.
      ===================================================================================== */
   const TW16 = 16, TH8 = 8, THW = 8, THH = 4;
   const SHK = [0, 0.85, 0.72, 1.08];
-  const SLOTS = ["floor 1", "floor 2", "floor 3", "floor 4", "worn"];
-  const lib = { floor: [0, 1, 2, 3].map(() => new Uint8Array(TW16 * TH8)), worn: new Uint8Array(TW16 * TH8) };
-  const slotGrid = i => i < 4 ? lib.floor[i] : lib.worn;
-  let tSlot = 0, shade = 1;
+  const ROLES = ["floor", "worn", "edge", "wall", "water"];
+  let tlib = { plain: 45, tiles: [] };
+  let tSel = 0, shade = 1;
 
   const dspans = quadSpans([[THW, 0], [THW * 2, THH], [THW, THH * 2], [0, THH]]);
   const inDiamond = (col, row) => {
@@ -935,20 +967,6 @@
     return col >= a && col < b;
   };
 
-  const DEFAULT_TILES = {
-    floor: [
-      ["................", "......1.........", "..........2.....", "....2...........",
-       ".........1......", "......2.........", "................", "................"],
-      ["................", "........3.......", "....1...........", "...........2....",
-       "......2.........", "..........1.....", "................", "................"],
-      ["................", "................", "....2...........", ".....22.........",
-       ".......12.......", ".........2......", "................", "................"],
-      ["................", "................", "................", "................",
-       "............21..", "...........2....", "................", "................"],
-    ],
-    worn: ["................", "................", "................", "....1...1.......",
-           "......1...1.....", "........1.......", "................", "................"],
-  };
   function tGridFrom(rows) {
     const g = new Uint8Array(TW16 * TH8);
     for (let r = 0; r < TH8; r++)
@@ -967,75 +985,234 @@
     }
     return rows;
   }
-  const tilesJson = () => JSON.stringify({ v: 1, floor: lib.floor.map(tRowsFrom), worn: tRowsFrom(lib.worn) });
+  const curTile = () => tlib.tiles[tSel] || null;
+
+  function tilesJson() {
+    return JSON.stringify({ v: 2, kind: "tiles", plain: tlib.plain,
+      tiles: tlib.tiles.map(t => ({ name: t.name, role: t.role, weight: t.weight,
+                                    mirror: t.mirror, grid: tRowsFrom(t.grid) })) });
+  }
   function loadTiles(txt) {
     const o = typeof txt === "string" ? JSON.parse(txt) : txt;
-    // Valid JSON is not a valid library: {} or [5] used to wipe all five grids and
-    // persist the wipe under a success toast. Shape-check before touching anything.
-    if (!o || typeof o !== "object" || Array.isArray(o) ||
-        (!Array.isArray(o.floor) && !Array.isArray(o.worn)))
-      throw new Error('not a tile library (want {"floor":[...], "worn":[...]})');
-    for (let i = 0; i < 4; i++) lib.floor[i] = tGridFrom((o.floor || [])[i] || []);
-    lib.worn = tGridFrom(o.worn || []);
+    if (!o || typeof o !== "object" || Array.isArray(o)) throw new Error("not a tile library");
+    if (Array.isArray(o.tiles)) {
+      if (o.tiles.length > 64) throw new Error("too many tiles (max 64)");
+      const tiles = [];
+      o.tiles.forEach((t, i) => {
+        if (!t || typeof t !== "object" || !ROLES.includes(t.role)) return;   // editor never writes junk; skip it
+        tiles.push({ name: String(t.name || "tile-" + (i + 1)).slice(0, 24), role: t.role,
+                     weight: clamp((+t.weight || 1) | 0, 1, 9), mirror: !!t.mirror,
+                     grid: tGridFrom(t.grid || []) });
+      });
+      tlib = { plain: o.plain == null ? 45 : clamp((+o.plain || 0) | 0, 0, 95), tiles };
+    } else if (Array.isArray(o.floor) || Array.isArray(o.worn)) {
+      // v1: four floor slots and a trail — converted, empty grids dropped
+      const tiles = [];
+      (o.floor || []).slice(0, 4).forEach((rows, i) => {
+        const g = tGridFrom(rows || []);
+        if (g.some(v => v)) tiles.push({ name: "floor-" + (i + 1), role: "floor", weight: 1, mirror: true, grid: g });
+      });
+      const w = tGridFrom(o.worn || []);
+      if (w.some(v => v)) tiles.push({ name: "trail", role: "worn", weight: 1, mirror: false, grid: w });
+      tlib = { plain: 45, tiles };
+    } else throw new Error('not a tile library (want v2 {"tiles":[...]} or v1 {"floor":[...],"worn":[...]})');
+    tSel = clamp(tSel, 0, Math.max(0, tlib.tiles.length - 1));
   }
   function saveTiles() { try { localStorage.setItem("wander.tiles", tilesJson()); } catch (e) {} }
-  try {
-    const savedT = localStorage.getItem("wander.tiles");
-    loadTiles(savedT ? savedT : DEFAULT_TILES);
-  } catch (e) { loadTiles(DEFAULT_TILES); }
 
-  const slotsEl = el("slots");
-  SLOTS.forEach((name, i) => {
-    const b = document.createElement("button");
-    b.textContent = name;
-    if (i === 0) b.className = "on";
-    b.onclick = () => { tSlot = i; [...slotsEl.children].forEach((e, j) => e.className = j === i ? "on" : ""); drawTedit(); };
-    slotsEl.appendChild(b);
-  });
+  const DEFAULT_TILES = { v: 2, kind: "tiles", plain: 45, tiles: [
+    { name: "pebbles-a", role: "floor", weight: 3, mirror: true, grid:
+      ["................", "......1.........", "..........2.....", "....2...........",
+       ".........1......", "......2.........", "................", "................"] },
+    { name: "pebbles-b", role: "floor", weight: 2, mirror: true, grid:
+      ["................", "........3.......", "....1...........", "...........2....",
+       "......2.........", "..........1.....", "................", "................"] },
+    { name: "crack", role: "floor", weight: 2, mirror: true, grid:
+      ["................", "................", "....2...........", ".....22.........",
+       ".......12.......", ".........2......", "................", "................"] },
+    { name: "chip", role: "floor", weight: 1, mirror: true, grid:
+      ["................", "................", "................", "................",
+       "............21..", "...........2....", "................", "................"] },
+    { name: "trail", role: "worn", weight: 1, mirror: false, grid:
+      ["................", "................", "................", "....1...1.......",
+       "......1...1.....", "........1.......", "................", "................"] },
+    { name: "crumble", role: "edge", weight: 1, mirror: true, grid:
+      ["................", "................", "................", "................",
+       "....2........2..", "......2...2.....", ".........2......", "................"] },
+    { name: "roots", role: "wall", weight: 1, mirror: true, grid:
+      ["................", "......2.........", "........1.......", ".....1..........",
+       "................", "................", "................", "................"] },
+    { name: "ripple", role: "water", weight: 1, mirror: true, grid:
+      ["................", "................", "................", "....3...3.......",
+       "......3...3.....", "................", "................", "................"] },
+  ] };
+
+  /* ---- the shared pick rule — the same law the viewer and the game implement ---- */
+  function poolFor(role) {
+    let pool = tlib.tiles.filter(t => t.role === role && t.grid.some(v => v));
+    if (!pool.length && (role === "edge" || role === "wall"))
+      pool = tlib.tiles.filter(t => t.role === "floor" && t.grid.some(v => v));
+    return pool;
+  }
+  function pickTile(role, h) {
+    const pool = poolFor(role);
+    if (!pool.length) return null;
+    if (role !== "worn" && role !== "water" && h % 100 < tlib.plain) return null;
+    const tot = pool.reduce((s, t) => s + t.weight, 0);
+    let r = (h >>> 7) % tot;
+    for (const t of pool) { if (r < t.weight) return t; r -= t.weight; }
+    return pool[0];
+  }
+
+  /* ---- library UI ---- */
+  function freshTileName(base) {
+    let n = base, i = 2;
+    while (tlib.tiles.some(t => t.name === n)) n = base + "-" + i++;
+    return n;
+  }
+  function drawTileList() {
+    const host = el("tileList");
+    host.innerHTML = "";
+    tlib.tiles.forEach((t, i) => {
+      const d = document.createElement("div");
+      d.style.cssText = "cursor:pointer;text-align:center;padding:4px;border-radius:4px;border:1px solid " +
+        (i === tSel ? "#5b6ee1;background:#211f2d" : "#2a2836");
+      const cv = document.createElement("canvas");
+      cv.width = TW16 * 2; cv.height = TH8 * 2;
+      const g = cv.getContext("2d");
+      for (let r = 0; r < TH8; r++)
+        for (let c = 0; c < TW16; c++)
+          if (inDiamond(c, r)) {
+            const v = t.grid[r * TW16 + c];
+            g.fillStyle = rgb(MONO, v ? SHK[v] : 1);
+            g.fillRect(c * 2, r * 2, 2, 2);
+          }
+      cv.style.cssText = "image-rendering:pixelated;width:64px;height:32px;display:block";
+      const lab = document.createElement("div");
+      lab.textContent = t.name;
+      lab.style.cssText = "font-size:9px;color:#847e87;max-width:64px;overflow:hidden;text-overflow:ellipsis";
+      const rl = document.createElement("div");
+      rl.textContent = t.role + " w" + t.weight + (t.mirror ? " m" : "");
+      rl.style.cssText = "font-size:8px;color:#595652";
+      d.append(cv, lab, rl);
+      d.onclick = () => { tSel = i; afterTiles(false); };
+      host.appendChild(d);
+    });
+  }
+  function tRulesUi() {
+    const t = curTile();
+    for (const id of ["tileName", "tileRole", "tileWeight", "tileMirror", "tDup", "tDel"])
+      el(id).disabled = !t;
+    el("plainPct").value = tlib.plain; el("plainPctV").textContent = tlib.plain;
+    if (!t) { el("tileName").value = ""; return; }
+    el("tileName").value = t.name;
+    el("tileRole").value = t.role;
+    el("tileWeight").value = t.weight; el("tileWeightV").textContent = t.weight;
+    el("tileMirror").className = t.mirror ? "on" : "";
+    el("tileMirror").textContent = t.mirror ? "mirror ok" : "no mirror";
+  }
+  function afterTiles(saveIt = true) {
+    drawTileList(); tRulesUi(); drawTedit(); drawTprev();
+    demoFloorDirty = true;               // the arena wears this library — never let it go stale
+    if (saveIt) saveTiles();
+  }
+
+  el("tNew").onclick = () => {
+    if (tlib.tiles.length >= 64) { toast("library full (64)"); return; }
+    pushUndo(snapTileLib());
+    tlib.tiles.push({ name: freshTileName("tile"), role: "floor", weight: 1, mirror: true,
+                      grid: new Uint8Array(TW16 * TH8) });
+    tSel = tlib.tiles.length - 1;
+    afterTiles(); toast("created — paint the face, set its rules");
+  };
+  el("tDup").onclick = () => {
+    const t = curTile();
+    if (!t || tlib.tiles.length >= 64) return;
+    pushUndo(snapTileLib());
+    tlib.tiles.splice(tSel + 1, 0, { name: freshTileName(t.name), role: t.role, weight: t.weight,
+                                     mirror: t.mirror, grid: t.grid.slice() });
+    tSel++;
+    afterTiles(); toast("duplicated");
+  };
+  el("tDel").onclick = () => {
+    if (!curTile()) return;
+    pushUndo(snapTileLib());
+    const dead = tlib.tiles[tSel].name;
+    tlib.tiles.splice(tSel, 1);
+    tSel = clamp(tSel, 0, Math.max(0, tlib.tiles.length - 1));
+    afterTiles(); toast("deleted " + dead);
+  };
+  el("tileName").onchange = () => {
+    const t = curTile();
+    if (!t) return;
+    const name = el("tileName").value.trim().slice(0, 24);
+    if (!name || name === t.name) { el("tileName").value = t.name; return; }
+    if (tlib.tiles.some(o => o !== t && o.name === name)) { toast("name taken"); el("tileName").value = t.name; return; }
+    pushUndo(snapTileLib());
+    t.name = name; afterTiles();
+  };
+  el("tileRole").onchange = () => {
+    const t = curTile();
+    if (!t) return;
+    pushUndo(snapTileLib());
+    t.role = el("tileRole").value; afterTiles();
+  };
+  el("tileWeight").oninput = () => {
+    const t = curTile();
+    if (!t) return;
+    t.weight = +el("tileWeight").value; el("tileWeightV").textContent = t.weight;
+    drawTileList(); drawTprev(); demoFloorDirty = true; saveTiles();
+  };
+  el("tileMirror").onclick = () => {
+    const t = curTile();
+    if (!t) return;
+    pushUndo(snapTileLib());
+    t.mirror = !t.mirror; afterTiles();
+  };
+  el("plainPct").oninput = () => {
+    tlib.plain = +el("plainPct").value; el("plainPctV").textContent = tlib.plain;
+    drawTprev(); demoFloorDirty = true; saveTiles();
+  };
+
   const shadeBtns = { 1: "sh1", 2: "sh2", 3: "sh3", 0: "shE" };
   function shadeUi() { for (const k in shadeBtns) el(shadeBtns[k]).className = +k === shade ? "on" : ""; }
   el("sh1").onclick = () => { shade = 1; shadeUi(); };
   el("sh2").onclick = () => { shade = 2; shadeUi(); };
   el("sh3").onclick = () => { shade = 3; shadeUi(); };
   el("shE").onclick = () => { shade = 0; shadeUi(); };
-  el("tClear").onclick = () => { pushUndo(snapTile()); slotGrid(tSlot).fill(0); afterTileEdit(); };
+  el("tClear").onclick = () => {
+    if (!curTile()) return;
+    pushUndo(snapTile()); curTile().grid.fill(0); afterTiles();
+  };
   el("tUndoBtn").onclick = doUndo;
   el("tRedoBtn").onclick = doRedo;
   el("tExport").onclick = () => { el("tio").value = tilesJson(); el("tio").select(); };
   el("tImport").onclick = () => {
-    // Snapshot the WHOLE library, and push it only if the import succeeds — a failed
-    // paste must not spend the redo stack, and undo of an import must restore all five
-    // grids, not just whichever slot happened to be selected.
+    // Snapshot the WHOLE library, push only on success: a failed paste must not spend
+    // the redo stack, and undo of an import restores everything, not one tile.
     const before = snapTileLib();
     try {
       loadTiles(el("tio").value);
       pushUndo(before);
-      afterTileEdit();
+      afterTiles();
       toast("tiles imported");
     }
     catch (e) { el("tio").value = "import failed: " + e.message; }
   };
 
-  function slotUi() { [...slotsEl.children].forEach((e, j) => e.className = j === tSlot ? "on" : ""); }
-
-  function afterTileEdit(pushSave = true) {
-    drawTedit(); drawTprev(); slotUi();
-    demoFloorDirty = true;               // the arena wears this library — never let it go stale
-    if (pushSave) saveTiles();
-  }
-
+  /* ---- the face editor ---- */
   const CELLT = 28;
   const tedit = el("tedit");
   tedit.width = TW16 * CELLT + 1; tedit.height = TH8 * CELLT + 1;
   function drawTedit() {
     const g = tedit.getContext("2d");
     g.fillStyle = "#0d0c12"; g.fillRect(0, 0, tedit.width, tedit.height);
-    const grid = slotGrid(tSlot);
+    const t = curTile();
     for (let r = 0; r < TH8; r++)
       for (let c = 0; c < TW16; c++)
         if (inDiamond(c, r)) {
-          const v = grid[r * TW16 + c];
-          g.fillStyle = rgb(MONO, v ? SHK[v] : 1);
+          const v = t ? t.grid[r * TW16 + c] : 0;
+          g.fillStyle = t ? rgb(MONO, v ? SHK[v] : 1) : "#17151f";
           g.fillRect(c * CELLT + 1, r * CELLT + 1, CELLT - 1, CELLT - 1);
         }
     g.strokeStyle = "#2a2836";
@@ -1046,16 +1223,18 @@
   }
   let tPainting = 0, tStrokeSnap = null;
   function tApply(ev) {
+    if (!curTile()) return;
     const r = tedit.getBoundingClientRect();
     const c = Math.floor((ev.clientX - r.left) / CELLT), row = Math.floor((ev.clientY - r.top) / CELLT);
     if (c < 0 || row < 0 || c >= TW16 || row >= TH8 || !inDiamond(c, row)) return;
     if (tStrokeSnap) { pushUndo(tStrokeSnap); tStrokeSnap = null; }
-    slotGrid(tSlot)[row * TW16 + c] = tPainting === 2 ? 0 : shade;
-    afterTileEdit();
+    curTile().grid[row * TW16 + c] = tPainting === 2 ? 0 : shade;
+    afterTiles();
   }
   tedit.addEventListener("contextmenu", e => e.preventDefault());
   tedit.addEventListener("pointerdown", e => {
     if (e.button !== 0 && e.button !== 2) return;
+    if (!curTile()) return;
     tStrokeSnap = snapTile();
     tPainting = e.button === 2 ? 2 : 1;
     tedit.setPointerCapture(e.pointerId);
@@ -1080,28 +1259,47 @@
     }
   }
 
+  /* ---- the preview: a little world with every context in it ---- */
+  const PV = 7;
+  const PV_VOID = new Set(["6,0", "5,0", "6,1"]);              // a notch of void — its rim is EDGE
+  const PV_ROCK = new Set(["2,4", "4,2"]);                     // blocks — their sides are WALL
+  const PV_WATER = new Set(["1,5", "0,5"]);                    // a pool — WATER
+  const PV_WORN = new Set(["3,0", "3,1", "3,2", "4,3", "4,4", "5,5"]);  // the trail — WORN
+  function pvContext(x, y) {
+    const key = x + "," + y;
+    if (PV_WORN.has(key)) return "worn";
+    if (PV_WATER.has(key)) return "water";
+    const n = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+    if (n.some(([nx, ny]) => PV_VOID.has(nx + "," + ny) )) return "edge";
+    if (n.some(([nx, ny]) => PV_ROCK.has(nx + "," + ny))) return "wall";
+    return "floor";
+  }
   function drawTprev() {
-    const NP = 5, SCALEP = 6;
-    const W = 2 * NP * THW + 2, Hp = 2 * NP * THH + 2;
+    const SCALEP = 5;
+    const W = 2 * PV * THW + 2, Hp = 2 * PV * THH + 2;
     const cv = el("tprev");
     const dpr = window.devicePixelRatio || 1;
     if (cv.width !== W || cv.height !== Hp) { cv.width = W; cv.height = Hp; }
     cv.style.width = (W * SCALEP / dpr) + "px"; cv.style.height = (Hp * SCALEP / dpr) + "px";
     const g = cv.getContext("2d");
     g.clearRect(0, 0, W, Hp);
-    const ox = NP * THW + 1, oy = 1;
-    for (let y = 0; y < NP; y++)
-      for (let x = 0; x < NP; x++) {
+    const ox = PV * THW + 1, oy = 1;
+    for (let y = 0; y < PV; y++)
+      for (let x = 0; x < PV; x++) {
+        const key = x + "," + y;
+        if (PV_VOID.has(key)) continue;
         const cx = ox + (x - y) * THW, cy = oy + (x + y) * THH;
-        const k = (x + y) & 1 ? 1 : 0.88;
+        const rock = PV_ROCK.has(key), water = PV_WATER.has(key);
+        const k = rock ? 0.5 : water ? 0.72 : ((x + y) & 1 ? 1 : 0.88);
         for (let kk = 0; kk < dspans.spans.length; kk++) {
           const [a, b] = dspans.spans[kk];
           g.fillStyle = rgb(MONO, k);
           g.fillRect(cx - THW + a, cy + kk, b - a, 1);
         }
+        if (rock) continue;
         const h = (x * 73856093 ^ y * 19349663) >>> 0;
-        if (y === 2) stampFace(g, cx, cy, lib.worn, k, THW, THH, false);
-        else if (h % 100 >= 45) stampFace(g, cx, cy, lib.floor[(h >>> 7) % 4], k, THW, THH, !!(h & 32));
+        const t = pickTile(pvContext(x, y), h);
+        if (t) stampFace(g, cx, cy, t.grid, k, THW, THH, t.mirror && !!(h & 32));
       }
   }
 
@@ -1163,8 +1361,11 @@
         rQuad(g, [[cx, cy], [cx + DHW, cy + DHH], [cx, cy + 2 * DHH], [cx - DHW, cy + DHH]], rgb(MONO, k));
         const worn = demo.worn.includes(x + "," + y);
         const h = (x * 73856093 ^ y * 19349663) >>> 0;
-        if (worn) stampFace(g, cx, cy, lib.worn, k, DHW, DHH, false);
-        else if (h % 100 >= 45) stampFace(g, cx, cy, lib.floor[(h >>> 7) % 4], k, DHW, DHH, !!(h & 32));
+        // Same context law as the game: the arena's perimeter borders the void -> EDGE.
+        const ctx = worn ? "worn"
+                  : (x === 0 || y === 0 || x === DP - 1 || y === DP - 1) ? "edge" : "floor";
+        const t = pickTile(ctx, h);
+        if (t) stampFace(g, cx, cy, t.grid, k, DHW, DHH, t.mirror && !!(h & 32));
       }
     // the arena's own silhouette — the same ink that rims the game's ground
     inkPass(g, DW, DHp, [34, 32, 52]);
@@ -1271,12 +1472,18 @@
   }
 
   /* ---- boot ---- */
+  try {
+    const savedT = localStorage.getItem("wander.tiles");
+    loadTiles(savedT ? savedT : DEFAULT_TILES);
+  } catch (e) { loadTiles(DEFAULT_TILES); }
   charSelUi();
   toolUi();
   shadeUi();
   demoToolUi();
   drawEdit();
   drawFramesUi();
+  drawTileList();
+  tRulesUi();
   drawTedit();
   drawTprev();
   requestAnimationFrame(tick);

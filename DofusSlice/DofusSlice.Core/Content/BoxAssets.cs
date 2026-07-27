@@ -199,11 +199,59 @@ public sealed class BoxSprite
     }
 }
 
+/// <summary>The rendering context a tile face is authored for. A face never says WHERE it goes
+/// — the map does — only what kind of cell it is allowed to dress (see the consumer rule on
+/// <see cref="TileLibrary"/>).</summary>
+public enum TileRole { Floor, Worn, Edge, Wall, Water }
+
 /// <summary>
-/// The BOXER tile library (v 1): shade OVERLAYS for ground tiles, not pixels. Each grid is a
-/// 16×8 mask of marks — 0 no mark, 1 dark, 2 darker, 3 light — that MULTIPLY whatever base
-/// colour the tile already has (<see cref="ShadeK"/>). The editor ships shape, the game keeps
-/// colour, so one library reskins with the biome instead of needing art per palette.
+/// One authored tile face: a 16×8 shade mask plus the metadata the renderer picks by. Grids are
+/// indexed <c>[col, row]</c> and hold marks 0..3 (0 = no mark; see <see cref="TileLibrary.ShadeK"/>).
+/// </summary>
+public sealed class TileFace
+{
+    public string Name { get; }
+    public TileRole Role { get; }
+
+    /// <summary>Relative pick weight among faces of the same role, 1..9. Authored, not
+    /// computed: the artist decides that the boring pebbles show three times as often as the
+    /// showpiece crack.</summary>
+    public int Weight { get; }
+
+    /// <summary>Whether the renderer may also stamp this face horizontally flipped — a free
+    /// second variant for symmetric-ish art, opt-in because text and directional marks read
+    /// wrong mirrored.</summary>
+    public bool Mirror { get; }
+
+    /// <summary>The shade mask, <c>[col, row]</c>, always 16×8 (short files are zero-padded).</summary>
+    public byte[,] Grid { get; }
+
+    internal TileFace(string name, TileRole role, int weight, bool mirror, byte[,] grid)
+    {
+        Name = name; Role = role; Weight = weight; Mirror = mirror; Grid = grid;
+    }
+}
+
+/// <summary>
+/// The BOXER tile library: shade OVERLAYS for ground tiles, not pixels. Each face is a 16×8
+/// mask of marks — 0 no mark, 1 dark, 2 darker, 3 light — that MULTIPLY whatever base colour
+/// the tile already has (<see cref="ShadeK"/>). The editor ships shape, the game keeps colour,
+/// so one library reskins with the biome instead of needing art per palette.
+///
+/// CONSUMER RULE — the game-side renderer must derive a cell's context exactly as the tools do,
+/// so both ends dress the same map identically: worn tile → <see cref="TileRole.Worn"/>; water
+/// tile → <see cref="TileRole.Water"/>; else any 4-neighbour void → <see cref="TileRole.Edge"/>;
+/// else any 4-neighbour rock → <see cref="TileRole.Wall"/>; else <see cref="TileRole.Floor"/>.
+/// Pick among the faces of that role, weighted by <see cref="TileFace.Weight"/>. Edge and Wall
+/// FALL BACK to the Floor faces when their role has no faces; Worn and Water do NOT fall back —
+/// a library without a worn face means "no trail", not a random floor face down the path. The
+/// <see cref="Plain"/> gate (leave that % of cells untextured) applies only to Floor/Edge/Wall
+/// contexts, never to Worn or Water.
+///
+/// v2 files (the current editor export) carry a flat role-tagged "tiles" list; v1 files (four
+/// fixed floor slots + one worn grid) still load, converted into the same shape, so shipped
+/// libraries never need re-exporting. Same discipline as <see cref="BoxSprite"/>: lenient about
+/// SHAPE, strict about MEANING.
 /// </summary>
 public sealed class TileLibrary
 {
@@ -216,17 +264,18 @@ public sealed class TileLibrary
     /// rather than index this slot, and the 0f makes forgetting that visibly, blackly wrong.</summary>
     public static readonly float[] ShadeK = { 0f, 0.85f, 0.72f, 1.08f };
 
-    /// <summary>ALWAYS length 4 — the editor's four floor variant slots. Unused slots are
-    /// all-zero grids rather than nulls, so a renderer can index by variant without a null
-    /// check and an unmarked slot simply draws the plain tile.</summary>
-    public IReadOnlyList<byte[,]> Floor { get; }
+    /// <summary>Percent (0..95) of Floor/Edge/Wall cells left untextured — the breathing room
+    /// between marks that keeps a map from reading as noise. Capped below 100 because a fully
+    /// plain library is an authoring accident: it would render as if no library loaded at all.</summary>
+    public int Plain { get; }
 
-    /// <summary>The worn overlay stamped along the walked path. Indexed [col, row], 16×8.</summary>
-    public byte[,] Worn { get; }
+    /// <summary>Every authored face, in file order. May legitimately be empty (a library under
+    /// construction); the consumer rule above says which absences are meaningful.</summary>
+    public IReadOnlyList<TileFace> Tiles { get; }
 
-    private TileLibrary(IReadOnlyList<byte[,]> floor, byte[,] worn)
+    private TileLibrary(int plain, IReadOnlyList<TileFace> tiles)
     {
-        Floor = floor; Worn = worn;
+        Plain = plain; Tiles = tiles;
     }
 
     public static TileLibrary Parse(string json)
@@ -237,18 +286,119 @@ public sealed class TileLibrary
             throw new FormatException("tiles: root is not a JSON object");
 
         // Same version discipline as the char parser: a non-integer 'v' is a bad file, not a
-        // parser crash, and anything but v1 is refused out loud.
+        // parser crash, and anything newer than we understand is refused out loud. A file with
+        // no 'v' at all is dated by its shape — a "tiles" list only ever came from a v2 editor,
+        // everything else predates versioned exports — so a hand-edit that dropped the header
+        // still loads as what it plainly is.
+        int v = root.TryGetProperty("tiles", out _) ? 2 : 1;
         if (root.TryGetProperty("v", out var vEl))
         {
-            if (vEl.ValueKind != JsonValueKind.Number || !vEl.TryGetInt32(out int v))
+            if (vEl.ValueKind != JsonValueKind.Number || !vEl.TryGetInt32(out v))
                 throw new FormatException("tiles: 'v' is not an integer");
-            if (v != 1) throw new FormatException($"tiles: unsupported version v={v} (expected 1)");
+            if (v is not (1 or 2)) throw new FormatException($"tiles: unsupported version v={v} (expected 1 or 2)");
         }
 
-        // All four slots exist up front (see Floor's doc comment); parsing fills what the file has.
-        var floor = new byte[4][,];
-        for (int i = 0; i < 4; i++) floor[i] = new byte[Cols, Rows];
+        // Same 'kind' rule as the char parser: missing or null is tolerated, a claim to be some
+        // OTHER asset type is not — feeding a char export to the tile loader is a real mistake.
+        if (root.TryGetProperty("kind", out var kindEl) && kindEl.ValueKind != JsonValueKind.Null)
+        {
+            if (kindEl.ValueKind != JsonValueKind.String)
+                throw new FormatException("tiles: 'kind' is not a string");
+            if (kindEl.GetString() is string kind && kind != "tiles")
+                throw new FormatException($"tiles: kind \"{kind}\" is not \"tiles\" — wrong asset type for this parser");
+        }
 
+        return v == 1 ? ParseV1(root) : ParseV2(root);
+    }
+
+    private static TileLibrary ParseV2(JsonElement root)
+    {
+        // 45 is the editor's default plain gate; files predating the slider load unchanged.
+        int plain = 45;
+        if (root.TryGetProperty("plain", out var plainEl))
+        {
+            if (plainEl.ValueKind != JsonValueKind.Number || !plainEl.TryGetInt32(out plain))
+                throw new FormatException("tiles: 'plain' is not an integer");
+            if (plain is < 0 or > 95) throw new FormatException($"tiles: plain={plain} out of range 0..95");
+        }
+
+        var tiles = new List<TileFace>();
+        if (root.TryGetProperty("tiles", out var tilesEl))
+        {
+            if (tilesEl.ValueKind != JsonValueKind.Array)
+                throw new FormatException("tiles: 'tiles' is not an array");
+            // Bound the allocation BEFORE decoding anything, same reasoning as the char frame
+            // cap: each face is a 16×8 array, and 64 is far beyond any library the editor can
+            // author — past it the file is not art.
+            if (tilesEl.GetArrayLength() > 64)
+                throw new FormatException($"tiles: {tilesEl.GetArrayLength()} tiles (max 64)");
+            int i = 0;
+            foreach (var tileEl in tilesEl.EnumerateArray())
+                tiles.Add(ParseTile(tileEl, i++));
+        }
+        return new TileLibrary(plain, tiles);
+    }
+
+    private static TileFace ParseTile(JsonElement el, int i)
+    {
+        if (el.ValueKind != JsonValueKind.Object)
+            throw new FormatException($"tiles: tile {i} is not a JSON object");
+
+        // Names exist for error messages and artist sanity, not identity, so a missing one gets
+        // a positional stand-in rather than a rejection.
+        string name = el.TryGetProperty("name", out var nameEl) && nameEl.ValueKind == JsonValueKind.String
+            ? nameEl.GetString()! : $"tile-{i}";
+
+        // Role is the ONE field with no safe default: it decides where the face may appear, and
+        // guessing Floor would stamp wall art across open ground. Unknown values are named in
+        // the error — "lava" probably means a newer editor, and the artist should hear that.
+        if (!el.TryGetProperty("role", out var roleEl) || roleEl.ValueKind != JsonValueKind.String)
+            throw new FormatException($"tiles: tile {i} (\"{name}\") missing string 'role'");
+        var role = roleEl.GetString()! switch
+        {
+            "floor" => TileRole.Floor, "worn" => TileRole.Worn, "edge" => TileRole.Edge,
+            "wall" => TileRole.Wall, "water" => TileRole.Water,
+            var r => throw new FormatException(
+                $"tiles: tile {i} (\"{name}\") role \"{r}\" is not one of floor|worn|edge|wall|water"),
+        };
+
+        // Weight 1..9 mirrors the editor's own slider; 0 would make a face unpickable (why
+        // export it?) and a huge weight starves every other face — both authoring errors.
+        int weight = 1;
+        if (el.TryGetProperty("weight", out var wEl) &&
+            (wEl.ValueKind != JsonValueKind.Number || !wEl.TryGetInt32(out weight)))
+            throw new FormatException($"tiles: tile {i} (\"{name}\") 'weight' is not an integer");
+        if (weight is < 1 or > 9)
+            throw new FormatException($"tiles: tile {i} (\"{name}\") weight={weight} out of range 1..9");
+
+        bool mirror = false;
+        if (el.TryGetProperty("mirror", out var mEl) && mEl.ValueKind != JsonValueKind.Null)
+            mirror = mEl.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new FormatException($"tiles: tile {i} (\"{name}\") 'mirror' is not a boolean"),
+            };
+
+        // A missing grid is a legal all-zero face (the artist reserved the slot); a present but
+        // malformed one throws inside ParseGrid, same rules as v1.
+        var grid = new byte[Cols, Rows];
+        if (el.TryGetProperty("grid", out var gridEl) && gridEl.ValueKind != JsonValueKind.Null)
+            ParseGrid(gridEl, $"tile {i} (\"{name}\") grid", grid);
+
+        return new TileFace(name, role, weight, mirror, grid);
+    }
+
+    /// <summary>v1 files carried four fixed floor slots and one worn grid; convert them to the
+    /// flat face list so consumers only ever see one shape. Empty (all-zero) grids are DROPPED
+    /// rather than kept: under v1 an unmarked slot meant "draw the plain tile", and the v2 way
+    /// to say that is the <see cref="Plain"/> gate, not a face that shades nothing. Names keep
+    /// the SLOT index (floor-0, floor-2, …) so a face keeps its name when a neighbour empties.
+    /// Floor faces get mirror=true — v1 renderers always flipped variants freely — and worn
+    /// becomes the single "trail" face, unmirrored, exactly as v1 stamped it.</summary>
+    private static TileLibrary ParseV1(JsonElement root)
+    {
+        var tiles = new List<TileFace>();
         if (root.TryGetProperty("floor", out var floorEl))
         {
             if (floorEl.ValueKind != JsonValueKind.Array)
@@ -257,7 +407,9 @@ public sealed class TileLibrary
             foreach (var gridEl in floorEl.EnumerateArray())
             {
                 if (i >= 4) break; // extra variants: ignore, same leniency as short rows
-                if (gridEl.ValueKind != JsonValueKind.Null) ParseGrid(gridEl, $"floor[{i}]", floor[i]);
+                var grid = new byte[Cols, Rows];
+                if (gridEl.ValueKind != JsonValueKind.Null) ParseGrid(gridEl, $"floor[{i}]", grid);
+                if (!IsEmpty(grid)) tiles.Add(new TileFace($"floor-{i}", TileRole.Floor, 1, true, grid));
                 i++;
             }
         }
@@ -265,8 +417,15 @@ public sealed class TileLibrary
         var worn = new byte[Cols, Rows];
         if (root.TryGetProperty("worn", out var wornEl) && wornEl.ValueKind != JsonValueKind.Null)
             ParseGrid(wornEl, "worn", worn);
+        if (!IsEmpty(worn)) tiles.Add(new TileFace("trail", TileRole.Worn, 1, false, worn));
 
-        return new TileLibrary(floor, worn);
+        return new TileLibrary(45, tiles);
+    }
+
+    private static bool IsEmpty(byte[,] grid)
+    {
+        foreach (byte b in grid) if (b != 0) return false;
+        return true;
     }
 
     /// <summary>Rows lenient (missing/short = no mark), chars strict: an unknown shade char means

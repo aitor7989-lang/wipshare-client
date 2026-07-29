@@ -1,0 +1,547 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScreenSave xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Name>CombatHud</Name>
+  <State>
+    <Name>Default</Name>
+    <Variable Type="float" Name="BottomPanel.X" SetsValue="true">
+      <Value xsi:type="xsd:float">0</Value>
+    </Variable>
+    <Variable Type="float" Name="BottomPanel.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">600</Value>
+    </Variable>
+    <Variable Type="float" Name="BottomPanel.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">1280</Value>
+    </Variable>
+    <Variable Type="float" Name="BottomPanel.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">160</Value>
+    </Variable>
+    <Variable Type="int" Name="BottomPanel.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">13</Value>
+    </Variable>
+    <Variable Type="int" Name="BottomPanel.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="BottomPanel.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">18</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewLabel.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewLabel.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">608</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewLabel.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewLabel.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewLabel.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">YOUR CREW</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewLabel.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewLabel.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewLabel.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewLabel.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewLabel.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">160</Value>
+    </Variable>
+    <Variable Type="float" Name="RoundText.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="RoundText.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="float" Name="RoundText.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="RoundText.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="RoundText.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">ROUND 1</Value>
+    </Variable>
+    <Variable Type="bool" Name="RoundText.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="RoundText.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">18</Value>
+    </Variable>
+    <Variable Type="int" Name="RoundText.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="int" Name="RoundText.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="int" Name="RoundText.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">235</Value>
+    </Variable>
+    <Variable Type="float" Name="TurnText.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="TurnText.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="float" Name="TurnText.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="TurnText.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="TurnText.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">WATCHING</Value>
+    </Variable>
+    <Variable Type="bool" Name="TurnText.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="TurnText.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">18</Value>
+    </Variable>
+    <Variable Type="int" Name="TurnText.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">120</Value>
+    </Variable>
+    <Variable Type="int" Name="TurnText.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">200</Value>
+    </Variable>
+    <Variable Type="int" Name="TurnText.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">120</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName0.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName0.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">630</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName0.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName0.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewName0.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">CREW 0</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewName0.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName0.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName0.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName0.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName0.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack0.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack0.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">636</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack0.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack0.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack0.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">40</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack0.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">42</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack0.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">48</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill0.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill0.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">636</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill0.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill0.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill0.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill0.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">200</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill0.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp0.X" SetsValue="true">
+      <Value xsi:type="xsd:float">344</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp0.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">630</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp0.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp0.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewHp0.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">0/0</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewHp0.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp0.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp0.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp0.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp0.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">160</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName1.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName1.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">662</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName1.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName1.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewName1.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">CREW 1</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewName1.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName1.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName1.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName1.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName1.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack1.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack1.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">668</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack1.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack1.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack1.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">40</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack1.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">42</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack1.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">48</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill1.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill1.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">668</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill1.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill1.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill1.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill1.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">200</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill1.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp1.X" SetsValue="true">
+      <Value xsi:type="xsd:float">344</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp1.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">662</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp1.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp1.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewHp1.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">0/0</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewHp1.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp1.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp1.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp1.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp1.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">160</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName2.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName2.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">694</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName2.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName2.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewName2.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">CREW 2</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewName2.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName2.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName2.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName2.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName2.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack2.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack2.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">700</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack2.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack2.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack2.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">40</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack2.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">42</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack2.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">48</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill2.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill2.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">700</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill2.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill2.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill2.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill2.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">200</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill2.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp2.X" SetsValue="true">
+      <Value xsi:type="xsd:float">344</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp2.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">694</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp2.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp2.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewHp2.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">0/0</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewHp2.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp2.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp2.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp2.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp2.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">160</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName3.X" SetsValue="true">
+      <Value xsi:type="xsd:float">16</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName3.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">726</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName3.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewName3.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewName3.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">CREW 3</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewName3.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName3.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName3.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName3.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">225</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewName3.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">230</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack3.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack3.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">732</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack3.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarBack3.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack3.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">40</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack3.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">42</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarBack3.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">48</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill3.X" SetsValue="true">
+      <Value xsi:type="xsd:float">180</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill3.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">732</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill3.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">150</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewBarFill3.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">8</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill3.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill3.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">200</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewBarFill3.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">96</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp3.X" SetsValue="true">
+      <Value xsi:type="xsd:float">344</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp3.Y" SetsValue="true">
+      <Value xsi:type="xsd:float">726</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp3.Width" SetsValue="true">
+      <Value xsi:type="xsd:float">400</Value>
+    </Variable>
+    <Variable Type="float" Name="CrewHp3.Height" SetsValue="true">
+      <Value xsi:type="xsd:float">30</Value>
+    </Variable>
+    <Variable Type="string" Name="CrewHp3.Text" SetsValue="true">
+      <Value xsi:type="xsd:string">0/0</Value>
+    </Variable>
+    <Variable Type="bool" Name="CrewHp3.UseCustomFont" SetsValue="true">
+      <Value xsi:type="xsd:boolean">false</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp3.FontSize" SetsValue="true">
+      <Value xsi:type="xsd:int">14</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp3.Red" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp3.Green" SetsValue="true">
+      <Value xsi:type="xsd:int">150</Value>
+    </Variable>
+    <Variable Type="int" Name="CrewHp3.Blue" SetsValue="true">
+      <Value xsi:type="xsd:int">160</Value>
+    </Variable>
+  </State>
+  <Instance Name="BottomPanel" BaseType="ColoredRectangle" />
+  <Instance Name="CrewLabel" BaseType="Text" />
+  <Instance Name="RoundText" BaseType="Text" />
+  <Instance Name="TurnText" BaseType="Text" />
+  <Instance Name="CrewName0" BaseType="Text" />
+  <Instance Name="CrewBarBack0" BaseType="ColoredRectangle" />
+  <Instance Name="CrewBarFill0" BaseType="ColoredRectangle" />
+  <Instance Name="CrewHp0" BaseType="Text" />
+  <Instance Name="CrewName1" BaseType="Text" />
+  <Instance Name="CrewBarBack1" BaseType="ColoredRectangle" />
+  <Instance Name="CrewBarFill1" BaseType="ColoredRectangle" />
+  <Instance Name="CrewHp1" BaseType="Text" />
+  <Instance Name="CrewName2" BaseType="Text" />
+  <Instance Name="CrewBarBack2" BaseType="ColoredRectangle" />
+  <Instance Name="CrewBarFill2" BaseType="ColoredRectangle" />
+  <Instance Name="CrewHp2" BaseType="Text" />
+  <Instance Name="CrewName3" BaseType="Text" />
+  <Instance Name="CrewBarBack3" BaseType="ColoredRectangle" />
+  <Instance Name="CrewBarFill3" BaseType="ColoredRectangle" />
+  <Instance Name="CrewHp3" BaseType="Text" />
+  <Behaviors />
+</ScreenSave>

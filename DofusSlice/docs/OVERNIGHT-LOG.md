@@ -1,0 +1,820 @@
+# TITHE — Autonomous work log & roadmap
+
+Durable memory for long autonomous work stretches toward Dofus-1.29 parity. NOTE:
+the self-scheduling trigger for a fully unattended overnight loop was **blocked by
+the environment's permission classifier**, so continuation happens within active
+sessions (or when the owner re-prompts) rather than on a timer. The container is
+ephemeral — only pushed commits survive — so **every increment is committed and
+pushed** to `claude/dofus-engine-vertical-slice-7ijlfm`, and this log records what
+is done and what is next.
+
+## Operating rules (read first, every wake-up)
+
+1. Re-read this log and `git log --oneline -15` to see real state (context may have
+   been summarized or the container recycled).
+2. Pick the **next unchecked item** from the roadmap. Do ONE coherent increment.
+3. Keep it **close to Dofus 1.29** (the reference) AND consistent with the TITHE
+   prototype and the Slice Bible (`docs/TITHE_slice_bible.md`).
+4. **Test before commit:** `dotnet build` all three projects (0 errors) AND run the
+   headless sim (`effects` must stay 15/15; run the relevant `campaign …` mode).
+5. Data-driven discipline: numbers live in `TitheTables.cs`, never in code.
+6. Original code only. Never commit 32rogues art or uploaded `.tmx/.tsx`.
+7. Commit with the standard co-author/session trailer, push, then tick the box here
+   and commit the log update too.
+8. If an item reveals a balance problem, note it under "M5 tuning" rather than
+   rabbit-holing. Leave the tree building-clean at every commit.
+
+## Reference commands
+
+```
+dotnet build DofusSlice.Core/DofusSlice.Core.csproj
+dotnet build DofusSlice.Game/DofusSlice.Game.csproj
+dotnet build DofusSlice.Sim/DofusSlice.Sim.csproj
+dotnet run --project DofusSlice.Sim effects
+dotnet run --project DofusSlice.Sim campaign progression
+dotnet run --project DofusSlice.Sim campaign crypt 7
+dotnet run --project DofusSlice.Sim campaign survey 40
+```
+
+## Roadmap (do in order; each is one tested, committed increment)
+
+- [x] **1. Elements & the 4 elemental stats.** DONE. Classes themed (Bulwark→Earth,
+      Archer→Air, Cannon→Fire), skills carry elements, mobs have elemental armor
+      (Warden 35% Earth, Sexton 20% all) + the Spitter got Chance for its Water
+      spit, gear carries Int/Chance/Power (all-element), StatsOf/factories/HUD/sims
+      element-aware. Audit fixes folded in: Wisdom = +1% XP per point now real
+      (TitheResolution), XP curve honestly relabeled as 1.29-SHAPED placeholder
+      (real mined table + per-mob XP must land together, §9), GearWeight values all
+      damage stats + Power. (Bible defers elements, but the owner asked to get as
+      close to Dofus as possible — elements are core Dofus.)
+- [x] **2. Essence system (Dofus spellbook, M4 core).** DONE. EssencesJson catalog
+      maps each essence to its mob's signature skill (+ new "seize" root skill for
+      the Husk's essence); CampaignUnit.EssenceSlots (2, campaign-permanent);
+      Campaign.TeachEssence (consumption, no class check); combat kit = class
+      skills + taught skills; Temple Sister UI action; sim city AI teaches avatar-
+      first; HUD shows learned essences. Temple exclusives (Blood Pact, Blink) and
+      paid essence removal still open — fold into item 6 (Temple services).
+- [x] **3. Spell ranks.** DONE (ranks half): +1 spell point per level (1.29),
+      `"ranks"` rows in SkillsJson as cumulative shape/economics overrides (Ruin
+      Bolt II range 7, III costs 3 AP; Piercing Shot II min-range 3, III 2 AP;
+      Slam II reach 2, III 3 AP), BuildSkill(key, rank) with stable engine ids,
+      AutoSpendSpellPoints by class template (signature → essences) hooked into
+      ApplyResult + CityPrep; hires arrive with level-1 banked points. Crit half
+      DEFERRED ON PURPOSE: the bible excludes crits from the prototype and no
+      TITHE skill crits — rewiring CriticalBonus now is dead code + risks the
+      Dofus-slice tests. Revisit if crits enter the data.
+      BALANCE NOTE: survey greedy went 100% wipes → 83% (avg 8.8 dives) — gear +
+      essences + ranks give deep gambles a real chance. Cautious still 0% risk;
+      M5 must add risk to cautious play, not nerf greedy hope.
+- [x] **4. City equip screen (stash & kit).** DONE (screen half): E in the City
+      opens STASH & KIT — equipped list (click to strip) vs stash list (click to
+      equip), per-piece stat lines, and a live effective-block readout (HP, damage
+      element, AGI/WIS/POW, +AP/+MP, set count) so every click's consequence is
+      visible. Avatar-only re-gearing (§6.6.9). Campaign.Equip/Unequip exposed;
+      manual ops proven headless (strip the Blade: Fire 137→116 → re-equip 137,
+      set-tier recompute included). VISUAL PASS PENDING: Xvfb refused to start
+      this session (exit 144) — screenshot the screen when the display env works.
+      Manual characteristic spend (stat points UI) still open — fold into a later
+      pass with the level-up notification (Bible §6.13).
+- [x] **5. Second signature skill per class.** DONE: Bulwark Bastion (self-shield),
+      Archer Crippling Arrow (2 AP, −1 MP filler; Piercing became the 4 AP big
+      shot after cast-count telemetry proved a 3-AP main mathematically starved
+      the filler), Cannon Flashfire (1-2 range burst + push, the dead-zone
+      escape). No AI changes needed. WARNING found by survey: crew power made
+      BOTH profiles riskless → fixed immediately by mob grades (below).
+- [x] **8-partial. Mob grades (Dofus 1.29).** DONE early because item 5 broke the
+      death spectrum: +30% HP / +15% stats / +25% XP+gold per grade, grade by
+      depth in data (packs g1→g4, crypt g1→g3), mob Fighter.Level carries the
+      grade. Measured result: greedy 43% wipes but HIGHER avg gold than cautious
+      (2709 vs 2581) — Pillar 4's gamble finally exists. Still open for M5:
+      cautious play has 0% risk (hunting packs that actually hunt — item 7 —
+      is the intended fix), and the real Dofus 5-grade tables come with §9.
+- [x] **6. Temple services + survivors & temperament (M4 social).** DONE in two
+      commits. 6a: Temple exclusives (Blood Pact = SelfHpCost engine effect +
+      self-economy AI; Blink = targetsGround skills + escape AI; both proven in
+      effects tests, 17/17), the rotating shelf at painful prices, surgery
+      (essence destroyed). 6b: survivors — 30% of dives spawn one on the yard
+      (walk to hire, cheap, nature hidden), Temple VET row reveals Loyal/Grasping,
+      and the Grasping exit fires when haul ≥100g with bell ≤75s (30% cut; toast
+      in the game, ~ notes headless). Proof mode: `campaign survivors 60` →
+      17 offered / 17 hired / 5 betrayals. Threshold tuned 120→100 because a
+      full cautious clear banks 116g — the exact arithmetic is in the log.
+      Open flourish for later: the huntable traitor chase.
+- [x] **7. Hunting packs hunt + the Jumped tier.** DONE. Visual: "hunts" packs step
+      toward the crew every 2s inside a 6-cell aggro radius (red "!" on the token
+      when closing); adjacency = CATCH → a Jumped fight (scattered mid-map crew,
+      no placement phase, "JUMPED" banner). Headless: after each fight, the ONE
+      hunter nearest that fight's territory (reach within 10) rolls 4% to catch
+      the crew jumped. Balance measured: CAUTIOUS 25% wipes / avg 1879g (finally
+      has real risk — the hound near warden-way), GREEDY 85% / 1214g. Greedy
+      looking dominated is a dumb-greedy stand-in artifact (it dives the g4
+      warband at L1); M5 owns that dial — consider a "weaver" stand-in profile
+      that scales depth with level before touching the data.
+- [ ] **8. Balance pass (M5).** Give cautious play real risk; make the Crypt a fair
+      big bet; tune income-per-dive. Fix the bimodal survive-forever / wipe-fast.
+- [x] **9-partial. The behavior-rule uniques.** DONE: Gravewalkers (+1 MP boots)
+      and the Piper's Whistle (+1 AP amulet) — set-less rows in ItemsJson; ~15%
+      of successful gear rolls resolve to an unowned unique (RandomUnownedGear);
+      GearWeight values AP/MP at 45 so auto-equip treats them as the screaming
+      finds they are. Verified dropping AND worn in campaign runs (a seed-11
+      avatar broke the panoply for Gravewalkers — the classic dilemma, live).
+      Still open for 9: a second full set, more bestiary vs Chafer numbers.
+- [x] **Polish pass** (user-requested). Fixed: mid-fight Grasping exit (a merc
+      could "slip away" while their fighter still stood on the grid — new
+      DiveSession.InFight gate; the fold remains the betrayal moment); stale
+      "R = NEW FIGHT · B = SEXTON" hints shown during campaign fights where
+      neither key works (now standalone-only, and the combat title says THE
+      CRYPT inside the crypt); ambush fights report "THE AMBUSH IS BEATEN"
+      instead of the generic pack title; crew-summary double-paren typo;
+      `_cryptMsg` renamed `_yardMsg` (it carries survivor/betrayal toasts too).
+      Checked-clean: no TODO markers, 0 compiler warnings ×3 projects, README
+      progression table verified against live output, Wisdom-XP claim verified
+      implemented (TitheResolution), HUD crew rows fit the 760px window.
+
+## Progress journal (newest last)
+
+- 2026-07-18: Baseline before overnight run. Done already this session: TITHE M2
+  loop, roaming Graveyard, M3 multi-room Crypt, and Dofus stat block + leveling +
+  Adventurer set (commit `4ddaedd`). Starting item 1 (elements).
+- 2026-07-18 (later): Full audit mid-item-1 caught: set had no Int (Cannon's set
+  damage gain had collapsed to ~13%), progression readout computed Ruin Bolt from
+  STR while the spell was Fire, Spitter silently lost stat scaling, GearWeight
+  ignored Int/Cha/Power, README overclaimed ("real 1.29 curve", Wisdom XP bonus
+  that didn't exist). All fixed; Wisdom XP bonus implemented for real. Item 1
+  committed. Verified: 3 builds clean, effects 15/15, progression (Fire 30→137,
+  ~82% damage lift), crypt clears, survey bimodal-as-known. Next: item 2
+  (essence system — consume to learn skills, 2 slots).
+- M5 note: real 1.29 XP table must arrive TOGETHER with rescaled per-mob XP
+  values (current mob XP is tiny; the real curve alone would stall leveling).
+- 2026-07-18 (later still): Upgrades landed — real 1.29 XP table + Dofus-band mob
+  XP (gold decoupled via mob "gold" column; pacing verified L3≈3 dives, L5 by 12)
+  and the +1 MP Adventurer full-set bonus (ap/mp plumbed through gear). Then item
+  2 (essences) done and verified: progression demo shows the kit growing (Ruin
+  Bolt + Ironhide + Grave Bite), campaign log shows drops→teaching in the loop.
+  Survey: greedy had its FIRST survivor (39/40 wipes) — gear + learned skills give
+  deep gambles a sliver of hope; keep an eye on it in M5. Next: item 3 (crit
+  wiring per-1.29-data + spell ranks) or item 4 (city equip screen).
+- 2026-07-18 (batch close): six commits pushed this stretch — real-1.29 leveling
+  + full-set MP (38f7bdf), essences (85cf7aa), spell ranks (d2221d5), equip
+  screen (94b1253), second skills (5bf1a8a), mob grades (ad0f9bf). Balance
+  spectrum in its best state yet (greedy 43% wipes / better avg gold). NEXT UP:
+  item 7 — hunting packs that actually hunt (real-time aggro on the yard, the
+  Jumped placement tier on catch). It doubles as the cautious-risk fix, so it
+  advances items 7 AND the rest of 8. Then Temple services (6a: exclusives need
+  either AI triggers for Blink/Blood Pact or a SelfHPCost effect — design note),
+  survivors/temperament (6b), and the visual pass on the equip screen when Xvfb
+  cooperates.
+
+## Chamber8x8 skin (the second tileset)
+
+The Scut skin is retired; the game now wears adamzbuub's **Chamber8x8** pack (local-only,
+never committed). Method, same as before but sharper: the pack's two example screenshots were
+decoded 100% — they are 10× recordings (a 5× reduction also roundtrips because every feature
+is even-sized; detailed-tile matching settles the scale), grid origins (2,4)/(4,5). Every cell
+masked-matched against the pack: the wall sheet is a ring autotile (+2 concave corners + fill),
+the floor sheet an edge autotile whose dark sides carry all wall-base shading, props embed in
+wall runs (chest alcoves, doors) or scatter off-grid (bones at (5.12, 2.12)), and nothing is
+left over — no dither shadow layer this time, depth is baked into the tiles.
+
+In game: `ChamberSet` (wall/floor atlases + named props + the 4-frame knight), floor edge
+autotile per boundary adjacency, wall ring with corner pillars, City alcove chests, webs in
+the dungeon families, tomb blocks/pillars/barrels as obstacles, services in pack vocabulary
+(open chest + gold, crown, barrel), gates as doors with flanking pillars, and every unit is
+the knight — crew silver, the dead in rust/bone tints, walk/use animations driven by the
+battle poses. Full ruleset with per-tile evidence: docs/TILESET-RULES.md.
+
+## The 45° turn (squares were boring)
+
+The pixel skin now projects like Dofus: classic 2:1 diamonds, checkered ground baked from the
+Chamber paving (axis-aligned texture clipped to the cell, exactly the 1.29 trick), no walls —
+the map floats in the dark with a dimmed scenery shelf around it, prop clutter accumulating
+against the rim (never a pillar on a corner). Units wear real animation packs now: the
+FreeCharactersAnimations hero + slime and the Tiny RPG soldier + orc, baked into SpriteBank
+strips by tools/bake_assets.py with feet-baseline union crops — idle/walk/cast/hurt/die per
+archetype, mirrored facings, class pads intact. One density rule everywhere: 2 screen px per
+texel, integer scales only (the "props feel scaled" fix). The UI wears the pixel pack: cream
+9-slice panels and cards, the green button, and the blackletter dungeon font on titles baked
+to a bitmap atlas. All of it stays local-only; the repo still runs procedural-clean.
+
+## Tactical mode (the goal was 1.29's chessboard)
+
+Matched to the two reference screenshots (Astrub + Minotoror tactical mode), palette sampled
+from the pixels: the field is now flat two-tone tan diamonds with hairline seams floating in
+black; void cells are holes; obstacles are slightly elevated tiles — the diamond raised 14 px
+on two darker procedural faces, depth-sorted with the fighters. All field props and floor
+textures are retired (Chamber art now only backs overworld tokens). No UI above heads: a red
+halo under the crew, blue under the dead, brighter for the active unit; hovering any fighter
+shows the 1.29 rollover plate (name + health number). Placement paints both teams' ground —
+red yours, blue theirs. Everything here is procedural: the tactical look ships in the repo
+with zero art files.
+
+## QA runs + the hover pass
+
+Three full scripted playthroughs (city -> trade -> stash -> yard -> fight at speed -> aftermath
+-> back out) caught and fixed: the crypt label buried under mob huddles (z-order), and confirmed
+the loop banks gold, auto-equips found gear and clears packs correctly. UX layer on top of
+tactical mode: the rollover plate grew level, AP/MP and live status effects (POISON 6 (2T),
+MP DRAIN, POWER +%); graveyard packs got a composition tooltip with grade and "HUNTS THE
+LIVING" warnings; timeline cards show the fighter's plate on hover and ring its cell; services,
+the Lychgate and the open Crypt advertise their click ("CLICK TO TRADE / DIVE / DESCEND") when
+hovered. Floating damage numbers now wear their element's colour (Fire orange, Water blue, Air
+green, Earth ochre, Neutral bone; crits stay gold, heals green) — another AUDIT-129 item down.
+
+## Gum: a real UI editor on top of MonoGame
+
+The game now hosts the Gum UI runtime (Gum.MonoGame nuget; MonoGame bumped to 3.8.5 to match).
+A committed, generated project — ui/TitheHud.gumx — holds the watched-combat HUD (bottom band,
+crew rows with HP bars, round/turn header) as an editable Gum screen: open it in the visual Gum
+editor, drag things around, save, and the running game hot-reloads the change in seconds
+(verified live: recolouring the panel mid-fight). The game binds data by element name every
+frame, so layouts are free to change shape; missing file or missing names and the hand-drawn
+HUD quietly returns. `dotnet run --project DofusSlice.Game -- --emit-gum` regenerates the stock
+project via the same Gum data classes the editor uses, so the files are always schema-perfect.
+One gotcha found on the way: this Gum's "Rectangle" standard is a stroke shape — filled panels
+are "ColoredRectangle", which PopulateProjectWithDefaultStandards no longer adds by default.
+
+## Sound, from nothing but math
+
+The game speaks now, and ships no audio files: Audio/Synth.cs is a ~100-line chiptune synth
+(oscillators with glides, noise, exponential envelopes, a soft-clip limiter) and SoundBank
+renders all 19 sounds from recipes at startup — element-flavoured hits (fire saw-growl, water
+plop, air zip, earth thud), the crit arpeggio, heals, a death knell, steps, casts, coin
+chimes, victory/defeat stings, and THE BELL as four inharmonic partials of 220 Hz, tolling at
+dive start and as the clock crosses 30 and 10 seconds. Ambient beds loop seamlessly (graveyard
+wind from low-passed tremolo noise, a 55 Hz crypt drone with exact-cycle frequencies). Sounds
+fire on the ANIMATION beats, not the engine events — a hit sounds when the number pops — via
+an Sfx delegate on the BattleAnimator. Per-sound cooldowns keep 4x playback from machine-
+gunning, M mutes, missing audio hardware disables the bank gracefully (verified headless),
+and `--emit-wavs` writes every sound to disk for auditioning; the numbers were verified by
+FFT (bell dominant at exactly 220 Hz, drone at 55, coin at 2093).
+
+## The first playtest report (all of it)
+
+The root visual bug is dead: the animator now keeps a replay-position ledger, so a fighter
+STANDS where the replay says it stands — no more pre-snapping to the engine's final cell, no
+more attacks landing before the walk, no more back-and-forth "teleporting" archers (that was
+CenterFor falling through to engine truth). On top of the ledger, watched combat now
+TELEGRAPHS: every turn opens with a name banner and a pulsing team ring, movement paints its
+green path cell by cell before the walk, and every cast announces the spell by name, shades
+its true range blue from the caster's replay cell and pulses the target red before the lunge
+— the whole AI decision is legible, and the pacing slowed to match. The dead leave the turn
+order (1.29), placement supports swapping two crew, the blackletter font is retired, and the
+archer finally has its own skin (the hero re-baked into ranger greens).
+
+Progression got its Dofus furniture: a cream end-of-fight window with per-unit XP shares and
+live XP bars, level-up call-outs with their own sting, XP bars + banked-point nudges in the
+city crew panel, and the kit screen grew crew tabs, an XP header and MANUAL characteristic
+points — five per level, spent with + buttons (or auto-spend), the class contributing only
+its level-1 base now. The sims auto-spend to stay honest. Variety: four fight arenas (sunken
+yard, tomb rows, barrow circle) keyed per pack and per dive, two new mobs (tomb wraith, grave
+ghoul) with skills and two new pack types fielding them.
+
+## Emberwick lands (the user's Claude Design import)
+
+Pulled the "Game UI system design" project through the design MCP (readme, tokens, the Combat
+UI board) and implemented its combat kit in-engine, 100% procedurally — rounded slate panels
+with the 2px ink outline and vertical gradients, sunken slot wells, amber/gold pill buttons,
+and the glossy gem badges rasterized from implicit curves (heart = Vim/HP with a drain fill,
+star = Spark/AP, diamond = Stride/MP). The combat band now shows the active unit's vitals
+cluster Dofus-style, crew HP wells left, the actor's spells as element-tinted wells right; the
+turn order wears slate cards with the amber active underline; the combat log became the
+design's turn-chat (header strip, element-tinted lines); FIGHT! is the gold pill. Element
+colors everywhere (floats, impacts, log) now come from the Emberwick tokens (ember/brook/
+gale/loam/moon). The Gum band yields to Emberwick in combat and stays wired for other screens.
+
+## Death replays in sequence + the archer finally gets a bow
+- Playtest: "the enemy disappears before the attacker finishes the action." Root cause:
+  `FighterDied` spawned the corpse fade at event time while the killing cast/hit were still
+  queued, and the renderer only drew engine-alive fighters. Now death is a queued `DeathAnim`:
+  the fallen unit keeps rendering (`BattleAnimator.StillShown`) — board, halo, turn-order
+  card, no spoilers — until the blow lands on screen, then the corpse takes over and plays
+  the character's actual die strip at the correct pixel height (`CorpseSpriteOf` hook).
+- Playtest: "this is not an archer cus he has a sword." The Tiny RPG Soldier's Attack03 is a
+  genuine bow shot (the pack even ships the arrow projectile), so the bake now builds the
+  archer from it in ranger greens; the bulwark takes the sword-and-shield hero, and the
+  cannon wears the hero re-forged in ember reds (`recolor_fire`). Three distinct silhouettes.
+
+## Playtest batch 2: agency, legibility, generated ground
+- One SIGNATURE spell per crew class (piercing shot / slam / ruin bolt) — essences add more.
+  Spell ranks are now PLAYER-SPENT: the kit screen grew a SPELLS section with RANK UP buttons
+  (auto-spend removed from the dive path; sims still auto-spend).
+- Spell legibility: hover any kit well in combat for the full card (element damage, AP, range,
+  cooldown, every effect); the kit screen prints the same line under each spell.
+- The kit screen (E) now opens in the graveyard too — inventory, stats, ranks, mid-dive.
+- Balance: archer 11-16 (was 13-18) and AGI 20; bulwark 100 HP at L1 (was 78); cannon 58 (was 42).
+- Corpses now carry the fighter's tint (a tinted shared sheet without its tint read as a
+  different creature — "the death anim is using old sprites").
+- Bread made visible: the mend prints into the fight log ("HARD BREAD: bulwark +22 HP (1 left)")
+  and the shop line says what bread does.
+- SOLO START: a new campaign is just you; the Hiring Post is the first decision (160g covers
+  two L1 hires). The city header says so.
+- Ready phase has the 1.29 countdown (30s over the FIGHT! pill, red under 10, auto-starts).
+- Ranged casts fly a PROJECTILE (arced streak, element-colored, queue-blocking so the hit
+  lands when the shot does).
+- PROPER GENERATED MAPS: TitheContent.GenerateArena — irregular ellipse-union silhouettes,
+  clustered obstacles, flood-fill connectivity guarantee (west landing always reaches east
+  ground; sealed pockets drown). Every fight and every yard uses them.
+- THE YARD IS THREE MAPS: near/mid/deep, connected by glowing edge gates; packs sort by reach,
+  the survivor wanders the mid yard, the Crypt waits in the deep one.
+- Obstacles got art: stacked-canopy trees and rubble boulders on the raised blocks.
+
+## The Dofus oldUI Remake skin, everywhere
+- New local-only theme layer: tools/bake_dofus_ui.py copies the aspette/dofus_themes
+  "oldUI Remake" chrome (using the theme's own scale9Grid margins) plus classic spell
+  tiles + stat icons into assets/dofusui/ (gitignored, never committed). Rendering/DofusUi.cs
+  loads the manifest and draws parchment windows, orange pill buttons, tab domes, segmented
+  candy gauges, dark rounded slots and the silver title strip.
+- ONE hook reskins everything: EwChrome.Theme routes Panel/Well/Pill/HeaderStrip through the
+  theme, so the combat band, fight log, timeline cards, placement band and spell cards
+  re-dress at once; UiPanelBg/UiButtonBg cover the fight report, NPC windows and every
+  button; the kit screen wears the full parchment treatment with stat icons, tab domes,
+  spell tiles and hairline list rows; crew HP + XP + the bell are candy gauges.
+- Spell icons: 18 classic Dofus tiles mapped by theme (Knell for Sexton's Toll, Lamentations
+  for Wraith Wail, Carrion for Ghoul Rend...) drawn in the combat kit wells (with AP chip),
+  kit screen rows and spell cards. Sourced from the open-source DofusFashionistaVanced set;
+  dofusroom.com itself is blocked by this environment's egress policy, so its mirror of the
+  same icons couldn't be used directly.
+- Everything keeps the procedural fallback: no assets folder -> Emberwick chrome unchanged.
+
+## Region-by-region fidelity pass on the oldUI skin
+- The windows were WRONG: real oldUI composes a near-black translucent body under the silver
+  popup frame (bg at ~0.16 RGB), not parchment. DofusUi.Window now does exactly that, and all
+  themed window text flipped to white ink (WinInk/WinInkDim/WinGold helpers) — kit screen,
+  NPC shops and the fight report included.
+- Real ITEMS, per the user's sources (dofusroom.com itself is egress-blocked; identical icons
+  pulled from the open-source DofusFashionistaVanced set): 24 classic Dofus eggs fill the demo
+  inventory grid, and the game's 9 gear pieces got their icons (Adventurer set, Black Crow's
+  boots for the Gravewalkers, a Flute for the Piper's Whistle) — drawn in the kit screen's
+  equipped/stash rows.
+- Demo scene region fixes: equip slots wear the theme's tx_slot silhouettes; the doll got the
+  real turn-character arrows; locked slots show the padlock; category tabs use real btnIcon
+  glyphs (the theme's windowIcon PNGs are empty placeholders — bbox-verified); [+] spenders
+  sit OUTSIDE the stat rows; help chips, page pip, gold kamas coin, wider XP strip; search
+  and kamas rows tucked inside the frame rail.
+
+## Second fidelity pass on the demo (user's region notes)
+- Corners fixed: the ornament title strip distorts when squashed, so themed headers are now a
+  flat near-black band with a gold hairline (EwChrome.HeaderStrip too), and the X/help chips
+  sit INSIDE the frame corners.
+- Real margins: window content starts 28px inside the silver rail; tabs at native proportions
+  seated on a hairline; the left column re-metered so nothing collides.
+- The bottom HUD is flat near-black with a hairline top edge (not the brown float panel) and
+  gained the missing furniture: two chat lines + input + toolbar chips, pager arrows + page
+  number by the bar, eight glyph option chips, a framed minimap with a diamond grid, and the
+  full-width XP strip.
+- Typography: DejaVu Sans Bold (freely redistributable) baked to the ui_font atlas at 13px —
+  the rounded bold sans reads like Dofus 2's text. The demo draws everything with it.
+
+## Demo pass 3 (user notes)
+- The heart, PA and PM now use the theme's OWN sprites (icon_hp_full / icon_ap_full /
+  icon_mp_full) instead of the Emberwick gems.
+- Header bands moved fully inside the silver rails — the frame's border is never covered.
+- The HUD is flat black; the chat corner and the minimap are deleted per the user's call;
+  the yellow LEVEL strip runs flush along the very bottom, full width.
+- The scene backdrop is black like the original's.
+
+## Demo pass 4 (user notes + their sprite sheet)
+- Unified typography: bake_assets now writes a TRUE 26px ui_font_big atlas alongside the 13px
+  one; headings and big values draw from it (never integer-doubled), so all text carries the
+  same rendering quality. UiFont learned named atlases.
+- The character-rotate arrows are now the orange arrow pair from the user's uploaded UI sheet
+  (keyed from the JPEG into the local theme assets), placed flanking the doll like the
+  original layout.
+
+## Demo pass 5: the grey
+- The bottom bar was read as "flat black" — it now uses the EXACT canvas grey sampled from
+  the user's sprite sheet, RGB(48,48,48) flat with a double hairline top edge, verified by
+  sampling the rendered output. Backdrop lifted to the same neutral family (34,34,34).
+
+## Demo pass 6: element-by-element polish vs the reference
+- Selected tab = light dome with DARK text (was inverted); heart tab icon enlarged.
+- The "+" chip joined the eye chip beside the portrait.
+- "Points a repartir" decomposed into label + dark input well + round orange refresh.
+- Dropdown gained its attached orange arrow button.
+- Item-grid stack counts moved top-left; padlocks centered on dimmed cells (grid + pet strip).
+- The pet strip's last slot holds the golden Dolmanax idol.
+- The right-side HUD chips draw WHITE glyphs on orange, like the reference.
+
+## Demo pass 7: proportion + declutter (user notes)
+- Rotate arrows shrunk to feet-size; the character stands CENTERED in the doll's free middle.
+- Doll decluttered: 3 slots left, 4 right, weapon+shield below — mini slot, pet slots and the
+  flute removed; the oldUI Remake plaque deleted.
+- The bottom bar is a CENTERED plate (580px) instead of full-width; the eight right chips are
+  gone; the level strip matches the plate's width.
+- Type unified for real: ui_font_big rebaked at 18px (was 26) so headings/values FIT inside
+  their pills; rows gained inner padding; the whole characteristics column re-metered inside
+  wider margins (34px) with the footer pills fully inside the frame.
+
+## Demo pass 8: the margins pass (measured)
+- Measured the popup frame's VISIBLE rails from the art itself: L22 / T21 / R21 / B27 px.
+  The footer buttons had been ending 19px inside the bottom rail — the clipping the user saw.
+- Re-metered both windows against those numbers with >=10px breathing everywhere: title band
+  at +28, content margins 34px, rank folded onto the Omega line to buy vertical room, footer
+  pills end 16px above the rail zone, inventory search/kamas 27px clear, grid pitch 45.
+- Verified with 2x zoom crops of every margin-critical region (window bottoms, band corners,
+  doll, HUD plate) — all gaps confirmed visually after the render.
+
+## Demo pass 9: verify-and-fix (user list)
+- The "second grey border" was our own body fill leaking 12px outside the silver rail (the
+  frame art has ONE rail at 17-21px, measured). The body now starts just inside the rail —
+  the white line alone defines the window.
+- The character is now MEASURABLY centred: the sprite's body mass sits 21% of its height left
+  of the frame centre (sword side), so the anchor compensates; the rendered mass centre
+  measures -0.7px from true centre. Portrait got the same correction. Arrows shrunk again
+  (12x18) and flank the visual body.
+- ONE text size across the characteristics panel (the 18px vitals dropped to the body size).
+- Inventory decluttered further: 18 eggs with empty rows below, one lock, one count; the pet
+  strip holds just a pet and the idol.
+
+## The Gum visual editor is player-usable now
+- F9 in combat flips the band to the GUM LAYER (ui/TitheHud.gumx) with live data bound by
+  name (RoundText/TurnText/CrewName0-3/CrewBarBack-Fill0-3/CrewHp0-3); F9 again returns the
+  coded Dofus/Emberwick HUD. The published build ships ui/ next to the exe, and the runtime
+  hot-reload watches THAT copy - so editing TITHE/ui/TitheHud.gumx in the Gum tool while the
+  game runs updates it live.
+
+## Ranged-attack glitch fixed
+- The spell-range telegraph painted its blue diamonds over IN-BOUNDS void cells — on the
+  generated island maps that meant range shading floating on the black sea beyond the map's
+  edge ("something going out of the screen"). Telegraph cells now land on real ground only.
+
+## THE ONE-BIT RESET (v7.0)
+The complete UI + graphics restyle the playtest asked for: "delete and start anew all the
+art, 1 bit style, minimal UI" — built from Hexany's Roguelike Tiles (CC0) and Batuhan
+Karagol's 1-bit UI pack, both local-only in gitignored assets/ like every kit before them.
+- `Rendering/Mono.cs` is the whole visual language: near-black panels, ONE ink, ONE dim
+  grey, ONE red accent (enemies/danger/alarms), 1px sharp frames, hover = inversion. A
+  compile-time `Mono.On` switch routes every chrome chokepoint; flipping it off restores
+  the previous look untouched.
+- The Ew and Palette token sets collapse to the mono inks at their SOURCE, so the combat
+  band, log, timeline, gauges, floats and every window fell in line without touching call
+  sites. The Dofus oldUI theme layer stays dormant under Mono (DofusUi never loads).
+- Every archetype now has its OWN silhouette (tools/bake_onebit.py): hero, bow archer,
+  wizard cannon, mummy husk, hound, cobra spitter, spider mite, robed piper, ghost wraith,
+  skull ghoul, horned warden — and the Sexton is a hooded monk drawn at 2x in pure Danger
+  red. Single static frames ride the SpriteBank name chain; the old animation strips are
+  gone locally.
+- Batuhan's heart/star/shield replace the glossy vitals gems (HP bar under the heart, ink
+  numbers ON the white icons); his kit also seeded the button/frame language.
+- Obstacles: dim rubble sprites on grey blocks, bare ink trees; floors are two near-black
+  tones with a visible seam; buildings are ink-outlined huts; the lychgate a white arch.
+- QA'd screen by screen under Xvfb: placement, watched combat, spell-card hovers, city,
+  NPC shop, kit (points + RANK UP), graveyard, pack hover, fight report, sexton court.
+  Fixed en route: SPEED label under the timeline cards, AUTO-SPEND off the WIS row,
+  mono unit rollover plate, and "THE SEXTON" truncating to seven letters on its card.
+
+## v7.1: fat pixels, small tokens, honest vitals
+- The mono world now renders through a HALF-RES target blown back up with point sampling
+  (BeginWorld/EndWorld) — board, sprites, halos, floats and telegraphs all share one chunky
+  2px grid while the HUD stays crisp. World coordinates are untouched, so picking never
+  noticed. World-pass text rides a WT=2 scale (half-res kills scale-1 glyphs); banners,
+  pack tooltips and every overworld label moved with it.
+- Sprites rebaked at NATIVE 16px and drawn at 32px — the cast is half its former size and
+  each art pixel is exactly one screen block. The Sexton still looms at 64px.
+- The bottom band vitals were rebuilt: three UNIFORM 48px icons (heart/star/shield) with
+  the numbers punched dark into the white shapes, AP/MP captions, and one HP bar under the
+  heart. The kit icons' diagonal shine slash read "broken" at HUD size, so the three
+  shapes are now pixelled in bake_onebit.py on the same 1-bit grid — solid and symmetric.
+
+## v7.2: hardening + polish audit
+Swept the whole build for cracks after the 1-bit conversion; every screen visited live
+under Xvfb, plus one run with NO assets folder at all.
+- Art-free boot PROVEN: with assets/ removed the game runs the full placement/combat loop
+  on procedural fallbacks — the public repo's no-art promise still holds.
+- Last colorful stragglers mono'd: standalone end overlay (defeat title, per-unit fates,
+  essence line), crew roster fate text, Gum editor turn color, summon impact flash, water
+  tiles (black water, dim ripples), and both XP track fills.
+- F10 (theme demo scene) is inert while the theme layer sleeps under Mono — no half-drawn
+  debug screen.
+- Kit crew tabs now speak the language: the SELECTED tab inverts like every active control.
+- The survivor's one-line pitch collided with pack labels at world text scale — now two
+  short lines (SURVIVOR / class-level-price).
+- Flows exercised: temple + hiring panels (bought two mercs, gold math right), kit tabs
+  across three crew members, NEAR->MID yard gate transit, pack rollovers, hire-button
+  inversion on hover. Building/gate cells confirmed clickable at their computed centers.
+
+## v8.0: YOU PLAY NOW — the P0 fun slice
+The Make It Fun brief's pivot, built: your avatar is piloted Dofus-style; the crew are
+companions with their own turns. Decisions locked with the designer: pure-AI companions,
+30s timer from day one, SPACE hands your turn to the AI, avatar death = dragged out.
+- YOUR TURN: move-range shading, castable cells + AoE + hover damage estimates, spell bar
+  (the band's kit wells are now clickable, 1-6 hotkeys, selection inverts, unaffordable
+  spells dim), END TURN button with the ticking 30s clock, ENTER ends, SPACE = auto.
+  The whole piloted grammar was already in the engine from the standalone mode — the
+  slice wired it to the avatar's turn inside tithe fights (campaign AND standalone).
+- REAL KITS: every class starts with THREE spells, not one. Archer: Piercing Shot ·
+  Crippling Arrow · Blink. Bulwark: Slam · Seize · Bastion. Cannon: Ruin Bolt ·
+  Flashfire · Blood Pact. Merc AI already chains them (piercing -> crippling kills).
+- RANK-UP PREVIEW: hovering RANK UP shows the NEXT rank's full line in the row.
+- DRAGGED OUT: a downed avatar no longer ends the campaign — wounded, HP 1, the dive
+  over, that fight's spoils lost. Dead mercs stay dead.
+- Fight log narrates your turn lifecycle (hand-off, end, clock-out, cast refusals).
+- QA'd end to end under Xvfb on both paths: arm-by-hotkey -> click-cast (Ruin Bolt 24
+  dmg confirmed in the log), SPACE hand-off mid-turn, timer auto-end, campaign dive
+  piloting on a generated island. (The flaky-looking "turn skips" were the harness
+  dropping keys; the game-side trace exonerated the dispatcher.)
+
+## v8.1: the UX pass — function speaks color
+Designer's call: the 1-bit rule bends for GAME INFORMATION. Art and chrome stay
+ink-on-black; the board's language gets green/blue/red back.
+- Move range is muted GREEN, castable cells muted BLUE, AoE red, reach dim grey.
+- Every action floats its price at replay time: -N AP in blue over the caster, -N MP in
+  green over the walker (new CostFloat beat in the animator), damage -N in red on the
+  victim, heals +N in green.
+- END TURN's clock (and the YOUR TURN header) turn red under 10 seconds.
+- Arming a spell and pointing somewhere illegal draws a red X on the cell.
+- The avatar's turn banner now says YOUR TURN and lingers longer than enemy name plates.
+- Also shipped: docs/ROADMAP-LEADER.md — the Leader Update plan (avatar-only progression,
+  split loot, character/spell panels, the bag + in-combat draughts, drop tables + the
+  Adventurer set with 3/5/7 bonuses, and Blood Price, the face-to-face lifesteal).
+
+## v8.2: the Leader Update, part 1 — your progression, their shares
+- The kit screen is YOURS: one "YOU — LEADER" plate, no crew tabs. Companions appear as a
+  read-only roster ("they manage themselves") and auto-spend their points silently on
+  level-up. Only the avatar banks stat/spell points for the player.
+- Loot SPLITS: gold divides evenly across living party members — mercs' cuts leave as
+  their pay, the leader banks their own share plus the remainder; a dead member's share
+  is lost with them. The fight report shows it Dofus-style: "+36 GOLD — SPLIT 3 WAYS"
+  and per-member rows with +XP, +gold cut, and the live level bar.
+- The archer lost Blink (mobility budget already spent) and gained DEADEYE: 5 AP,
+  range 5-8, 16-22 air — the max-distance sniper identity as an active.
+- Observed in QA: the handed-over avatar turn chained BLOOD PACT (+3 AP for 10 HP) into
+  RUIN BOLT for a 41-damage kill — the three-spell kits are already producing combos.
+
+## v8.3: the Leader's windows — the F10 demo structure, reborn in ink
+The designer's call: reuse the Dofus-recreation test's layout wholesale, in the new UI.
+- C = CHARACTERISTICS: portrait slot with your sprite, name/class/level + XP bar, the
+  PV/PA/PM rows, six characteristic rows with [+] spenders and AUTO-SPEND, the effective
+  power/initiative line, and the Adventurer set count. Same skeleton as the demo's left
+  window, pure mono chrome.
+- I = INVENTORY: the equipment doll (amulet/weapon/ring left, hat/cape/belt/boots right)
+  with YOUR CHARACTER standing in the middle of their gear; the consumable strip where
+  BREAD is clickable food (mends the most-hurt member, new Campaign.EatBread), draughts
+  stack for the coming in-combat use, and held ESSENCES teach you their skill on click;
+  the 5x8 stash grid (click to equip, hover for item cards); the gold row with the ink
+  coin and the set progress. Same skeleton as the demo's right window.
+- Both open anywhere in the city or mid-dive (the bell keeps ticking), close on C/I/ESC/X.
+
+## v8.4: the combat band, rebuilt on the demo HUD — team goes right
+- The bottom bar is now the F10 demo's HUD skeleton: a CENTRED PLATE with the actor's
+  name, the vitals cluster (AP star · heart with punched number + HP bar · MP shield)
+  and the 7x2 SPELL GRID (your six spells + the draught stack slot; row two waits for
+  pages). The avatar's LEVEL strip runs plate-wide underneath, like the demo's gauge.
+- THE TEAM moved to the right edge, Dofus-style: name, HP bar and numbers per member,
+  with END TURN (and its clock) right below them. The piloting how-to lives on the
+  band's left; spell hover cards still pop above the plate.
+
+## v8.4.1: END TURN takes centre stage
+- The turn TIMER is a plate-wide draining BAR now (ink, burning red under 10s), with the
+  END TURN button centred beneath it — the 1.29 arrangement. The avatar's level strip
+  moved to the team column with its XP numbers.
+
+## v8.4.2: the heart IS the health bar
+- The little HP bar under the heart is gone. The HEART ITSELF drains now: a faint hollow
+  silhouette that fills bottom-up with ink to your exact HP fraction (new
+  DrawUiSpriteFilled). END TURN moved into the bar's old spot, right under the heart.
+- Every vitals number wears a near-black 4-way OUTLINE (new OutlinedCentered) so it reads
+  on the white fill, the dark hollow, and anything between; the HP number burns red under
+  a quarter. AP/MP captions moved beside their icons to clear the button.
+
+## v8.5: the spell book (S) — and the window set is complete
+- S opens YOUR spell book: one row per spell with the letter well and AP cost, RANK PIPS
+  (filled squares for bought ranks), the current effect line, and the NEXT rank's line
+  permanently visible beneath it — no hovering needed to know what you're buying.
+  RANK UP buttons appear when points are banked; essence-taught spells say FROM ESSENCE.
+- Window consolidation: the old E kit screen retired — E now opens the bag (alias of I),
+  the companions roster lives at the bottom of the character sheet, and every level-up
+  hint points at C (stats) and S (spells).
+
+## v8.6: the roadmap closes — drops, the full set, Blood Price — and a hardening pass
+ROADMAP COMPLETE (docs/ROADMAP-LEADER.md):
+- DROP TABLES with FAMILY POOLS: each mob's gear roll now draws from what its family
+  carries to the grave (husks: belts/boots · hounds: boots/rings · spitters and pipers:
+  amulets · wraiths: capes · ghouls and wardens: blades...). ~15% of finds are uniques;
+  exhausted pools fall through to any unowned piece. THE SEXTON ALWAYS gives up a piece.
+- SUNDRIES: the dead carry supplies — bread from the shambling (10-15%), healing draughts
+  from the learned (8-10%, the Sexton always) — folded into the FOUND line and your bag.
+- THE PANOPLY LADDER: the bag shows the tier you HOLD in ink and the next rung as a goal
+  line ("AT 3 PC: +18 VIT +3 STR..."), up to the full-set +1 MP scream.
+- BLOOD PRICE lands: the bulwark's level-4 unlock — 4 AP, range 1 face-to-face, 14-20
+  earth, and you drink HALF the damage back (the engine's Lifesteal, now parseable from
+  data). Class kits are LEVEL-GATED: three signatures at 1, the fourth at 4.
+HARDENING (fresh angles):
+- Lifesteal engine support VERIFIED before shipping the spell (it was already there).
+- The retired kit screen is DELETED — ~250 lines of dead panel, rects and click plumbing
+  gone; StatRows moved to the Leader panels that still use it.
+- Art-free boot re-proven post-purge; FOUND lines truncation-guarded; ItemName confirmed
+  pass-through-safe for sundry names; solo fights show no bogus "SPLIT 1 WAYS" line.
+- Live campaign QA: solo piloted dive, auto-turn chaining Flashfire kills, survived at
+  11/58 with the heart nearly hollow and the number in red — every v8.x system in frame.
+
+## v8.7: THE ICON PASS — the 1-bit Pixel Icons pack, wired game-wide
+The owner supplied a pack of ~3,000 named 16x16 two-tone glyphs (white fill, black
+outline, real alpha). 41 are baked (gitignored, like all third-party art) via
+`tools/bake_onebit.py --icons`: 9 stat, 7 equipment-slot, 20 spell, 5 UI chips.
+Icons keep their authored two-tone (NO reink): drawn tinted, the fill takes the ink
+and the outline stays dark, so glyphs read on panels and on white fills alike.
+- New helpers `DrawIconRect` (largest integer multiple of 16 that fits — pixels stay
+  square) and `DrawSpellIcon` (spell -> `icon_spell_{key}` via SkillKeyById). EVERY
+  call site keeps its old text fallback, so the public repo still runs art-free.
+- COMBAT BAND: spell wells wear their glyphs with the AP price outlined in the corner
+  (Faint when you can't pay), the draught slot wears the potion bottle, the spell
+  hover card gets its glyph in the header. Mob signatures included — enemy turns show
+  fangs, poison drops, the ghost, the flute.
+- CHARACTER SHEET: HP/AP/MP and all six characteristic rows lead with their stat glyph.
+- INVENTORY: empty doll slots show their slot's ghost glyph faint (Dofus's language),
+  worn slots show it in ink with the piece's name outlined at its feet; the stash grid
+  draws slot glyphs with outlined names; bread/draught/essence strip cells wear their
+  icons with outlined counts; the kamas row gets the pack's coin.
+- SPELL BOOK: the letter wells wear the same glyphs as the combat bar.
+- CAMPAIGN HUD: coin + gold, bread/draught/essence chips as icon + count; THE BELL
+  clock label rings with the pack's bell (Danger-tinted under 25% clock).
+- QA: city HUD, C/S/I windows, graveyard clock, live fight band + hover card all
+  screenshot-verified; vitals numbers still outlined-readable over the art.
+
+## v8.8: PASS 1 "READ THE FIGHT" — the color language (ROADMAP-POLISH.md begins)
+The owner's polish batch is segmented into four passes in docs/ROADMAP-POLISH.md
+(with 3.4b added later: level-up deserves a wow moment). Pass 1 ships here:
+- THE VITALS LAW: HP is RED, AP is BLUE, MP is GREEN — Mono.Hp/Ap/Mp. The band's
+  heart fills red, the star and shield tint blue/green, team HP bars and world HP
+  bars go red, the character sheet's HP/AP/MP rows tint their icons, effect lines
+  (HEALS/STEALS AP/…) speak their color.
+- ELEMENTS SPEAK: Mono.Element() (fire orange, water blue, air green, earth ochre)
+  now feeds EwChrome.ElementColor under mono — spell glyphs in the combat wells,
+  spell book and card headers wear their element; damage floats and log lines
+  inherit it through the same switch.
+- TEAMS: ally halos are BLUE (Mono.Ally), enemies red — in the world and as the
+  turn-order card borders.
+- TURN ORDER: each card wears the fighter's sprite HEAD (head+shoulders crop, 2x),
+  red HP number, and STATUS CHIPS underneath (P poison green, S shield blue,
+  + damage buff orange, M mp-drain violet, R regen green...).
+- The fight log lives BOTTOM-LEFT now (8, HudTop-232), Dofus-chat style, clear of
+  the turn order.
+- PATH PREVIEW: hovering a reachable cell draws the exact A* route as green
+  footstep dots plus the MP cost in green (Pathfinding.FindPath, same blocker rule
+  as the real move).
+- QA (live fight): blue-ringed cannon vs red-ringed barrows, heads + team borders
+  on the timeline, red heart/blue star/green shield, fire-orange Ruin Bolt glyph,
+  footsteps + "3 MP" verified on screenshot.
+
+## v8.9: PASS 2 "ONE BAR, EVERYWHERE" — HUD unification
+- The fight log now sits IN the bottom-left corner (owner correction: literally the
+  corner), riding the band left of the plate; piloting hints moved top-left.
+- CampaignBand.cs: city + graveyard wear the SAME band as combat — heart/star/shield
+  vitals (avatar HP live), the well grid holding QUICK ITEMS (bread eat-now with
+  count, draught treats the wounded, carried essences), TEAM column right with red
+  HP bars, the leader's XP on the plate-wide strip. Bread heals float "+N" green
+  over the band AND over the party token in the graveyard world.
+- The corner MENU (Dofus-style): three icon buttons bottom-right (character/book/
+  bag; 3 new baked icons) replace every "C: CHARACTER · S: SPELLS · I: BAG" hint
+  line; they toggle their windows open AND closed (UpdateLeaderPanels lets the menu
+  through while a window is open — found in QA).
+- PLACEMENT keeps ONE button: the END TURN slot reads FIGHT, the plate-wide bar
+  drains the ready countdown. The big gold pill is demo-mode-only now.
+- The bottom-left pile (gold, sundry chips, tithe due, wide CREW block) is GONE
+  from the HUD — gold/tithe/counts live in the bag (tithe line added), the crew in
+  the TEAM column; DrawCampaignHud deleted.
+- QA: city band + quick wells + corner menu screenshot-verified; bag toggles from
+  the menu both ways; placement FIGHT starts the fight; corner log confirmed live.
+
+## v9.0: PASS 3 "FAIR TURNS, HONEST AI" — systems + fixes
+- 3.1 ALTERNATING INITIATIVE was already the engine's law (CombatEngine.Start: the
+  side with the top initiative leads, then strict team alternation, leftovers close
+  the round) — verified, no change needed.
+- 3.2 BLOOD PACT HONESTY (the owner's cannon bled for nothing): TrySelfEconomy now
+  requires the bonus AP to UNLOCK an extra attack this turn AND refuses when the
+  already-affordable swings (stat-scaled vs the nearest target) cover every living
+  enemy's HP. Effects suite grew a refusal case: 18/18 PASS.
+- 3.3 THE SPELL LADDER: ClassSkillsAt = one spell at level 1, +1 per level until
+  the class list ends. Kits, spell book, auto-spend and fight factories all flow
+  from it.
+- 3.4 LEVEL UP = FULL LIFE: GainXp's level loop sets CurrentHp = null.
+- 3.4b THE MOMENT: after the loot window, the LEADER's ding gets its own screen —
+  blackout, rotating rays, the pulsing AP-blue star wearing the new level, LIFE
+  FULLY RESTORED, and the freshly unlocked spell's glyph + name in its element ink.
+  SPACE advances. (Code-complete; a live ding wasn't stageable in headless QA — the
+  solo opener kept wiping, see the balance note.)
+- 3.5 AUTO-SPEND ALL removed from the character sheet (mercs still self-manage).
+- 3.6 THE GRAVE REFILLS: cleared yard packs respawn 75 bell-seconds later
+  (PackState.ClearedAtClock; ConsumeRespawn feeds the yard message).
+- Sims: effects 18/18; campaign progression REPAIRED for the solo start (it still
+  assumed the pre-pivot 3-member crew — hires added); survey 40+40 runs clean.
+- M5 BALANCE WATCH: with one spell at level 1, a SOLO fresh campaign now loses the
+  near-yard pack more often than not (watched twice in QA — dragged-out flow held
+  both times). Hiring first is the intended answer (45g/head from 160g), but the
+  opening pack may want a soft-touch variant for solo divers.
+
+## v9.1: PASS 4 "TOUCH THE LOOT" — the polish roadmap CLOSES
+- DRAG & DROP in the bag: a press on a stash cell or worn doll slot ARMS a drag,
+  moving past 6px makes it real (the piece's glyph rides the cursor, the legal
+  landing zone strokes walk-green), release drops — stash->doll equips, doll->grid
+  unequips. A release that never travelled is the old click, so eat/teach/equip
+  clicks are untouched. The bag now speaks press/drag/release (guarded so the
+  menu-press that OPENS it can't self-close on its release — caught in design).
+- ESSENCES FALL IN THE WORLD: a victorious yard fight drops its essences ON the
+  pack's cell — a bobbing soul-glyph pulsing ink<->cast-blue inside a slow-turning
+  four-point glint, name beneath. Walk beside it to claim (+NAME float, coin);
+  leaving the yard snatches leftovers so loot is never silently lost. Crypt drops
+  still go straight to the bag (the altar tears you out).
+- QA: release-based input regression-proven (bag opens from the menu and STAYS
+  open, strip clicks fire on release, menu closes it). The drag path is a thin
+  layer over Equip/Unequip, which the progression sim already proves; a live drag
+  needs a gear drop, so it rides on that proof.
+ALL FOUR PASSES OF docs/ROADMAP-POLISH.md ARE DONE (18 items + 3.4b).
+
+## v9.2: hardening — the straggler, and the ding SEEN live
+- THE STRAGGLER: a new near-yard pack (one barrow husk, reach 12, grade 1) gives a
+  solo one-spell level-1 an honest first kill — answers the v9.0 balance watch.
+  Data-only change in TitheTables; sims stay green (effects 18/18, survey clean).
+- THE LEVEL-UP MOMENT, VERIFIED LIVE at last: solo dive, straggler kill, ding to 2 —
+  blackout, rays, the blue star wearing "2", LIFE FULLY RESTORED in green, and
+  FLASHFIRE unveiled with its torch glyph in fire orange. One SPACE advances. The
+  next fight's band showed the new spell in its well, HP full from the ding, the
+  green "-3 MP" float and YOUR TURN banner — the ladder + full-heal loop closed.
+- Grammar caught on the celebration ("YOU REACHES LEVEL 2"): the avatar's name
+  "You" now conjugates — YOU REACH / {NAME} REACHES.
+- Still luck-gated in live QA (mechanisms sim-proven): a live essence ground-drop
+  and a live gear drag — both thin layers over verified Core calls.
+
+## v9.3: QA sweep — the drops SEEN, the drag hardened, art-free re-proven
+Instrumented QA (husk drop rates temporarily 100%, REVERTED before commit — zero
+diff on the tables) surfaced two real fixes:
+- THE SHINE WAS SWALLOWED: the crew stands on the pack's cell after a fight, so a
+  fallen essence was auto-claimed the same frame it landed — the moment never
+  showed. Fixed with ScatterFrom(): the drop lands on the nearest free yard cell
+  at least two steps from the crew. VERIFIED LIVE: SEIZE shone in cast-blue with
+  its glint two cells from YOU (band well empty), one walk-click later "+SEIZE"
+  floated and the well filled. The whole loop on camera.
+- WOBBLY CLICKS WERE SWALLOWED: a press that drifted >6px armed a drag, and an
+  aimless release dropped the action on the floor — a sloppy click on a doll slot
+  did NOTHING. Threshold raised to 10px and an invalid drop released over its own
+  source slot now falls back to the plain click.
+- Auto-equip note (by design, v8.6): AddGear self-equips upgrades into empty
+  slots, so fresh finds often start ON the doll (the report's FOUND line is the
+  receipt). Drag-to-stash is the way to bench them.
+- Harness note: synthetic held-button mouse MOTION never reaches SDL under the
+  Xvfb rig, so a full drag can't be exercised by the bot — the drag path is
+  compile/review-verified atop the sim-proven Equip/Unequip; clicks fully QA'd.
+- ART-FREE BOOT RE-PROVEN after the icon era: assets hidden, game boots clean —
+  letter corner menu, gem-badge vitals, icon-less sheet rows all fall back right.
+- Sims after revert: effects 18/18.
+
+## v9.4: THE CURRENCY IS ESSENCE STONES (owner's call)
+Gold is gone from the fiction: the dead pay in ESSENCE STONES, and the Tithe-Keeper
+collects them. A REAL rename, not a label swap:
+- Core: Campaign.Gold -> Stones, StonesGained, FightReport/DiveReport.Stones,
+  Shares (Name, Stones), MobStonesOf/MobStones, the mob tables' "gold" column ->
+  "stones". Rendering's Ew.Gold/WinGold COLORS untouched (they are paint, not money).
+- UI: every price reads "N ST" (tithe, bread, draught, essences, vet, hires,
+  survivor), the report pays "+N STONES" with "+N ST" member cuts, the bag banks
+  "N ESSENCE STONES" behind the pack's currency-gem glyph (icon_ui_stone replaces
+  icon_ui_gold in the bake). Skill essences keep their soul glyph — stones are the
+  coin, essences are the knowledge.
+- Sim prints speak stones; effects 18/18, survey clean ("avg end stones").
+- QA: bag row + Tithe-Keeper prices screenshot-verified.
+
+## v9.5: THE LEDGER — M5 economy tuning + essence crushing
+Frontier round 1 of 3 (owner: "do everything you mentioned").
+- TUNING (rationale logged, sims validated): draught 130 -> 80 (a fresh 160-stone
+  purse that wipes once must still afford recovery + a hire — 130 locked players
+  out, watched in v9.0 QA); tithe base 120 -> 100 but growth 70 -> 80 (gentler
+  entry, the noose tightens later); essence crush value 45 -> 60 (a real
+  temptation against teaching, with the Temple's 300 still the premium path).
+  Bread, hires, vet, surgery unchanged — they played right.
+- ESSENCE CRUSHING: SellEssence is now Campaign.CrushEssence, and the Tithe-Keeper
+  offers "CRUSH <NAME> INTO STONES (+60 st) — THE KNOWLEDGE IS LOST". Same
+  substance, lesser form: the dark bargain made explicit.
+- Sims: effects 18/18, survey 40+40 clean, progression completes.
+
+## v9.6: THE DEEP — the Bonewrought set, fourth spells, a longer Crypt
+Frontier round 2 of 3.
+- THE BONEWROUGHT SET: five crypt pieces (Maul/Crown/Mantle/Loop/Girdle), stronger
+  per piece than Adventurer, tier ladder to a full-set +1 AP — the counterpart
+  scream to Adventurer's +1 MP. Deep families carry it to their graves (piper,
+  wraith, ghoul, warden pools extended); the SEXTON now draws exclusively from it.
+  StatsOf already folds any worn set generically — no engine change needed. The
+  bag's ladder follows whichever set you hold more of; sheet + bag show both counts.
+- FOURTH SPELLS: every class now ladders to four. Archer L4 = BARBED QUILL (air
+  6-9 + poison 4/turn for 2 — the DoT niche; ranks extend range then drop the
+  cooldown). Cannon L4 = BACKBLAST (fire 10-15 + pushes 2 — the artillery panic
+  button; ranks extend range then cut it to 2 AP). Icons baked (46 now).
+  Progression sim proves the L4 build: "Backblast III (AP2, 1-4)" in the kit.
+- THE CRYPT DEEPENS: 4 -> 6 sealing-door rooms — THE WAILING GALLERY (wraiths +
+  piper) and THE BONE ORCHARD (ghouls + wraith + warden) now stand between the
+  Reliquary and the Sexton's Court. The big bet got longer and darker.
+- Sims: effects 18/18, crypt chain runs 6 rooms, survey clean.
+
+## v9.7: THE DIRGE — sound depth (the frontier run closes)
+Frontier round 3 of 3. Four synthesized additions to the SoundBank (all pure math,
+loop-safe tremolo rates on the bed):
+- THE CITY'S DIRGE: the city was silent — now it hums a slow minor lament (C2 root,
+  minor third, fifth, faint filtered breath) at 0.10 volume. Every scene has a bed:
+  city dirge, graveyard wind, crypt drone.
+- YOUR TURN cue: a soft rising two-note pluck the moment the piloted turn begins —
+  you hear the baton before you read the banner.
+- The essence CHIME: claiming a fallen essence rings two glassy partials instead
+  of the coin clink.
+- The Keeper's CRUSH: grinding an essence into stones sounds like what it is — a
+  grind collapsing to a crack.
+- Build + boot smoke clean (recipes synthesize at startup; zero exceptions).
+THE FRONTIER RUN IS COMPLETE: v9.5 Ledger, v9.6 Deep, v9.7 Dirge.

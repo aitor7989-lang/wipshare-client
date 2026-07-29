@@ -1,0 +1,846 @@
+using DofusSlice.Core.Grid;
+using DofusSlice.Core.Spells;
+
+namespace DofusSlice.Core.Combat;
+
+public enum FightOutcome { Ongoing, Victory, Defeat }
+
+/// <summary>
+/// The authoritative turn-based combat state machine. It owns the fighters, the
+/// initiative order and the round counter, and is the single place that validates and
+/// applies movement and spell casts. The renderer and the AI both drive the fight only
+/// through this class, so the rules live in exactly one spot.
+/// </summary>
+public sealed class CombatEngine
+{
+    public Battlefield Field { get; }
+    private readonly List<Fighter> _order = new();
+    private readonly IRng _rng;
+    private int _pointer;
+
+    public int Round { get; private set; }
+
+    /// <summary>When set, a push or pull into a Void tile (or off the map) makes the victim FALL —
+    /// dead, gone, no corpse. Off by default so the classic walled maps keep their collisions;
+    /// the Gauntlet's ragged islands turn it on and every coastline becomes a weapon.</summary>
+    public bool LethalVoid { get; set; }
+
+    /// <summary>Damage dealt by a Spikes tile each time a fighter enters it (walked or thrown).</summary>
+    public const int SpikeDamage = 3;
+
+    /// <summary>When set, attacks from a victim's back arc deal +25% (the Mewgenics rule).
+    /// Off by default so the classic TITHE fights keep their original arithmetic.</summary>
+    public bool Backstabs { get; set; }
+
+    /// <summary>Extra per-cell danger the game layers on top of the board (ember graves).
+    /// AI policies read <see cref="DangerAt"/> so they stop parking on hot ground.</summary>
+    public Func<CellCoord, int>? TileDanger { get; set; }
+
+    /// <summary>How much a fighter expects to bleed for standing on this cell — spikes the
+    /// engine knows about plus whatever the game registered via <see cref="TileDanger"/>.</summary>
+    public int DangerAt(CellCoord cell) =>
+        (Field.TileAt(cell) == TileKind.Spikes ? SpikeDamage : 0) + (TileDanger?.Invoke(cell) ?? 0);
+
+    /// <summary>Where a shove/drag would land a victim and what it truly costs them — computed
+    /// WITHOUT mutating anything, so the AI can weigh tipping a hero into the void or dragging them
+    /// across spikes and embers. This walks the victim's HP the way the live rules do, so the tally
+    /// is honest and the AI can never bank a kill the rules forbid:
+    /// <list type="bullet">
+    ///   <item>the <b>void</b> is an instant kill (respecting <see cref="Fighter.VoidAnchored"/>),</item>
+    ///   <item>a <b>collision</b> with wall or body deals its lethal slam (shoves only),</item>
+    ///   <item><b>spikes</b> bite lethally (skipped for the hazard-immune, like <see cref="ApplyHazards"/>),</item>
+    ///   <item>a registered <b>soft hazard</b> (ember graves via <see cref="TileDanger"/>) only singes —
+    ///         never to death, flooring at 1 HP and doing nothing at ≤2, like the game's ember tick.</item>
+    /// </list>
+    /// <paramref name="preDamage"/> is the HP the SAME cast strips before it shoves (the AI's shove
+    /// spells usually hit and push at once); the walk starts from the post-hit HP so a floored soft
+    /// hazard is weighed against what is actually left. <see cref="ShiftForecast.Damage"/> is the HP
+    /// the shift alone removes; <see cref="ShiftForecast.Kills"/> folds in <paramref name="preDamage"/>.</summary>
+    public readonly record struct ShiftForecast(bool Valid, CellCoord Landing, bool IntoVoid, int Damage, bool Kills)
+    {
+        public static readonly ShiftForecast None = new(false, default, false, 0, false);
+    }
+
+    public ShiftForecast ForecastShift(Fighter caster, Fighter victim, int cells, bool pull, int preDamage = 0)
+    {
+        if (!pull) cells += caster.PushBonus;
+        if (victim.Pos == caster.Pos || cells <= 0 || victim.IsStabilized) return ShiftForecast.None;
+
+        int sx = Math.Sign(victim.Pos.X - caster.Pos.X);
+        int sy = Math.Sign(victim.Pos.Y - caster.Pos.Y);
+        int dx = pull ? -sx : sx;
+        int dy = pull ? -sy : sy;
+        if (dx != 0 && dy != 0)
+        {
+            if (Math.Abs(victim.Pos.X - caster.Pos.X) >= Math.Abs(victim.Pos.Y - caster.Pos.Y)) dy = 0;
+            else dx = 0;
+        }
+
+        int startHp = Math.Max(0, victim.Hp - Math.Max(0, preDamage));   // the direct hit lands first
+
+        // Walk GEOMETRY only: where the victim ends up, which cells it enters, and whether it slams
+        // something. Hazards are tallied AFTERWARD in the exact order ApplyShift applies them, so the
+        // forecast can never disagree with the live shove about who dies.
+        var pos = victim.Pos;
+        var entered = new List<CellCoord>();
+        int moved = 0, collision = 0;
+        for (int i = 0; i < cells; i++)
+        {
+            var next = pos.Offset(dx, dy);
+            if (LethalVoid && Field.TileAt(next) == TileKind.Void && !victim.VoidAnchored)
+                return new ShiftForecast(true, next, true, Math.Max(startHp, 1), true);   // a plunge = a kill
+            if (!Field.IsWalkable(next) || IsOccupied(next))
+            {
+                if (!pull) collision = (cells - moved) * 5 + caster.SlamBonus;             // collision (shoves only)
+                break;
+            }
+            pos = next; moved++; entered.Add(pos);
+        }
+
+        // Tally damage exactly as ApplyShift does: COLLISION first (applied inline there), then EMBERS
+        // (soft, non-lethal — floor at 1, no-op at ≤2 HP, ignoring HazardImmune like TryEmberBurn — raised
+        // via FighterPushed and handled synchronously BEFORE the spike pass), then SPIKES (lethal, skipped
+        // for the hazard-immune, like <see cref="ApplyHazards"/>). Both hazard passes sweep every entered
+        // cell in order. That order matters: an over-counted ember could otherwise lower the HP the spike
+        // pass then finishes from and invent a kill the rules forbid — so a victim the game exempts from
+        // soft hazards (the warm/BONE avatar, flagged via <see cref="Fighter.SoftHazardImmune"/>) is spared
+        // the ember pass here, exactly as TryEmberBurn spares it live.
+        int hp = Math.Max(0, startHp - collision);
+        if (!victim.SoftHazardImmune)
+            foreach (var cell in entered)
+            {
+                if (hp <= 2) break;                                                       // embers can do no more
+                int soft = TileDanger?.Invoke(cell) ?? 0;
+                if (soft > 0) hp = Math.Max(1, hp - soft);
+            }
+        if (!victim.HazardImmune)
+            foreach (var cell in entered)
+            {
+                if (hp <= 0) break;
+                if (Field.TileAt(cell) == TileKind.Spikes) hp = Math.Max(0, hp - SpikeDamage);
+            }
+
+        return new ShiftForecast(true, pos, false, startHp - hp, hp <= 0);
+    }
+
+    /// <summary>The fight's RNG — reused after the fight for deterministic drop rolls.</summary>
+    public IRng Rng => _rng;
+    public IReadOnlyList<Fighter> Fighters => _order;
+    public Fighter Current => _order[_pointer];
+
+    /// <summary>
+    /// Swap a fighter for a rebuilt one, BEFORE <see cref="Start"/>. A Fighter's stats are
+    /// init-only (they are a snapshot of the campaign unit at build time), so the only way to
+    /// let progression spent during the placement phase reach the fight is to replace the object.
+    /// Position/HP carry-over is the caller's job. Refuses once the fight is under way, since the
+    /// turn order and the animation layer hold this reference from Start() onward.
+    /// </summary>
+    public bool ReplaceFighter(string id, Fighter replacement)
+    {
+        if (Round > 0) throw new InvalidOperationException("ReplaceFighter must be called before Start()");
+        int i = _order.FindIndex(f => f.Id == id);
+        if (i < 0 || replacement.Id != id) return false;
+        _order[i] = replacement;
+        return true;
+    }
+
+    /// <summary>Human-readable combat log; the renderer and the sim both read from it.</summary>
+    public List<string> Log { get; } = new();
+    public event Action<string>? Logged;
+
+    /// <summary>Structured play-by-play for the animation layer (see <see cref="CombatEvent"/>).</summary>
+    public event Action<CombatEvent>? Emitted;
+    private void Raise(CombatEvent e) => Emitted?.Invoke(e);
+
+    // Builds a summoned creature: (kind, team, cell, id) -> Fighter. Injected so the engine
+    // stays decoupled from the content/bestiary layer.
+    private readonly Func<string, Team, CellCoord, string, Fighter>? _summonFactory;
+    private int _summonCounter;
+
+    public CombatEngine(Battlefield field, IEnumerable<Fighter> fighters, IRng rng,
+        Func<string, Team, CellCoord, string, Fighter>? summonFactory = null)
+    {
+        Field = field;
+        _rng = rng;
+        _summonFactory = summonFactory;
+        _order.AddRange(fighters);
+    }
+
+    private void Emit(string message)
+    {
+        Log.Add(message);
+        Logged?.Invoke(message);
+    }
+
+    public Fighter? FighterAt(CellCoord cell) => _order.FirstOrDefault(f => f.IsAlive && f.Pos == cell);
+    public bool IsOccupied(CellCoord cell) => FighterAt(cell) != null;
+
+    /// <summary>Add a summoned fighter to the fight; it acts when the turn order reaches it.</summary>
+    public void Summon(Fighter fighter, Fighter? summoner = null)
+    {
+        // 1.29: a summon takes its turn immediately after its summoner; without a known summoner
+        // it closes the round instead (still pointer-safe: insertion is always past the pointer).
+        int at = summoner != null ? _order.IndexOf(summoner) : -1;
+        if (at >= 0 && at >= _pointer) _order.Insert(at + 1, fighter);
+        else _order.Add(fighter);
+        Emit($"{fighter.Name} is summoned.");
+        Raise(new FighterSummoned(fighter));
+    }
+
+    public void Start()
+    {
+        if (_order.Count == 0) throw new InvalidOperationException("CombatEngine has no fighters");
+
+        // 1.29 turn order: the team holding the highest-initiative fighter leads, then turns
+        // strictly alternate between the teams, each team consuming its own fighters in
+        // descending initiative; the larger team's leftovers close the round. The weave is
+        // computed once and stays fixed for the whole fight. Ties break by add order, so a
+        // fight replays identically from the same setup (the event-log parity discipline).
+        var indexed = _order.Select((f, i) => (f, i)).ToList();
+        List<Fighter> TeamLine(Team t) => indexed.Where(x => x.f.Team == t)
+            .OrderByDescending(x => x.f.Initiative).ThenBy(x => x.i).Select(x => x.f).ToList();
+        var lead = indexed.OrderByDescending(x => x.f.Initiative).ThenBy(x => x.i).First().f.Team;
+        var first = TeamLine(lead);
+        var second = TeamLine(lead == Team.Player ? Team.Enemy : Team.Player);
+        _order.Clear();
+        for (int k = 0; k < Math.Max(first.Count, second.Count); k++)
+        {
+            if (k < first.Count) _order.Add(first[k]);
+            if (k < second.Count) _order.Add(second[k]);
+        }
+
+        // Everyone opens facing their nearest foe, so round one already has back arcs.
+        foreach (var f in _order.Where(f => f.IsAlive))
+        {
+            var foe = _order.Where(o => o.IsAlive && o.Team != f.Team)
+                .OrderBy(o => f.Pos.DistanceTo(o.Pos)).FirstOrDefault();
+            if (foe != null) f.Facing = StepToward(f.Pos, foe.Pos);
+        }
+
+        Round = 1;
+        _pointer = 0;
+        Emit($"=== Round 1 ===");
+        BeginTurnFor(Current);
+    }
+
+    /// <summary>Refresh points, tick this fighter's statuses, and announce the turn.</summary>
+    private void BeginTurnFor(Fighter f)
+    {
+        f.BeginTurn();
+        TickTurnStart(f);
+        Emit($"{f.Name}'s turn.");
+        Raise(new TurnStarted(f, Round));
+    }
+
+    /// <summary>Start-of-turn status processing: poison damage and MP drain.</summary>
+    private void TickTurnStart(Fighter f)
+    {
+        foreach (var s in f.Statuses.ToList())
+        {
+            if (s.Kind == StatusKind.Poison && f.IsAlive)
+            {
+                int dmg = Math.Max(0, s.Magnitude);
+                var at = f.Pos;
+                f.Hp = Math.Max(0, f.Hp - dmg);
+                Emit($"  {f.Name} suffers {dmg} poison damage ({f.Hp}/{f.MaxHp} HP).");
+                Raise(new DamageDealt(f, dmg, Element.Water, at, f.Hp));
+                if (!f.IsAlive) { Emit($"  {f.Name} succumbs!"); Raise(new FighterDied(f, at)); }
+            }
+            else if (s.Kind == StatusKind.MpDrain)
+            {
+                f.CurrentMp = Math.Max(0, f.CurrentMp - s.Magnitude);
+            }
+            // BeginTurn refills AP/MP from base, so a theft only ever cost the victim the turn it
+            // landed. A drain is how a loss PERSISTS: it re-applies every turn until it expires.
+            else if (s.Kind == StatusKind.ApDrain)
+            {
+                f.CurrentAp = Math.Max(0, f.CurrentAp - s.Magnitude);
+            }
+        }
+    }
+
+    /// <summary>End-of-turn status processing: regeneration, then age and expire durations.</summary>
+    private void TickTurnEnd(Fighter f)
+    {
+        foreach (var s in f.Statuses)
+        {
+            if (s.Kind == StatusKind.Regen && f.IsAlive && f.Hp < f.MaxHp)
+            {
+                int heal = Math.Min(s.Magnitude, f.MaxHp - f.Hp);
+                f.Hp += heal;
+                Emit($"  {f.Name} regenerates {heal} HP ({f.Hp}/{f.MaxHp}).");
+                Raise(new HealApplied(f, heal, f.Pos, f.Hp));
+            }
+        }
+
+        foreach (var s in f.Statuses) s.Remaining--;
+        foreach (var s in f.Statuses.Where(s => s.Remaining <= 0).ToList())
+        {
+            f.Statuses.Remove(s);
+            Raise(new StatusExpired(f, s.Kind));
+        }
+    }
+
+    // ---- Movement -------------------------------------------------------------------
+
+    /// <summary>The bible's flattened tackle (§3.4/§6.2): leaving an enemy's melee costs extra MP,
+    /// deterministically — max(0, (best tackler AGI − mover AGI) / divisor). No rolls, no AP loss.</summary>
+    public int TackleSurcharge(Fighter f)
+    {
+        var tacklers = TacklersOf(f);
+        if (tacklers.Count == 0) return 0;
+        return Math.Max(0, (tacklers.Max(t => t.Agility) - f.Agility) / TackleDivisor);
+    }
+
+    private const int TackleDivisor = 10; // the bible's placeholder divisor (§6.2)
+
+    /// <summary>Cells the given fighter can walk to this turn, mapped to their TRUE MP cost —
+    /// including the tackle surcharge on any destination that leaves the lockers' melee, so the
+    /// AI policies and any UI reason about what the move really costs.</summary>
+    public Dictionary<CellCoord, int> MovementRange(Fighter f)
+    {
+        if (f.IsRooted) return new Dictionary<CellCoord, int>();
+        var raw = Pathfinding.ReachableCells(Field, f.Pos, f.CurrentMp, c => c != f.Pos && IsOccupied(c));
+        int surcharge = TackleSurcharge(f);
+        if (surcharge == 0) return raw;
+        var tacklers = TacklersOf(f);
+        var priced = new Dictionary<CellCoord, int>();
+        foreach (var (cell, cost) in raw)
+        {
+            // Shuffling within a locker's melee pays nothing; breaking away pays the surcharge.
+            int true_ = cost + (tacklers.Any(t => t.Pos.DistanceTo(cell) == 1) ? 0 : surcharge);
+            if (true_ <= f.CurrentMp) priced[cell] = true_;
+        }
+        return priced;
+    }
+
+    /// <summary>Living enemies orthogonally adjacent to (locking) the given fighter.</summary>
+    public List<Fighter> TacklersOf(Fighter f) =>
+        _order.Where(e => e.IsAlive && e.Team != f.Team && e.Pos.DistanceTo(f.Pos) == 1).ToList();
+
+    public bool IsLocked(Fighter f) => TacklersOf(f).Count > 0;
+
+    public bool TryMove(Fighter f, CellCoord dest)
+    {
+        if (!f.IsAlive || f.IsRooted) return false;
+        var range = MovementRange(f);
+        if (!range.TryGetValue(dest, out int cost) || cost > f.CurrentMp) return false;
+
+        bool paidLock = TackleSurcharge(f) > 0 && cost > 0; // the surcharge is folded into cost
+        // Danger rides the route as a tie-break: same MP spent, but among equally short
+        // walks the mover threads BETWEEN the spikes and embers instead of through them.
+        var path = Pathfinding.FindPath(Field, f.Pos, dest, c => c != f.Pos && IsOccupied(c),
+                       stepDanger: f.HazardImmune ? null : DangerAt)
+                   ?? new List<CellCoord> { f.Pos, dest };
+        f.Pos = dest;
+        f.CurrentMp -= cost;
+        if (path.Count >= 2) f.Facing = StepToward(path[^2], path[^1]);
+        Emit($"{f.Name} moves to {dest} (-{cost} MP, {f.CurrentMp} left)"
+             + (paidLock ? " — pulled free of the lock." : "."));
+        Raise(new FighterMoved(f, path, cost));
+        ApplyHazards(f, path.Skip(1));
+        return true;
+    }
+
+    /// <summary>Bone spikes gash whoever enters them, however they got there (Mewgenics' tile law:
+    /// the ground is a combatant). Applied per cell entered, so a careless sprint bleeds twice.</summary>
+    private void ApplyHazards(Fighter f, IEnumerable<CellCoord> entered)
+    {
+        if (f.HazardImmune) return;   // THE REVENANT: half-dead already — the ground has no claim
+        foreach (var cell in entered)
+        {
+            if (!f.IsAlive) return;
+            if (Field.TileAt(cell) != TileKind.Spikes) continue;
+            f.Hp = Math.Max(0, f.Hp - SpikeDamage);
+            Emit($"  {f.Name} is gashed by bone spikes for {SpikeDamage} ({f.Hp}/{f.MaxHp} HP).");
+            Raise(new DamageDealt(f, SpikeDamage, Element.Neutral, cell, f.Hp));
+            if (!f.IsAlive) { Emit($"  {f.Name} is defeated!"); Raise(new FighterDied(f, cell)); }
+        }
+    }
+
+    /// <summary>True when an attack from that cell lands in the victim's back arc (+25% damage).</summary>
+    public static bool IsBackstab(CellCoord from, Fighter victim)
+    {
+        if (from == victim.Pos) return false;
+        int dx = from.X - victim.Pos.X, dy = from.Y - victim.Pos.Y;
+        return dx * victim.Facing.X + dy * victim.Facing.Y < 0;
+    }
+
+    // ---- Casting --------------------------------------------------------------------
+
+    /// <summary>A spell's reach for this caster right now: its authored max plus the caster's
+    /// net range modifier (RangeBuff − stolen/lost range), never dropping below the min range so
+    /// a debuffed spell still fires at point-blank instead of becoming uncastable.</summary>
+    public int EffectiveMaxRange(Fighter caster, SpellDef spell) =>
+        Math.Max(spell.MinRange, spell.MaxRange + caster.RangeBonus);
+
+    public bool CanCast(Fighter caster, SpellDef spell, CellCoord target, out string reason)
+    {
+        reason = "";
+        if (!caster.IsAlive) { reason = "caster is dead"; return false; }
+        if (caster.CurrentAp < spell.ApCost) { reason = "not enough AP"; return false; }
+        if (!caster.HasCastsLeft(spell)) { reason = "cast limit reached this turn"; return false; }
+        if (caster.IsOnCooldown(spell, Round)) { reason = "spell on cooldown"; return false; }
+        if (!Field.InBounds(target)) { reason = "out of bounds"; return false; }
+
+        int dist = caster.Pos.DistanceTo(target);
+        if (dist < spell.MinRange || dist > EffectiveMaxRange(caster, spell)) { reason = "out of range"; return false; }
+        if (spell.LineOnly && !caster.Pos.IsAlignedWith(target)) { reason = "must be cast in a line"; return false; }
+        if (spell.RequiresLineOfSight &&
+            !LineOfSight.HasLineOfSight(Field, caster.Pos, target, c => c != target && IsOccupied(c)))
+        {
+            reason = "no line of sight";
+            return false;
+        }
+        if (spell.NeedsTarget && FighterAt(target) == null) { reason = "no target on that cell"; return false; }
+        if (spell.NeedsFreeCell && (!Field.IsWalkable(target) || IsOccupied(target)))
+        {
+            reason = "cell is not free";
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>All cells the caster could legally target with the spell right now.</summary>
+    public List<CellCoord> CastableCells(Fighter caster, SpellDef spell)
+    {
+        var cells = new List<CellCoord>();
+        foreach (var cell in Field.AllCells())
+            if (CanCast(caster, spell, cell, out _))
+                cells.Add(cell);
+        return cells;
+    }
+
+    /// <summary>
+    /// Cells the spell can geometrically reach — range, line-of-sight and line-only, but
+    /// ignoring whether a target/free cell is actually there. This is the "where can it go"
+    /// area the UI paints, so a targeted spell still shows its full reach, not just the
+    /// occupied cells that happen to be legal targets.
+    /// </summary>
+    public List<CellCoord> SpellReachCells(Fighter caster, SpellDef spell)
+    {
+        var cells = new List<CellCoord>();
+        foreach (var cell in Field.AllCells())
+        {
+            int dist = caster.Pos.DistanceTo(cell);
+            if (dist < spell.MinRange || dist > EffectiveMaxRange(caster, spell)) continue;
+            if (spell.LineOnly && !caster.Pos.IsAlignedWith(cell)) continue;
+            if (spell.RequiresLineOfSight &&
+                !LineOfSight.HasLineOfSight(Field, caster.Pos, cell, c => c != cell && IsOccupied(c)))
+                continue;
+            cells.Add(cell);
+        }
+        return cells;
+    }
+
+    /// <summary>
+    /// Estimated (non-crit) damage range a spell would deal to whatever stands on the target
+    /// cell, given the caster's stats/buffs and the victim's resistances — for a hover preview.
+    /// Returns null if there's no damage effect or no fighter there.
+    /// </summary>
+    public (int min, int max)? EstimateDamage(Fighter caster, SpellDef spell, CellCoord target)
+    {
+        var victim = FighterAt(target);
+        if (victim == null) return null;
+        var dmg = spell.Effects.FirstOrDefault(e => e.Kind is EffectKind.Damage or EffectKind.Lifesteal);
+        if (dmg == null) return null;
+        return (ComputeDamage(caster, victim, dmg.Element, dmg.Min, false),
+                ComputeDamage(caster, victim, dmg.Element, dmg.Max, false));
+    }
+
+    public List<CellCoord> AreaCells(SpellDef spell, CellCoord impact, CellCoord fromPos) =>
+        spell.Area.CellsAround(impact, StepToward(fromPos, impact)).Where(Field.InBounds).ToList();
+
+    private static CellCoord StepToward(CellCoord from, CellCoord to)
+    {
+        int dx = to.X - from.X, dy = to.Y - from.Y;
+        if (dx == 0 && dy == 0) return default;
+        return Math.Abs(dx) >= Math.Abs(dy) ? new CellCoord(Math.Sign(dx), 0) : new CellCoord(0, Math.Sign(dy));
+    }
+
+    public bool TryCast(Fighter caster, SpellDef spell, CellCoord target)
+    {
+        if (!CanCast(caster, spell, target, out string reason))
+        {
+            Emit($"{caster.Name} cannot cast {spell.Name}: {reason}.");
+            return false;
+        }
+
+        caster.CurrentAp -= spell.ApCost;
+        caster.RecordCast(spell, Round);
+        if (target != caster.Pos) caster.Facing = StepToward(caster.Pos, target);
+        Emit($"{caster.Name} casts {spell.Name} at {target} (-{spell.ApCost} AP).");
+        Raise(new SpellCast(caster, spell, target));
+
+        // Critical failure: the spell fizzles (AP already spent).
+        if (spell.CriticalFailureOneIn > 0 && _rng.Roll(1, spell.CriticalFailureOneIn) == 1)
+        {
+            Emit($"  {caster.Name}'s {spell.Name} critically fails!");
+            Raise(new SpellFizzled(caster, spell));
+            return true;
+        }
+
+        bool crit = spell.CriticalChanceOneIn > 0 && _rng.Roll(1, spell.CriticalChanceOneIn) == 1;
+        if (crit) Emit("  Critical hit!");
+
+        foreach (var effect in spell.Effects)
+            ApplyEffect(caster, spell, effect, target, crit);
+
+        RemoveTheDead();
+        return true;
+    }
+
+    private void ApplyEffect(Fighter caster, SpellDef spell, SpellEffect effect, CellCoord impact, bool crit)
+    {
+        if (effect.Kind == EffectKind.Teleport)
+        {
+            if (Field.IsWalkable(impact) && !IsOccupied(impact))
+            {
+                var from = caster.Pos;
+                caster.Pos = impact;
+                Emit($"  {caster.Name} leaps to {impact}.");
+                Raise(new FighterTeleported(caster, from, impact));
+            }
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Swap)
+        {
+            var t = FighterAt(impact);
+            if (t != null && t != caster) SwapPositions(caster, t);
+            return;
+        }
+
+        if (effect.Kind == EffectKind.SelfHpCost)
+        {
+            // A sacrifice (Blood Pact): the caster pays HP up front. It wounds, never kills —
+            // the pact takes blood, not the life (clamped to leave 1 HP).
+            int cost = Math.Min(effect.Min, Math.Max(0, caster.Hp - 1));
+            if (cost > 0)
+            {
+                caster.Hp -= cost;
+                Emit($"  {caster.Name} pays {cost} HP in sacrifice ({caster.Hp}/{caster.MaxHp} HP).");
+                Raise(new DamageDealt(caster, cost, Element.Neutral, caster.Pos, caster.Hp, false));
+            }
+            return;
+        }
+
+        if (effect.Kind == EffectKind.Summon)
+        {
+            if (_summonFactory != null && Field.IsWalkable(impact) && !IsOccupied(impact))
+            {
+                var ally = _summonFactory(effect.SummonKind, caster.Team, impact, $"summon_{_summonCounter++}");
+                if (ally != null) Summon(ally, caster);
+            }
+            return;
+        }
+
+        foreach (var cell in AreaCells(spell, impact, caster.Pos))
+        {
+            var victim = FighterAt(cell);
+            if (victim == null) continue;
+
+            switch (effect.Kind)
+            {
+                case EffectKind.Damage:
+                    ApplyDamage(caster, victim, effect, crit);
+                    break;
+                case EffectKind.Lifesteal:
+                    ApplyLifesteal(caster, victim, effect, crit);
+                    break;
+                case EffectKind.Heal:
+                    if (victim.Team == caster.Team) ApplyHeal(caster, victim, effect);
+                    break;
+                case EffectKind.Push:
+                    ApplyShift(caster, victim, effect.Min, pull: false);
+                    break;
+                case EffectKind.Pull:
+                    ApplyShift(caster, victim, effect.Min, pull: true);
+                    break;
+                case EffectKind.StealAp:
+                    ApplySteal(caster, victim, effect.Min, ap: true, turns: Math.Max(1, effect.Max));
+                    break;
+                case EffectKind.StealMp:
+                    ApplySteal(caster, victim, effect.Min, ap: false, turns: Math.Max(1, effect.Max));
+                    break;
+                case EffectKind.StealRange:
+                    ApplyStealRange(caster, victim, effect.Min, effect.Max);
+                    break;
+                case EffectKind.GrantAp:
+                    if (victim.Team == caster.Team) ApplyGrantAp(caster, victim, effect.Min);
+                    break;
+                case EffectKind.ApplyStatus:
+                    ApplyStatusEffect(victim, effect.Status, effect.Min, effect.Max);
+                    break;
+            }
+        }
+    }
+
+    private void SwapPositions(Fighter a, Fighter b)
+    {
+        var from = a.Pos;
+        a.Pos = b.Pos;
+        b.Pos = from;
+        Emit($"  {a.Name} swaps places with {b.Name}.");
+        Raise(new FighterTeleported(a, from, a.Pos));
+        Raise(new FighterTeleported(b, a.Pos, from));
+    }
+
+    private void ApplyLifesteal(Fighter caster, Fighter victim, SpellEffect effect, bool crit)
+    {
+        int rolled = _rng.Roll(effect.Min, effect.Max);
+        int dmg = ComputeDamage(caster, victim, effect.Element, rolled, crit);
+        var at = victim.Pos;
+        victim.Hp = Math.Max(0, victim.Hp - dmg);
+        Raise(new DamageDealt(victim, dmg, effect.Element, at, victim.Hp, crit));
+        int healed = Math.Min(dmg / 2, caster.MaxHp - caster.Hp);
+        caster.Hp += Math.Max(0, healed);
+        Emit($"  {victim.Name} takes {dmg} {effect.Element} (life-stolen); {caster.Name} heals {healed}.");
+        if (healed > 0) Raise(new HealApplied(caster, healed, caster.Pos, caster.Hp));
+        if (!victim.IsAlive) { Emit($"  {victim.Name} is defeated!"); Raise(new FighterDied(victim, at)); }
+    }
+
+    private void ApplySteal(Fighter caster, Fighter victim, int amount, bool ap, int turns = 1)
+    {
+        amount = Math.Max(0, amount);
+        // Wisdom lets the victim dodge part of the theft.
+        int resisted = victim.Wisdom > 0 ? _rng.Roll(0, Math.Max(0, victim.Wisdom / 20)) : 0;
+        int want = Math.Max(0, amount - resisted);
+        int taken = Math.Min(want, ap ? victim.CurrentAp : victim.CurrentMp);
+        if (taken <= 0) return;
+        if (ap) { victim.CurrentAp -= taken; caster.CurrentAp += taken; }
+        else { victim.CurrentMp -= taken; caster.CurrentMp += taken; }
+        Emit($"  {caster.Name} steals {taken} {(ap ? "AP" : "MP")} from {victim.Name}.");
+        // 1.29: a theft is not just this turn's tempo — the loss RIDES for its duration. BeginTurn
+        // refills from base, so the only way a loss survives the turn boundary is a drain status.
+        if (turns > 1)
+            ApplyStatusEffect(victim, ap ? StatusKind.ApDrain : StatusKind.MpDrain, taken, turns - 1);
+    }
+
+    /// <summary>Dofus range theft: the victim's spell range shrinks and the caster's grows by the
+    /// same amount for the same duration — a Xelor/wraith staple that pins ranged units in close.</summary>
+    private void ApplyStealRange(Fighter caster, Fighter victim, int amount, int turns)
+    {
+        if (amount <= 0 || turns <= 0) return;
+        ApplyStatusEffect(victim, StatusKind.RangeDebuff, amount, turns);
+        ApplyStatusEffect(caster, StatusKind.RangeBuff, amount, turns);
+        Emit($"  {caster.Name} steals {amount} range from {victim.Name}.");
+    }
+
+    private void ApplyGrantAp(Fighter caster, Fighter ally, int amount)
+    {
+        amount = Math.Max(0, amount);
+        if (amount <= 0) return;
+        ally.CurrentAp += amount;
+        Emit($"  {caster.Name} grants {ally.Name} +{amount} AP.");
+        Raise(new StatusApplied(ally, StatusKind.DamageBuff, 1)); // reuse the buff cue for a positive flash
+    }
+
+    private void ApplyStatusEffect(Fighter target, StatusKind kind, int magnitude, int turns)
+    {
+        if (kind == StatusKind.None || turns <= 0) return;
+        magnitude = Math.Max(0, magnitude); // never let a status grant resources / heal via damage
+        var existing = target.Statuses.FirstOrDefault(s => s.Kind == kind);
+        if (existing != null)
+        {
+            existing.Magnitude = magnitude;
+            existing.Remaining = Math.Max(existing.Remaining, turns);
+        }
+        else
+        {
+            target.Statuses.Add(new StatusEffect(kind, magnitude, turns));
+        }
+        Emit($"  {target.Name} gains {kind} ({turns} turns).");
+        Raise(new StatusApplied(target, kind, turns));
+    }
+
+    /// <summary>
+    /// Dofus-style damage pipeline: roll, scale by (primary stat + Power + %damage + buffs),
+    /// add flat damage, apply the critical bonus, then reduce by %resistance, flat resistance
+    /// and shields.
+    /// </summary>
+    private static int ComputeDamage(Fighter caster, Fighter victim, Element element, int rolled, bool crit)
+    {
+        int percent = 100 + caster.PrimaryStatFor(element) + caster.Power
+                      + caster.DamagePercent + caster.DamageBuffPercent + PassivePercent(caster);
+        int scaled = rolled * percent / 100 + caster.FlatDamage + PassiveFlat(caster, victim);
+        if (crit) scaled += (int)MathF.Round(scaled * 0.5f);
+        // Elemental armor + defense buffs / vulnerabilities. Capped at 90% so nothing is ever
+        // fully immune; a Vulnerable target's negative resist amplifies the blow past 100%.
+        int resist = Math.Min(90, victim.ResistanceFor(element) + victim.DefensePercent);
+        int afterPct = scaled * (100 - resist) / 100;
+        int dmg = afterPct - victim.FlatResistanceFor(element) - victim.ShieldAmount;
+        return Math.Max(0, dmg);
+    }
+
+    // Class passives (TITHE) read at damage time, so they visibly change what you watch happen.
+    private static int PassivePercent(Fighter caster) => caster.Passive switch
+    {
+        "rage_below" => caster.Hp * 2 <= caster.MaxHp ? 30 : 0, // +30% while bloodied (Bulwark)
+        _ => 0,
+    };
+
+    private static int PassiveFlat(Fighter caster, Fighter victim) => caster.Passive switch
+    {
+        "long_shot" => caster.Pos.DistanceTo(victim.Pos) >= 6 ? 4 : 0, // reward the kiter (Archer)
+        "overchannel" => caster.CurrentAp * 2,                          // unspent AP banks damage (Cannon)
+        _ => 0,
+    };
+
+    private void ApplyDamage(Fighter caster, Fighter victim, SpellEffect effect, bool crit)
+    {
+        int rolled = _rng.Roll(effect.Min, effect.Max);
+        int dmg = ComputeDamage(caster, victim, effect.Element, rolled, crit);
+        bool backstab = Backstabs && caster != victim && IsBackstab(caster.Pos, victim);
+        if (backstab) dmg += dmg / 4; // Mewgenics: +25% from the back arc — geometry is free damage
+        var at = victim.Pos;
+        victim.Hp = Math.Max(0, victim.Hp - dmg);
+        Emit($"  {victim.Name} takes {dmg} {effect.Element} damage{(crit ? " (CRIT)" : "")}{(backstab ? " — from behind!" : "")} ({victim.Hp}/{victim.MaxHp} HP).");
+        Raise(new DamageDealt(victim, dmg, effect.Element, at, victim.Hp, crit, backstab));
+        if (!victim.IsAlive)
+        {
+            Emit($"  {victim.Name} is defeated!");
+            Raise(new FighterDied(victim, at));
+        }
+
+        // Damage reflection (renvoi): a portion returns to the attacker.
+        if (victim.ReflectPercent > 0 && caster != victim && caster.IsAlive)
+        {
+            int reflected = dmg * victim.ReflectPercent / 100;
+            if (reflected > 0)
+            {
+                var cAt = caster.Pos;
+                caster.Hp = Math.Max(0, caster.Hp - reflected);
+                Emit($"  {caster.Name} takes {reflected} reflected damage ({caster.Hp}/{caster.MaxHp} HP).");
+                Raise(new DamageDealt(caster, reflected, effect.Element, cAt, caster.Hp));
+                if (!caster.IsAlive) { Emit($"  {caster.Name} is defeated!"); Raise(new FighterDied(caster, cAt)); }
+            }
+        }
+    }
+
+    private void ApplyHeal(Fighter caster, Fighter victim, SpellEffect effect)
+    {
+        int rolled = _rng.Roll(effect.Min, effect.Max);
+        int amount = rolled * (100 + caster.Intelligence) / 100;
+        int before = victim.Hp;
+        victim.Hp = Math.Min(victim.MaxHp, victim.Hp + amount);
+        Emit($"  {victim.Name} recovers {victim.Hp - before} HP ({victim.Hp}/{victim.MaxHp}).");
+        Raise(new HealApplied(victim, victim.Hp - before, victim.Pos, victim.Hp));
+    }
+
+    /// <summary>Push (away) or pull (toward) the caster along one orthogonal axis.</summary>
+    private void ApplyShift(Fighter caster, Fighter victim, int cells, bool pull)
+    {
+        if (!pull) cells += caster.PushBonus;   // Husk's Grip: every shove carries further
+        if (victim.Pos == caster.Pos || cells <= 0) return;
+        if (victim.IsStabilized)
+        {
+            Emit($"  {victim.Name} is stabilized and holds its ground.");
+            return;
+        }
+
+        int sx = Math.Sign(victim.Pos.X - caster.Pos.X);
+        int sy = Math.Sign(victim.Pos.Y - caster.Pos.Y);
+        int dx = pull ? -sx : sx;
+        int dy = pull ? -sy : sy;
+        // Collapse to the dominant orthogonal axis for a clean shift.
+        if (dx != 0 && dy != 0)
+        {
+            if (Math.Abs(victim.Pos.X - caster.Pos.X) >= Math.Abs(victim.Pos.Y - caster.Pos.Y)) dy = 0;
+            else dx = 0;
+        }
+
+        var path = new List<CellCoord> { victim.Pos };
+        int moved = 0;
+        for (int i = 0; i < cells; i++)
+        {
+            var next = victim.Pos.Offset(dx, dy);
+            // The fall: sent over a coastline (or off the map entirely), the victim is simply gone.
+            if (LethalVoid && Field.TileAt(next) == TileKind.Void && !victim.VoidAnchored)
+            {
+                path.Add(next);
+                victim.Pos = next;
+                victim.Hp = 0;
+                Emit($"  {victim.Name} is cast into the void!");
+                Raise(new FighterPushed(victim, path, 0));
+                Raise(new FighterFell(victim, next));
+                Raise(new FighterDied(victim, next));
+                return;
+            }
+            if (!Field.IsWalkable(next) || IsOccupied(next))
+            {
+                int collision = pull ? 0 : (cells - moved) * 5 + caster.SlamBonus; // only shoves deal collision damage
+                var at = victim.Pos;
+                if (collision > 0)
+                {
+                    victim.Hp = Math.Max(0, victim.Hp - collision);
+                    Emit($"  {victim.Name} slams into an obstacle for {collision} damage ({victim.Hp}/{victim.MaxHp} HP).");
+                }
+                Raise(new FighterPushed(victim, path, collision));
+                if (collision > 0) Raise(new DamageDealt(victim, collision, Element.Neutral, at, victim.Hp));
+                if (!victim.IsAlive)
+                {
+                    Emit($"  {victim.Name} is defeated!");
+                    Raise(new FighterDied(victim, at));
+                }
+                ApplyHazards(victim, path.Skip(1));
+                return;
+            }
+            victim.Pos = next;
+            path.Add(next);
+            moved++;
+        }
+        if (moved > 0)
+        {
+            Emit($"  {victim.Name} is {(pull ? "pulled" : "pushed")} {moved} cell(s) to {victim.Pos}.");
+            Raise(new FighterPushed(victim, path, 0));
+            ApplyHazards(victim, path.Skip(1));
+        }
+    }
+
+    private void RemoveTheDead()
+    {
+        // Fighters stay in the order list (so the pointer math is stable) but are skipped
+        // once dead; nothing else to do here beyond a hook for future death effects.
+    }
+
+    // ---- Turn flow ------------------------------------------------------------------
+
+    public void EndTurn()
+    {
+        Emit($"{Current.Name} ends their turn.");
+        TickTurnEnd(Current); // regen, then age/expire the ending fighter's statuses
+
+        // Advance to the next living fighter, beginning turns (which tick statuses) as we go.
+        // A fighter that dies to poison at the start of its turn is skipped.
+        for (int guard = 0; guard <= _order.Count * 2; guard++)
+        {
+            if (Outcome != FightOutcome.Ongoing) return;
+
+            _pointer++;
+            if (_pointer >= _order.Count)
+            {
+                _pointer = 0;
+                Round++;
+                Emit($"=== Round {Round} ===");
+            }
+            if (!Current.IsAlive) continue;
+
+            BeginTurnFor(Current);
+            if (Current.IsAlive) return; // survived its start-of-turn ticks
+        }
+    }
+
+    public FightOutcome Outcome
+    {
+        get
+        {
+            bool anyEnemy = _order.Any(f => f.Team == Team.Enemy && f.IsAlive);
+            // You lose when your hero falls — allied summons don't keep the fight alive.
+            bool heroAlive = _order.Any(f => f.PlayerControlled && f.IsAlive);
+            if (!heroAlive) return FightOutcome.Defeat;
+            if (!anyEnemy) return FightOutcome.Victory;
+            return FightOutcome.Ongoing;
+        }
+    }
+}

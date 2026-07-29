@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DofusSlice.Core", "DofusSlice.Core\DofusSlice.Core.csproj", "{90BCDC70-9DD5-4608-A088-96D79BC2330B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DofusSlice.Game", "DofusSlice.Game\DofusSlice.Game.csproj", "{BCE0FDF2-20B7-4B09-B745-3CB530A8EAFB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DofusSlice.Sim", "DofusSlice.Sim\DofusSlice.Sim.csproj", "{F3021C54-23A6-444E-8A22-6C7464A2547C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{90BCDC70-9DD5-4608-A088-96D79BC2330B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90BCDC70-9DD5-4608-A088-96D79BC2330B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90BCDC70-9DD5-4608-A088-96D79BC2330B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90BCDC70-9DD5-4608-A088-96D79BC2330B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCE0FDF2-20B7-4B09-B745-3CB530A8EAFB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCE0FDF2-20B7-4B09-B745-3CB530A8EAFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCE0FDF2-20B7-4B09-B745-3CB530A8EAFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCE0FDF2-20B7-4B09-B745-3CB530A8EAFB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F3021C54-23A6-444E-8A22-6C7464A2547C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F3021C54-23A6-444E-8A22-6C7464A2547C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F3021C54-23A6-444E-8A22-6C7464A2547C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F3021C54-23A6-444E-8A22-6C7464A2547C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

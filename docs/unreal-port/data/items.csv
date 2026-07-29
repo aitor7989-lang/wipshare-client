@@ -1,0 +1,15 @@
+Name,id,name,slot,set,strength,intelligence,power,vitality,wisdom,agility,chance,mp,ap
+adv_blade,adv_blade,Adventurer Blade,weapon,adventurer,6,6,3,,,,,,
+adv_hat,adv_hat,Adventurer Hat,hat,adventurer,,4,,8,4,,,,
+adv_cape,adv_cape,Adventurer Cape,cape,adventurer,4,,2,,,4,,,
+adv_amulet,adv_amulet,Adventurer Amulet,amulet,adventurer,,5,,10,3,,,,
+adv_ring,adv_ring,Adventurer Ring,ring,adventurer,4,4,,6,,,,,
+adv_belt,adv_belt,Adventurer Belt,belt,adventurer,3,,2,8,,,,,
+adv_boots,adv_boots,Adventurer Boots,boots,adventurer,,,,6,,6,4,,
+bone_maul,bone_maul,Bonewrought Maul,weapon,bonewrought,9,9,5,,,,,,
+bone_crown,bone_crown,Bonewrought Crown,hat,bonewrought,,6,,14,7,,,,
+bone_mantle,bone_mantle,Bonewrought Mantle,cape,bonewrought,,,4,10,,7,,,
+bone_loop,bone_loop,Bonewrought Loop,ring,bonewrought,6,6,,,,,6,,
+bone_girdle,bone_girdle,Bonewrought Girdle,belt,bonewrought,6,,3,12,,,,,
+gravewalkers,gravewalkers,Gravewalkers,boots,,,,,,,4,,1,
+pipers_whistle,pipers_whistle,Piper's Whistle,amulet,,,,,,4,,,,1

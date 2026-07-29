@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Gauntlet</RootNamespace>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Committed ORIGINAL silhouette fallbacks (tools/gen_default_sprites.py) so a clean
+         checkout / CI release always renders readable bodies, never placeholder letters. -->
+    <None Include="assets-default\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Local (gitignored) art baked by DofusSlice/tools/bake_onebit.py — never committed;
+         when dropped next to the exe it OVERRIDES the defaults above (SpriteBank indexes
+         assets-default first, then assets). -->
+    <None Include="assets\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The battle-tested combat engine + TITHE content tables ride along unchanged. -->
+    <ProjectReference Include="..\DofusSlice\DofusSlice.Core\DofusSlice.Core.csproj" />
+  </ItemGroup>
+
+</Project>

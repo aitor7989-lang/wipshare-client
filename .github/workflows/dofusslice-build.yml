@@ -1,0 +1,56 @@
+name: DofusSlice Windows build
+
+# Builds a self-contained Windows package of the Dofus Slice game and publishes it two ways:
+#  - as a workflow artifact (needs a GitHub login to download), and
+#  - as a GitHub *Release* asset (public, permanent link, no login, works on mobile).
+# Unzip and double-click DofusSlice.Game.exe — no .NET install required.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "claude/dofus-engine-vertical-slice-7ijlfm" ]
+    paths:
+      - "DofusSlice/**"
+      - ".github/workflows/dofusslice-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained win-x64
+        run: >
+          dotnet publish DofusSlice/DofusSlice.Game/DofusSlice.Game.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=false
+          -o publish
+
+      - name: Zip the build
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath DofusSlice-windows.zip -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DofusSlice-windows
+          path: publish
+
+      - name: Publish GitHub Release (public download, no login)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dofusslice-latest --yes --cleanup-tag 2>$null
+          gh release create dofusslice-latest DofusSlice-windows.zip `
+            --title "Dofus Slice - latest build" `
+            --notes "Self-contained Windows build. Download DofusSlice-windows.zip, unzip it, and run DofusSlice.Game.exe. No .NET install needed." `
+            --prerelease `
+            --target $env:GITHUB_SHA

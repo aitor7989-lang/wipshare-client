@@ -4,3 +4,7 @@ obj/
 .vs/
 *.suo
 publish/
+
+# Python bytecode cache (from tools/ asset scripts)
+__pycache__/
+*.pyc

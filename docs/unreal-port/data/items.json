@@ -1,0 +1,138 @@
+[
+  {
+    "Name": "adv_blade",
+    "id": "adv_blade",
+    "name": "Adventurer Blade",
+    "slot": "weapon",
+    "set": "adventurer",
+    "strength": 6,
+    "intelligence": 6,
+    "power": 3
+  },
+  {
+    "Name": "adv_hat",
+    "id": "adv_hat",
+    "name": "Adventurer Hat",
+    "slot": "hat",
+    "set": "adventurer",
+    "vitality": 8,
+    "intelligence": 4,
+    "wisdom": 4
+  },
+  {
+    "Name": "adv_cape",
+    "id": "adv_cape",
+    "name": "Adventurer Cape",
+    "slot": "cape",
+    "set": "adventurer",
+    "strength": 4,
+    "agility": 4,
+    "power": 2
+  },
+  {
+    "Name": "adv_amulet",
+    "id": "adv_amulet",
+    "name": "Adventurer Amulet",
+    "slot": "amulet",
+    "set": "adventurer",
+    "vitality": 10,
+    "intelligence": 5,
+    "wisdom": 3
+  },
+  {
+    "Name": "adv_ring",
+    "id": "adv_ring",
+    "name": "Adventurer Ring",
+    "slot": "ring",
+    "set": "adventurer",
+    "strength": 4,
+    "intelligence": 4,
+    "vitality": 6
+  },
+  {
+    "Name": "adv_belt",
+    "id": "adv_belt",
+    "name": "Adventurer Belt",
+    "slot": "belt",
+    "set": "adventurer",
+    "vitality": 8,
+    "strength": 3,
+    "power": 2
+  },
+  {
+    "Name": "adv_boots",
+    "id": "adv_boots",
+    "name": "Adventurer Boots",
+    "slot": "boots",
+    "set": "adventurer",
+    "agility": 6,
+    "chance": 4,
+    "vitality": 6
+  },
+  {
+    "Name": "bone_maul",
+    "id": "bone_maul",
+    "name": "Bonewrought Maul",
+    "slot": "weapon",
+    "set": "bonewrought",
+    "strength": 9,
+    "intelligence": 9,
+    "power": 5
+  },
+  {
+    "Name": "bone_crown",
+    "id": "bone_crown",
+    "name": "Bonewrought Crown",
+    "slot": "hat",
+    "set": "bonewrought",
+    "vitality": 14,
+    "wisdom": 7,
+    "intelligence": 6
+  },
+  {
+    "Name": "bone_mantle",
+    "id": "bone_mantle",
+    "name": "Bonewrought Mantle",
+    "slot": "cape",
+    "set": "bonewrought",
+    "vitality": 10,
+    "agility": 7,
+    "power": 4
+  },
+  {
+    "Name": "bone_loop",
+    "id": "bone_loop",
+    "name": "Bonewrought Loop",
+    "slot": "ring",
+    "set": "bonewrought",
+    "strength": 6,
+    "intelligence": 6,
+    "chance": 6
+  },
+  {
+    "Name": "bone_girdle",
+    "id": "bone_girdle",
+    "name": "Bonewrought Girdle",
+    "slot": "belt",
+    "set": "bonewrought",
+    "vitality": 12,
+    "strength": 6,
+    "power": 3
+  },
+  {
+    "Name": "gravewalkers",
+    "id": "gravewalkers",
+    "name": "Gravewalkers",
+    "slot": "boots",
+    "agility": 4,
+    "mp": 1
+  },
+  {
+    "Name": "pipers_whistle",
+    "id": "pipers_whistle",
+    "name": "Piper's Whistle",
+    "slot": "amulet",
+    "wisdom": 4,
+    "ap": 1
+  }
+]

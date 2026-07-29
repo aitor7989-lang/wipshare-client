@@ -14,7 +14,7 @@
   .panel { background: #17151f; border: 1px solid #2a2836; border-radius: 6px; padding: 10px 12px; }
   .panel b.t { display: block; color: #847e87; font-size: 11px; letter-spacing: 1.5px; margin-bottom: 8px; }
   canvas { image-rendering: pixelated; display: block; }
-  #edit, #tedit, #vedit, #demoCv { cursor: crosshair; touch-action: none; }
+  #edit, #tedit, #tflat, #vedit, #demoCv { cursor: crosshair; touch-action: none; }
   #pal, #vpal { display: grid; grid-template-columns: repeat(8, 22px); gap: 4px; }
   #pal div, #vpal div { width: 22px; height: 22px; border-radius: 3px; cursor: pointer; border: 2px solid transparent; }
   #pal div.on, #vpal div.on { border-color: #fff; }
@@ -233,6 +233,10 @@
     <div class="panel">
       <b class="t" id="faceTitle">FACE</b>
       <div class="row" style="margin-bottom:8px">
+        <button id="tModeIso" class="on" title="paint the diamond directly">iso face</button>
+        <button id="tModeFlat" title="paint a flat square — the tool projects it onto the iso face for you">flat &rarr; iso</button>
+      </div>
+      <div class="row" style="margin-bottom:8px">
         <button id="sh1" class="on" title="1">dark</button>
         <button id="sh2" title="2">darker</button>
         <button id="sh3" title="3">light</button>
@@ -244,7 +248,8 @@
         <button id="tRedoBtn">redo</button>
       </div>
       <canvas id="tedit"></canvas>
-      <div class="row" style="margin-top:6px"><span>1/2/3/0 shades · shift+arrows shift the face · right-drag erases · shades are relative to the tile's own colour</span></div>
+      <canvas id="tflat" hidden></canvas>
+      <div class="row" style="margin-top:6px"><span id="tHint">1/2/3/0 shades · shift+arrows shift the face · right-drag erases · shades are relative to the tile's own colour</span></div>
     </div>
     <div class="panel">
       <b class="t">IN THE FLOOR — every rule live</b>
@@ -613,7 +618,10 @@
   function snapChar(name = curName) {
     return { type: "char", name, json: charJson(name), an: curAnim, fi: curFrame };
   }
-  function snapTile() { return { type: "tile", idx: tSel, data: curTile().grid.slice() }; }
+  function snapTile() {
+    const t = curTile();
+    return { type: "tile", idx: tSel, data: t.grid.slice(), flat: t.flat ? t.flat.slice() : null };
+  }
   function snapTileLib() { return { type: "tilelib", json: tilesJson() }; }
   function snapVfxLib() { return { type: "vfxlib", json: vfxJsonAll() }; }
   function pushUndo(snap) {
@@ -666,8 +674,9 @@
     }
     const t = tlib.tiles[s.idx];
     if (!t) return null;
-    const back = { type: "tile", idx: s.idx, data: t.grid.slice() };
+    const back = { type: "tile", idx: s.idx, data: t.grid.slice(), flat: t.flat ? t.flat.slice() : null };
     t.grid.set(s.data);
+    if (s.flat && t.flat) t.flat.set(s.flat);
     tSel = s.idx;
     if (activeTab !== "tiles") showTab("tiles");
     afterTiles(true);
@@ -1257,11 +1266,50 @@
     }
     return rows;
   }
+  /* FLAT AUTHORING — classic square pixel tiles are far easier to draw than
+     diamond faces, so a tile may carry a 12x12 "flat" source. Every flat stroke
+     re-projects onto the 16x8 iso face (rotate 45 deg + squash 2:1, nearest
+     sample). The projected grid stays the shipped format; "flat" is an optional
+     extra field old parsers simply ignore. */
+  const FLATN = 12;
+  function fGridFrom(rows) {
+    const g = new Uint8Array(FLATN * FLATN);
+    for (let r = 0; r < FLATN; r++)
+      for (let c = 0; c < FLATN; c++) {
+        const ch = (rows[r] || "")[c] || ".";
+        if (ch === "1" || ch === "2" || ch === "3") g[r * FLATN + c] = +ch;
+      }
+    return g;
+  }
+  function fRowsFrom(g) {
+    const rows = [];
+    for (let r = 0; r < FLATN; r++) {
+      let str = "";
+      for (let c = 0; c < FLATN; c++) str += g[r * FLATN + c] ? String(g[r * FLATN + c]) : ".";
+      rows.push(str);
+    }
+    return rows;
+  }
+  function projectFlat(t) {
+    if (!t.flat || !t.flat.some(v => v)) return;
+    for (let r = 0; r < TH8; r++)
+      for (let c = 0; c < TW16; c++) {
+        if (!inDiamond(c, r)) { t.grid[r * TW16 + c] = 0; continue; }
+        const px = (c + 0.5) / TW16 * 2 - 1, py = (r + 0.5) / TH8 * 2 - 1;
+        const u = clamp(Math.floor(((px + py) / 2 + 0.5) * FLATN), 0, FLATN - 1);
+        const v = clamp(Math.floor(((py - px) / 2 + 0.5) * FLATN), 0, FLATN - 1);
+        t.grid[r * TW16 + c] = t.flat[v * FLATN + u];
+      }
+  }
   const curTile = () => tlib.tiles[tSel] || null;
   function tilesJson() {
     return JSON.stringify({ v: 2, kind: "tiles", plain: tlib.plain,
-      tiles: tlib.tiles.map(t => ({ name: t.name, role: t.role, weight: t.weight,
-                                    mirror: t.mirror, grid: tRowsFrom(t.grid) })) });
+      tiles: tlib.tiles.map(t => {
+        const o = { name: t.name, role: t.role, weight: t.weight,
+                    mirror: t.mirror, grid: tRowsFrom(t.grid) };
+        if (t.flat && t.flat.some(v => v)) o.flat = fRowsFrom(t.flat);
+        return o;
+      }) });
   }
   function loadTiles(txt) {
     const o = typeof txt === "string" ? JSON.parse(txt) : txt;
@@ -1273,17 +1321,17 @@
         if (!t || typeof t !== "object" || !ROLES.includes(t.role)) return;
         tiles.push({ name: String(t.name || "tile-" + (i + 1)).slice(0, 24), role: t.role,
                      weight: clamp((+t.weight || 1) | 0, 1, 9), mirror: !!t.mirror,
-                     grid: tGridFrom(t.grid || []) });
+                     grid: tGridFrom(t.grid || []), flat: fGridFrom(t.flat || []) });
       });
       tlib = { plain: o.plain == null ? 45 : clamp((+o.plain || 0) | 0, 0, 95), tiles };
     } else if (Array.isArray(o.floor) || Array.isArray(o.worn)) {
       const tiles = [];
       (o.floor || []).slice(0, 4).forEach((rows, i) => {
         const g = tGridFrom(rows || []);
-        if (g.some(v => v)) tiles.push({ name: "floor-" + (i + 1), role: "floor", weight: 1, mirror: true, grid: g });
+        if (g.some(v => v)) tiles.push({ name: "floor-" + (i + 1), role: "floor", weight: 1, mirror: true, grid: g, flat: new Uint8Array(FLATN * FLATN) });
       });
       const w = tGridFrom(o.worn || []);
-      if (w.some(v => v)) tiles.push({ name: "trail", role: "worn", weight: 1, mirror: false, grid: w });
+      if (w.some(v => v)) tiles.push({ name: "trail", role: "worn", weight: 1, mirror: false, grid: w, flat: new Uint8Array(FLATN * FLATN) });
       tlib = { plain: 45, tiles };
     } else throw new Error('not a tile library (want v2 {"tiles":[...]} or v1 {"floor":[...],"worn":[...]})');
     tSel = clamp(tSel, 0, Math.max(0, tlib.tiles.length - 1));
@@ -1383,14 +1431,15 @@
     el("tileMirror").textContent = t.mirror ? "mirror ok" : "no mirror";
   }
   function afterTiles(saveIt = true) {
-    drawTileList(); tRulesUi(); drawTedit(); drawTprev();
+    drawTileList(); tRulesUi(); drawTedit(); drawTflat(); drawTprev();
     demoFloorDirty = true;
     if (saveIt) saveTiles();
   }
   el("tNew").onclick = () => {
     if (tlib.tiles.length >= 64) { toast("library full (64)"); return; }
     pushUndo(snapTileLib());
-    tlib.tiles.push({ name: freshTileName("tile"), role: "floor", weight: 1, mirror: true,
+    tlib.tiles.push({ flat: new Uint8Array(FLATN * FLATN),
+                      name: freshTileName("tile"), role: "floor", weight: 1, mirror: true,
                       grid: new Uint8Array(TW16 * TH8) });
     tSel = tlib.tiles.length - 1;
     afterTiles(); toast("created — paint the face, set its rules");
@@ -1399,7 +1448,8 @@
     const t = curTile();
     if (!t || tlib.tiles.length >= 64) return;
     pushUndo(snapTileLib());
-    tlib.tiles.splice(tSel + 1, 0, { name: freshTileName(t.name), role: t.role, weight: t.weight,
+    tlib.tiles.splice(tSel + 1, 0, { flat: t.flat ? t.flat.slice() : new Uint8Array(FLATN * FLATN),
+                                     name: freshTileName(t.name), role: t.role, weight: t.weight,
                                      mirror: t.mirror, grid: t.grid.slice() });
     tSel++;
     afterTiles(); toast("duplicated");
@@ -1458,7 +1508,7 @@
   el("tPickBtn").onclick = () => { tTool = "pick"; shadeUi(); };
   el("tClear").onclick = () => {
     if (!curTile()) return;
-    pushUndo(snapTile()); curTile().grid.fill(0); afterTiles();
+    pushUndo(snapTile()); curTile().grid.fill(0); if (curTile().flat) curTile().flat.fill(0); afterTiles();
   };
   el("tUndoBtn").onclick = doUndo;
   el("tRedoBtn").onclick = doRedo;
@@ -1474,18 +1524,33 @@
     catch (e) { el("tio").value = "import failed: " + e.message; }
   };
   function shiftTileFace(dc, dr) {
-    if (!curTile()) return;
+    const t = curTile();
+    if (!t) return;
     pushUndo(snapTile());
-    const src = curTile().grid.slice(), dst = curTile().grid;
-    dst.fill(0);
-    for (let r = 0; r < TH8; r++)
-      for (let c = 0; c < TW16; c++) {
-        const v = src[r * TW16 + c];
-        if (!v) continue;
-        const nc = c + dc, nr = r + dr;
-        if (nc < 0 || nc >= TW16 || nr < 0 || nr >= TH8) continue;
-        dst[nr * TW16 + nc] = v;
-      }
+    if (tMode === "flat" && t.flat) {
+      const src = t.flat.slice();
+      t.flat.fill(0);
+      for (let r = 0; r < FLATN; r++)
+        for (let c = 0; c < FLATN; c++) {
+          const v = src[r * FLATN + c];
+          if (!v) continue;
+          const nc = c + dc, nr = r + dr;
+          if (nc < 0 || nc >= FLATN || nr < 0 || nr >= FLATN) continue;
+          t.flat[nr * FLATN + nc] = v;
+        }
+      projectFlat(t);
+    } else {
+      const src = t.grid.slice(), dst = t.grid;
+      dst.fill(0);
+      for (let r = 0; r < TH8; r++)
+        for (let c = 0; c < TW16; c++) {
+          const v = src[r * TW16 + c];
+          if (!v) continue;
+          const nc = c + dc, nr = r + dr;
+          if (nc < 0 || nc >= TW16 || nr < 0 || nr >= TH8) continue;
+          dst[nr * TW16 + nc] = v;
+        }
+    }
     afterTiles();
   }
 
@@ -1533,6 +1598,10 @@
       return;
     }
     if (tStrokeSnap) { pushUndo(tStrokeSnap); tStrokeSnap = null; }
+    if (curTile().flat && curTile().flat.some(v => v) && !tApply.warned) {
+      tApply.warned = true;
+      toast("this tile is flat-authored — the next flat stroke overwrites face edits");
+    }
     if (tTool === "fill" && tPainting !== 2) tFillFace(c, row, shade);
     else curTile().grid[row * TW16 + c] = tPainting === 2 ? 0 : shade;
     afterTiles();
@@ -1548,6 +1617,85 @@
   });
   tedit.addEventListener("pointermove", e => { if (tPainting) tApply(e); });
   tedit.addEventListener("pointerup", () => { tPainting = 0; tStrokeSnap = null; });
+
+  /* ---- FLAT mode: square canvas, auto-projected ---- */
+  let tMode = "iso";
+  const CELLF = 28;
+  const tflat = el("tflat");
+  tflat.width = FLATN * CELLF + 1; tflat.height = FLATN * CELLF + 1;
+  function drawTflat() {
+    if (tMode !== "flat") return;
+    const g = tflat.getContext("2d");
+    g.fillStyle = "#0d0c12"; g.fillRect(0, 0, tflat.width, tflat.height);
+    const t = curTile();
+    for (let r = 0; r < FLATN; r++)
+      for (let c = 0; c < FLATN; c++) {
+        const v = t && t.flat ? t.flat[r * FLATN + c] : 0;
+        g.fillStyle = t ? rgb(MONO, v ? SHK[v] : 1) : "#17151f";
+        g.fillRect(c * CELLF + 1, r * CELLF + 1, CELLF - 1, CELLF - 1);
+      }
+    g.strokeStyle = "#2a2836";
+    g.beginPath();
+    for (let i = 0; i <= FLATN; i++) {
+      g.moveTo(i * CELLF + 0.5, 0); g.lineTo(i * CELLF + 0.5, FLATN * CELLF);
+      g.moveTo(0, i * CELLF + 0.5); g.lineTo(FLATN * CELLF, i * CELLF + 0.5);
+    }
+    g.stroke();
+  }
+  function tModeUi() {
+    el("tModeIso").className = tMode === "iso" ? "on" : "";
+    el("tModeFlat").className = tMode === "flat" ? "on" : "";
+    tedit.style.display = tMode === "iso" ? "" : "none";
+    tflat.style.display = tMode === "flat" ? "" : "none";
+    el("faceTitle").textContent = tMode === "iso" ? "FACE — the iso diamond" : "FLAT — square pixels, projected to iso for you";
+    el("tHint").textContent = tMode === "iso"
+      ? "1/2/3/0 shades · shift+arrows shift the face · right-drag erases · shades are relative to the tile's own colour"
+      : "draw square, like a classic tileset — every stroke re-projects onto the iso diamond · judge it in the floor preview below";
+    drawTedit(); drawTflat();
+  }
+  el("tModeIso").onclick = () => { tMode = "iso"; tModeUi(); };
+  el("tModeFlat").onclick = () => { tMode = "flat"; tModeUi(); };
+  tModeUi();
+  function fFill(c0, r0, v) {
+    const g = curTile().flat;
+    const from = g[r0 * FLATN + c0];
+    if (from === v) return;
+    const q = [[c0, r0]];
+    while (q.length) {
+      const [c, r] = q.pop();
+      if (c < 0 || r < 0 || c >= FLATN || r >= FLATN || g[r * FLATN + c] !== from) continue;
+      g[r * FLATN + c] = v;
+      q.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+    }
+  }
+  function fApply(ev) {
+    const t = curTile();
+    if (!t || !t.flat) return;
+    const r = tflat.getBoundingClientRect();
+    const c = Math.floor((ev.clientX - r.left) / CELLF), row = Math.floor((ev.clientY - r.top) / CELLF);
+    if (c < 0 || row < 0 || c >= FLATN || row >= FLATN) return;
+    if (tTool === "pick" && tPainting !== 2) {
+      const v = t.flat[row * FLATN + c];
+      shade = v || shade; tTool = "paint"; shadeUi(); toast("picked shade " + (v || "none"));
+      return;
+    }
+    if (tStrokeSnap) { pushUndo(tStrokeSnap); tStrokeSnap = null; }
+    if (tTool === "fill" && tPainting !== 2) fFill(c, row, shade);
+    else t.flat[row * FLATN + c] = tPainting === 2 ? 0 : shade;
+    projectFlat(t);
+    afterTiles();
+  }
+  tflat.addEventListener("contextmenu", e => e.preventDefault());
+  tflat.addEventListener("pointerdown", e => {
+    if (e.button !== 0 && e.button !== 2) return;
+    if (!curTile()) return;
+    tStrokeSnap = snapTile();
+    tPainting = e.button === 2 ? 2 : 1;
+    tflat.setPointerCapture(e.pointerId);
+    fApply(e);
+  });
+  tflat.addEventListener("pointermove", e => { if (tPainting) fApply(e); });
+  tflat.addEventListener("pointerup", () => { tPainting = 0; tStrokeSnap = null; });
 
   function stampFace(g, cx, cyTop, grid, k, hw, hh, flip) {
     const pts = [[cx, cyTop], [cx + hw, cyTop + hh], [cx, cyTop + 2 * hh], [cx - hw, cyTop + hh]];
@@ -2131,7 +2279,7 @@
       el(nav).className = t === tab ? "on" : "";
       el("page" + t[0].toUpperCase() + t.slice(1)).className = "page" + (t === tab ? " on" : "");
     }
-    if (tab === "tiles") { drawTileList(); tRulesUi(); drawTedit(); drawTprev(); }
+    if (tab === "tiles") { drawTileList(); tRulesUi(); drawTedit(); drawTflat(); drawTprev(); }
     if (tab === "vfx") { drawVfxList(); vRulesUi(); drawVedit(); drawVFramesUi(); }
     if (tab === "demo") { charSelUi(); drawDemoVfxSel(); demoFloorDirty = true; }
     prevDirty = true;
